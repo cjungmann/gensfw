@@ -4,10 +4,10 @@
 
   <xsl:output method="text" version="1.0" encoding="utf-8"/>
 
-  <xsl:param name="dbase" select="'CaseStudy'" />
+  <xsl:param name="dbase" select="'TestGenSFW'" />
   <xsl:param name="mode" select="'sql'" />
-  <xsl:param name="stem" select="'App_School_'" />
-  <xsl:param name="includes" select="'id|name|city'" />
+  <xsl:param name="stem" select="'App_Person_'" />
+  <xsl:param name="includes" select="'id|fname|dob'" />
 
   <xsl:template name="padstr">
     <xsl:param name="len" />
