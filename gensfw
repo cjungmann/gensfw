@@ -1,0 +1,154 @@
+#!/bin/bash
+
+common_props="--height=300 --width=600 --center"
+
+prepare_global_vars()
+{
+    declare -g tschema=$( xmlify -t "$tname" "$dbname" )
+    fieldsstr=$( echo "${tschema}" | xsltproc --stringparam mode vars main.xsl - )
+    readarray -t fnames <<< "${fieldsstr}"
+
+    declare -g stem_value="App_${tname}_"
+
+    declare -gA fields
+    for i in "${fnames[@]}"; do
+        fields["$i"]="true"
+    done
+}
+
+
+show_usage()
+{
+    echo "Usage: gensrm database_name table_name"
+}
+
+get_fields_checkboxes()
+{
+    for i in "${fnames[@]}"; do
+        echo -n "--field=\"$i\":CHK "
+    done
+}
+
+get_fields_values()
+{
+    for i in "${fnames[@]}"; do
+        echo -n "\"${fields[$i]}\" "
+    done
+}
+
+get_field_includes()
+{
+    delimit=false
+    for i in "${fnames[@]}"; do
+        fval="${fields[$i]}"
+        if [ "$fval" ]; then
+            if [ $delimit = "true" ]; then
+                echo -n "|"
+            else
+                delimit=true
+            fi
+            echo -n $i
+        fi
+    done
+}
+
+save_results()
+{
+    readarray -t rvals <<< "${1}"
+
+    stem_value="${rvals[0]}"
+
+    # Re-array-ify the slice with the parentheses:
+    fvals=("${rvals[@]:1}")
+
+    stop="${#fvals[@]}"
+    for ((i=0; i<$stop; i++)); do
+        nval="${fvals[$i]}"
+        fname="${fnames[$i]}"
+        fields["$fname"]=$nval
+    done
+}
+
+
+apply_stylesheet()
+{
+    mode=$1
+    includes=$( get_field_includes )
+
+    parm0="--stringparam dbase $dbname"
+    parm1="--stringparam mode $mode"
+    parm2="--stringparam stem $stem_value"
+    parm3="--stringparam includes $includes"
+    cmd="xsltproc $parm1 $parm2 $parm3 main.xsl -"
+    result=$( echo "$tschema" | xsltproc $parm0 $parm1 $parm2 $parm3 main.xsl - )
+    echo "$result"
+}
+
+basebuttons="--button=\"SQL Script\":1 --button=\"SRM Script\":2 --button=Done:0"
+basecmd="yad ${common_props} --title=\"SRM Generator\" --text=\"Confirm values before OK\" --always-print-result"
+
+show_main()
+{
+    fld_prefix="--field=\"Proc Prefix:\" \"App_${tname}\""
+
+    f_cmd="${basecmd} ${basebuttons} --form --separator='\n'"
+    f_stem="--field=Stem"
+    f_fields=$( get_fields_checkboxes )
+    cmd="$f_cmd $f_stem $f_fields"
+
+    persevere=true
+
+    while $persevere; do
+        values_fields=$( get_fields_values )
+        values="\"$stem_value\" ${values_fields}"
+
+        # Run the dialog and save the result
+        result=$( eval $cmd $values )
+        ecode=$?
+
+        if [ $ecode -eq 0 ] || [ $ecode -eq 252 ]; then
+            persevere=false
+        else
+            mode=
+            if [ $ecode -eq 1 ]; then
+                mode="sql"
+            elif [ $ecode -eq 2 ]; then
+                mode="srm"
+            fi
+
+            save_results "$result"
+
+            if [ -n $mode ]; then
+                datext=$(apply_stylesheet $mode)
+                echo $datext
+            fi
+        fi
+    done
+}
+
+
+
+###### Start of Program Here
+
+# Process arguments to gensrm before anything else
+tname="Person"
+dbname="TestGenSFW"
+
+if [ "$#" -gt 1 ]; then
+    tname="$2"
+    dbname="$1"
+# else
+#     show_usage
+fi
+
+prepare_global_vars
+show_main
+
+
+
+# mainpage=$( echo "${tschema}" | xsltproc main.xsl - )
+
+# result=$( eval "${mainpage}" )
+
+
+
