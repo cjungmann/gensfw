@@ -68,7 +68,7 @@
 
   <xsl:template match="field" mode="sql_write_dtype">
     <xsl:value-of select="@type" />
-    <xsl:variable name="l3" select="substring(@type, 2-string-length(@type))" />
+    <xsl:variable name="l3" select="substring(@type, (string-length(@type))-2)" />
     <xsl:choose>
       <xsl:when test="$l3='INT'">
         <xsl:if test="@unsigned"><xsl:text> UNSIGNED</xsl:text></xsl:if>
