@@ -7,6 +7,7 @@
   <xsl:param name="mode" select="'sql'" />
   <xsl:param name="stem" select="'App_Person_'" />
   <xsl:param name="includes" select="'id|fname|dob'" />
+  <xsl:param name="session_compare_field" select="'id_account'" />
 
   <xsl:param name="indent_code" select="'  '" />
 
@@ -92,22 +93,26 @@
   <xsl:template match="schema" mode="sql_add_params">
     <xsl:param name="str" />
     <xsl:param name="indent" />
-    <xsl:param name="first" select="1" />
+    <xsl:param name="skip_id" />
 
     <xsl:variable name="before" select="substring-before($str,'|')" />
     <xsl:variable name="blen" select="string-length($before)" />
     <xsl:variable name="after" select="substring($str,1 div boolean($blen=0))" />
     <xsl:variable name="name" select="concat($before,$after)" />
 
-    <xsl:apply-templates select="field[@name=$name]" mode="sql_write_param" />
+    <xsl:variable name="field" select="field[@name=$name][not(@primary_key and $skip_id)]" />
+
+    <xsl:apply-templates select="$field" mode="sql_write_param" />
 
     <xsl:if test="$blen">
-      <xsl:value-of select="concat(',',$nl,$indent)" />
+      <xsl:if test="count($field)">
+        <xsl:value-of select="concat(',',$nl,$indent)" />
+      </xsl:if>
 
       <xsl:apply-templates select="." mode="sql_add_params">
         <xsl:with-param name="str" select="substring-after($str,'|')" />
         <xsl:with-param name="indent" select="$indent" />
-        <xsl:with-param name="first" select="0" />
+        <xsl:with-param name="skip_id" select="$skip_id" />
       </xsl:apply-templates>
     </xsl:if>
 
@@ -147,9 +152,10 @@
 
   <xsl:template match="schema" mode="sql_start_proc_with_params">
     <xsl:param name="type" />
+    <xsl:param name="skip_id" />
 
     <xsl:variable name="create_proc_stem">
-      <xsl:call-template name="sql_create_proc">
+      <xsl:call-template name="sql_create_proc_to_open_paren">
         <xsl:with-param name="type" select="$type" />
       </xsl:call-template>
     </xsl:variable>
@@ -160,7 +166,7 @@
 
     <xsl:value-of select="$create_proc_stem" />
 
-    <xsl:variable name="indent_params">
+    <xsl:variable name="spaces_to_paren">
       <xsl:call-template name="padstr">
         <xsl:with-param name="len" select="string-length($create_proc_stem)" />
       </xsl:call-template>
@@ -168,21 +174,26 @@
 
     <xsl:apply-templates select="." mode="sql_add_params">
       <xsl:with-param name="str" select="$includes" />
-      <xsl:with-param name="indent" select="$indent_params" />
+      <xsl:with-param name="indent" select="$spaces_to_paren" />
+      <xsl:with-param name="skip_id" select="$skip_id" />
     </xsl:apply-templates>
 
     <xsl:value-of select="concat(')',$nl)" />
   </xsl:template>
 
+  <!-- Target-agnostic template that determines if a given field is in the includes list. -->
   <xsl:template match="field" mode="must_include">
+    <xsl:param name="skip_id" />
+
     <xsl:variable name="pos" select="string-length($includes)-string-length(@name)" />
     <xsl:variable name="last" select="substring($includes,$pos)" />
     <xsl:choose>
+      <xsl:when test="$skip_id and @primary_key">0</xsl:when>
       <xsl:when test="$includes=@name">1</xsl:when>
       <xsl:when test="starts-with($includes,concat(@name,'|'))">1</xsl:when>
       <xsl:when test="contains($includes,concat('|',@name,'|'))">1</xsl:when>
       <xsl:when test="$last=concat('|',@name)">1</xsl:when>
-      <xsl:otherwise>0></xsl:otherwise>
+      <xsl:otherwise>0</xsl:otherwise>
     </xsl:choose>
   </xsl:template>
 
@@ -199,6 +210,94 @@
       <xsl:if test="$prefix"><xsl:value-of select="concat($prefix,'.')" /></xsl:if>
       <xsl:value-of select="@name" />
     </xsl:if>
+  </xsl:template>
+
+  <xsl:template match="field" mode="sql_add_proc_field">
+    <xsl:param name="indent" />
+    <xsl:param name="first" select="1" />
+
+    <xsl:variable name="include">
+      <xsl:apply-templates select="." mode="must_include">
+        <xsl:with-param name="skip_id" select="1" />
+      </xsl:apply-templates>
+    </xsl:variable>
+
+    <xsl:if test="$include=1">
+        <xsl:if test="not($first=1)"><xsl:value-of select="concat(',',$nl,$indent)" /></xsl:if>
+        <xsl:value-of select="@name" />
+    </xsl:if>
+
+    <xsl:apply-templates select="following-sibling::field[1]" mode="sql_add_proc_field">
+      <xsl:with-param name="indent" select="$indent" />
+      <xsl:with-param name="first" select="($first) - ($include)" />
+    </xsl:apply-templates>
+
+  </xsl:template>
+
+  <xsl:template match="field" mode="sql_update_set_field">
+    <xsl:param name="indent" />
+    <xsl:param name="prefix" />
+    <xsl:param name="first" select="1" />
+
+    <xsl:variable name="include">
+      <xsl:apply-templates select="." mode="must_include">
+        <xsl:with-param name="skip_id" select="1" />
+      </xsl:apply-templates>
+    </xsl:variable>
+
+    <xsl:if test="$include=1">
+      <xsl:if test="not($first=1)">,</xsl:if>
+      <xsl:value-of select="concat($nl,$indent_code)" />
+
+      <xsl:choose>
+        <xsl:when test="$first=1"><xsl:text>   SET </xsl:text></xsl:when>
+        <xsl:otherwise><xsl:text>       </xsl:text></xsl:otherwise>
+      </xsl:choose>
+
+      <xsl:value-of select="concat($prefix,'.',@name,'=',@name)" />
+
+    </xsl:if>
+
+    <xsl:apply-templates select="following-sibling::field[1]" mode="sql_update_set_field">
+      <xsl:with-param name="indent" select="$indent" />
+      <xsl:with-param name="prefix" select="$prefix" />
+      <xsl:with-param name="first" select="($first) - ($include)" />
+    </xsl:apply-templates>
+
+  </xsl:template>
+
+  <xsl:template match="schema" mode="sql_write_conditions">
+    <xsl:param name="indent" />
+    <xsl:param name="prefix" />
+    <xsl:param name="null_override" />
+
+    <xsl:variable name="pre"
+                  select="concat($prefix,substring('.',1 div boolean(string-length($prefix)!=0)))" />
+    <xsl:variable name="id_field" select="field[@primary_key]" />
+    <xsl:variable name="session_field" select="field[@name=$session_compare_field]" />
+    <xsl:variable name="and_indent" select="concat($indent,'   AND ')" />
+    <xsl:variable name="or_indent"  select="concat($indent,'    OR ')" />
+
+    <xsl:value-of select="concat($indent,' WHERE ')" />
+    <xsl:if test="$session_field">
+      <xsl:value-of
+          select="concat($pre,$session_field/@name,'=@session_confirmed_id',$nl,$and_indent)" />
+    </xsl:if>
+
+    <xsl:if test="$null_override">
+      <xsl:value-of select="concat('(',$pre,$id_field/@name,' IS NULL OR ')" />
+    </xsl:if>
+    <xsl:value-of select="concat($pre,$id_field/@name,'=id')" />
+    <xsl:if test="$null_override">)</xsl:if>
+
+    <xsl:value-of select="concat(';',$nl)" />
+  </xsl:template>
+
+  <xsl:template name="sql_if_row_count">
+    <xsl:value-of select="concat($nl,$indent_code,'IF ROW_COUNT()&gt;0 THEN')" />
+    <xsl:value-of select="concat($nl,$indent_code,$indent_code,'SET newid = LAST_INSERT_ID();')" />
+    <xsl:value-of select="concat($nl,$indent_code,$indent_code,'CALL ',$stem,'List(newid);')" />
+    <xsl:value-of select="concat($nl,$indent_code,'END IF;',$nl)" />
   </xsl:template>
 
 
@@ -231,10 +330,12 @@
     <!-- FROM -->
     <xsl:value-of select="concat($nl,$indent_code,'  FROM ', $dbase,' ',$prefix,$nl)" />
     <!-- Condition -->
-    <xsl:value-of select="concat($indent_code,' WHERE id IS NULL OR id = ')" />
-    <xsl:if test="$prefix"><xsl:value-of select="concat($prefix,'.')" /></xsl:if>
-    <xsl:value-of select="field[@primary_key]/@name" />
-    <xsl:value-of select="concat(';',$nl,'END $$',$nl,$nl)" />
+    <xsl:apply-templates select="." mode="sql_write_conditions">
+      <xsl:with-param name="indent" select="$indent_code" />
+      <xsl:with-param name="prefix" select="$prefix" />
+      <xsl:with-param name="null_override" select="1" />
+    </xsl:apply-templates>
+    <xsl:value-of select="concat('END $$',$nl,$nl)" />
   </xsl:template>
 
   <xsl:template match="schema" mode="sql_write_proc_read">
@@ -265,23 +366,105 @@
     </xsl:apply-templates>
     <!-- FROM -->
     <xsl:value-of select="concat($nl,$indent_code,'  FROM ', $dbase,' ',$prefix,$nl)" />
+
     <!-- Condition -->
-    <xsl:value-of select="concat($indent_code,' WHERE id = ')" />
-    <xsl:if test="$prefix"><xsl:value-of select="concat($prefix,'.')" /></xsl:if>
-    <xsl:value-of select="field[@primary_key]/@name" />
-    <xsl:value-of select="concat(';',$nl,'END $$',$nl,$nl)" />
+    <xsl:apply-templates select="." mode="sql_write_conditions">
+      <xsl:with-param name="indent" select="$indent_code" />
+      <xsl:with-param name="prefix" select="$prefix" />
+    </xsl:apply-templates>
+
+    <xsl:value-of select="concat('END $$',$nl,$nl)" />
+  </xsl:template>
+
+  <xsl:template match="schema" mode="sql_write_proc_add">
+    <xsl:apply-templates select="." mode="sql_start_proc_with_params">
+      <xsl:with-param name="type" select="'Add'" />
+      <xsl:with-param name="skip_id" select="1" />
+    </xsl:apply-templates>
+
+    <xsl:variable name="command_start" select="concat($indent_code,'INSERT INTO ',@name,' (')" />
+    <xsl:variable name="command_start_len" select="string-length($command_start)" />
+
+    <xsl:variable name="spaces_to_paren">
+      <xsl:call-template name="padstr">
+        <xsl:with-param name="len" select="$command_start_len" />
+      </xsl:call-template>
+    </xsl:variable>
+
+    <xsl:value-of select="concat('BEGIN',$nl,$indent_code,'DECLARE newid INT UNSIGNED;',$nl,$nl)" />
+    <xsl:value-of select="$command_start" />
+    <xsl:apply-templates select="field[1]" mode="sql_add_proc_field">
+      <xsl:with-param name="indent" select="$spaces_to_paren" />
+    </xsl:apply-templates>
+    <xsl:value-of select="concat(')',$nl)" />
+
+    <xsl:variable name="values_start_len" select="($command_start_len)-string-length(@name)+6" />
+    <xsl:variable name="spaces_to_val">
+      <xsl:call-template name="padstr">
+        <xsl:with-param name="len" select="$values_start_len" />
+      </xsl:call-template>
+    </xsl:variable>
+
+    <xsl:call-template name="padstr">
+      <xsl:with-param name="len" select="($values_start_len)-8" />
+    </xsl:call-template>
+    <xsl:text>VALUES (</xsl:text>
+    <xsl:apply-templates select="field[1]" mode="sql_add_proc_field">
+      <xsl:with-param name="indent" select="$spaces_to_val" />
+    </xsl:apply-templates>
+
+    <xsl:value-of select="concat(');',$nl)" />
+
+    <xsl:call-template name="sql_if_row_count" />
+
+    <xsl:value-of select="concat('END $$',$nl,$nl)" />
+
   </xsl:template>
 
   <xsl:template match="schema" mode="sql_write_proc_update">
-  <xsl:apply-templates select="." mode="sql_start_proc_with_params">
-    <xsl:with-param name="type" select="'Update'" />
-  </xsl:apply-templates>
+    <xsl:param name="prefix" select="'t'" />
+
+    <xsl:apply-templates select="." mode="sql_start_proc_with_params">
+      <xsl:with-param name="type" select="'Update'" />
+    </xsl:apply-templates>
+
+    <xsl:variable name="command_start" select="concat($indent_code,'UPDATE ')" />
+
+    <xsl:variable name="spaces_to_indent">
+      <xsl:call-template name="padstr">
+        <xsl:with-param name="len" select="string-length($command_start)" />
+      </xsl:call-template>
+    </xsl:variable>
+
+    <xsl:value-of select="concat('BEGIN',$nl,$indent_code,'DECLARE newid INT UNSIGNED;',$nl,$nl)" />
+    <xsl:value-of select="concat($command_start,@name,' ',$prefix)" />
+
+    <xsl:apply-templates select="field[1]" mode="sql_update_set_field">
+      <xsl:with-param name="indent" select="$spaces_to_indent" />
+      <xsl:with-param name="prefix" select="$prefix" />
+    </xsl:apply-templates>
+
+    <xsl:value-of select="$nl" />
+
+    <!-- Condition -->
+    <xsl:apply-templates select="." mode="sql_write_conditions">
+      <xsl:with-param name="indent" select="$indent_code" />
+      <xsl:with-param name="prefix" select="$prefix" />
+    </xsl:apply-templates>
+
+    <xsl:call-template name="sql_if_row_count" />
+
+    <xsl:value-of select="concat('END $$',$nl,$nl)" />
+
+  
   </xsl:template>
 
   <xsl:template match="schema" mode="sql">
     <xsl:value-of select="concat('DELIMITER $$',$nl)" />
     <xsl:apply-templates select="." mode="sql_write_proc_list" />
     <xsl:apply-templates select="." mode="sql_write_proc_read" />
+    <xsl:apply-templates select="." mode="sql_write_proc_add" />
+    <xsl:apply-templates select="." mode="sql_write_proc_update" />
 
     <xsl:value-of select="concat('DELIMITER ;',$nl)" />
   </xsl:template>
