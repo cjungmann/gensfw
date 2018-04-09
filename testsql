@@ -1,10 +1,13 @@
 #!/bin/bash
 
-params_base="--stringparam dbase TestGenSFW --stringparam stem App_Person"
+params_base="--stringparam dbase TestGenSFW --stringparam stem App_Person_"
 params_include="--stringparam includes id|fname|dob"
 params_compare="--stringparam session_compare_field id_account"
 params_confirm="--stringparam select_confirm_field fname"
-params="$params_base $params_include $params_compare"
+params="$params_base $params_include $params_compare $params_confirm"
 
 xsltproc ${params} --stringparam type List sql.xsl person.xml
 xsltproc ${params} --stringparam type Add sql.xsl person.xml 
+xsltproc ${params} --stringparam type Read sql.xsl person.xml 
+xsltproc ${params} --stringparam type Update sql.xsl person.xml 
+xsltproc ${params} --stringparam type Delete sql.xsl person.xml 
