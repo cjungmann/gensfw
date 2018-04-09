@@ -17,17 +17,14 @@
   <xsl:variable name="apos"><xsl:text>&apos;</xsl:text></xsl:variable>
   <xsl:variable name="ispaces" select="'                                                          '" />
 
-  <xsl:variable name="selecting_proc_type" select="$type='List' or $type='Read' or $type='Delete'" />
-  <xsl:variable name="conf_field" select="//field[$selecting_proc_type][@name=$select_confirm_field]" />
+  <xsl:variable name="list_proc_type" select="boolean($type='List')" />
+  <xsl:variable name="write_proc_type" select="boolean($type='Update' or $type='Add')" />
+  <xsl:variable name="confirming_proc_type"
+                select="boolean($type='Update' or $type='Read' or $type='Delete')" />
+  <xsl:variable name="conf_field" select="//field[$confirming_proc_type=1][@name=$select_confirm_field]" />
+
 
   <!-- Templates to return conditions according to global values and parameters. -->
-  <xsl:template name="selecting_proc_type">
-    <xsl:choose>
-      <xsl:when test="$type='List' or $type='Read' or $type='Delete'">1</xsl:when>
-      <xsl:otherwise>0</xsl:otherwise>
-    </xsl:choose>
-  </xsl:template>
-
   <xsl:template name="null_for_all">
     <xsl:choose>
       <xsl:when test="$type='List'">1</xsl:when>
@@ -80,8 +77,20 @@
     </xsl:choose>
   </xsl:template>
 
-  <xsl:template match="field" mode="add_confirm_param">
+  <xsl:template match="field" mode="write_confirm_param">
+    <xsl:param name="indent" />
+    <xsl:param name="first" select="0" />
+    <xsl:if test="$first=0"><xsl:value-of select="concat(',',$nl,$indent)" /></xsl:if>
     <xsl:value-of select="concat('conf_',@name,' ')" />
+    <xsl:apply-templates select="." mode="get_datatype" />
+  </xsl:template>
+
+  <xsl:template match="field" mode="write_param">
+    <xsl:param name="indent" />
+    <xsl:param name="first" />
+
+    <xsl:if test="not($first=1)"><xsl:value-of select="concat(',',$nl,$indent)" /></xsl:if>
+    <xsl:value-of select="concat(@name,' ')" />
     <xsl:apply-templates select="." mode="get_datatype" />
   </xsl:template>
 
@@ -97,9 +106,10 @@
     </xsl:variable>
 
     <xsl:if test="$must_include=1">
-      <xsl:if test="not($first=1)"><xsl:value-of select="concat(',',$nl,$indent)" /></xsl:if>
-      <xsl:value-of select="concat(@name,' ')" />
-      <xsl:apply-templates select="." mode="get_datatype" />
+      <xsl:apply-templates select="." mode="write_param">
+        <xsl:with-param name="first" select="$first" />
+        <xsl:with-param name="indent" select="$indent" />
+      </xsl:apply-templates>
     </xsl:if>
 
     <xsl:apply-templates select="following-sibling::field[1]" mode="add_params">
@@ -167,14 +177,26 @@
     <xsl:param name="indent" />
     <xsl:param name="first" select="1" />
 
-    <xsl:if test="$conf_field">
-      <xsl:apply-templates select="$conf_field" mode="add_confirm_param" />
+    <xsl:if test="$confirming_proc_type=1">
+      <xsl:apply-templates select="field[@primary_key]" mode="write_param">
+        <xsl:with-param name="first" select="1" />
+        <xsl:with-param name="indent" select="$indent" />
+      </xsl:apply-templates>
+
+      <xsl:apply-templates select="$conf_field" mode="write_confirm_param">
+        <xsl:with-param name="indent" select="$indent" />
+        <xsl:with-param name="first" select="0" />
+      </xsl:apply-templates>
     </xsl:if>
 
-    <xsl:apply-templates select="field[1]" mode="add_params">
-      <xsl:with-param name="indent" select="$indent" />
-      <xsl:with-param name="first" select="($first)-count($conf_field)" />
-    </xsl:apply-templates>
+    <xsl:if test="$write_proc_type">
+      <xsl:apply-templates select="field[1]" mode="add_params">
+        <xsl:with-param name="indent" select="$indent" />
+        <xsl:with-param name="first" select="($first)-($confirming_proc_type)" />
+        <xsl:with-param name="omit_key"
+                        select="boolean($confirming_proc_type or boolean($type='Add'))" />
+      </xsl:apply-templates>
+    </xsl:if>
   </xsl:template>
 
   <!-- Add comma-separated field names for SELECT, and INSERT commands. -->
@@ -434,14 +456,25 @@
 
 
   <xsl:template match="schema" mode="make_proc">
-
     <xsl:call-template name="drop_proc_stmt" />
+
     <xsl:variable name="create_proc_str"><xsl:call-template name="create_proc_stmt" /></xsl:variable>
 
     <xsl:value-of select="$create_proc_str" />
-    <xsl:apply-templates select="." mode="add_params">
-      <xsl:with-param name="indent" select="substring($ispaces,1,string-length($create_proc_str))" />
-    </xsl:apply-templates>
+    <xsl:variable name="indent_str" select="substring($ispaces,1,string-length($create_proc_str))" />
+
+    <xsl:choose>
+      <xsl:when test="$list_proc_type">
+        <xsl:apply-templates select="field[@primary_key]" mode="write_param">
+          <xsl:with-param name="first" select="1" />
+        </xsl:apply-templates>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:apply-templates select="." mode="add_params">
+          <xsl:with-param name="indent" select="$indent_str" />
+        </xsl:apply-templates>
+      </xsl:otherwise>
+    </xsl:choose>
 
     <xsl:value-of select="concat(')',$nl,'BEGIN',$nl)" />
     <xsl:apply-templates select="." mode="write_queries" />
