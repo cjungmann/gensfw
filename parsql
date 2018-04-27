@@ -1,0 +1,118 @@
+#/bin/bash
+
+# This little program makes an array of strings from the --column-type-info output.
+# It's not perfect, it gets confused by the space and parentheses in the Collation
+# property, which I therefore exclude from the results.  It also does not parse the
+# query results (that's why I append 'LIMIT 0' to the query).
+#
+# The idea of this script is to generate the fields' meta data to know what column
+# heads should be named, then run the query again with -B -N options (batch mode,
+# no column heads) to get the data.  The resulting string can be used immediately
+# as an array, or the value can be saved to the environment for later extration
+# by setting IFS=${RSEP}, then extract each field with IFS=${FSEP}.
+#
+# For some reason, it's not working with an adhoc query right now.  It works with
+# the default values, using database information_schema and selects all columns in
+# the COLUMNS table.  I'll fix it later, if I have time (ha ha).
+#
+# I may use this script later to present a nice display of an arbitrary query.
+
+awk_split_from_meta="BEGIN {RS=\"\n\n\n\"; ORS=\"\a\";} { print $1 }"
+awk_split_into_columns="BEGIN {RS=\"\n\n\"; ORS=\"\a\";} {print $1 }"
+awk_split_into_props="BEGIN {RS=\"\n\"; ORS=\"\a\";} {print $1 }"
+
+# These values hold values for printing a Record SEParator (RSEP) and a Field SEParator (FSEP)
+# These values can be used for IFS values to later parse the string into records of fields.
+RSEP=$'\a'
+FSEP=$'\006'
+
+# I'm using these separator values for a visible output.  The control characters are
+# more appropriate in case some elements contain newlines.
+# RSEP=$'\n'
+FSEP='|'
+
+
+serialize_column()
+{
+   column="$1"
+   local IFS=$'\a'
+   props_arr=( $( echo "${column}" | awk "${awk_split_into_props}" - ) )
+
+   # Note on ( $(echo ...) ) the construction that follows,
+   # I use this to strip out extra spaces.
+
+   # Process the first property separately: it contains two values:
+   # the position and the column name.
+
+   # Split property, then split the propery name for the position
+   IFS=':' first=( $(echo "${props_arr[0]}") )
+   IFS=$' ' # Using IFS=space from here to end
+   posarr=( $(echo "${first[0]}" ) )
+   printf "name:%s${FSEP}pos:%s" $( echo "${first[1]}" ) "${posarr[1]}"
+
+   # Process the remainder of the properties   
+   for prop in "${props_arr[@]:1}"; do
+      parr=( $(echo "$prop") )
+      if [ "${parr[0]}" != "Collation:" ]; then
+         printf "${FSEP}%s%s" "${parr[@]}"
+      fi
+   done
+
+   echo -n "${RSEP}"
+}
+
+serialize_columns()
+{
+   columns="$1"
+
+   local IFS=$'\a'
+   arr=( $( echo "${columns}" | awk "${awk_split_into_columns}" - ) )
+
+   for col in "${arr[@]}"; do
+      serialize_column "${col}"
+   done
+}
+
+parse_result()
+{
+   result="$1"
+   local IFS=$'\a'
+   arr=( $( echo "${result}" | awk "${awk_split_from_meta}" - ) )
+   if [ ${#arr[@]} -eq 2 ]; then
+      serialize_columns "${arr[0]}"
+   fi 
+}
+
+get_query_schema()
+{
+   # Since we're setting LIMIT 0, we won't have any data, so the result
+   # will not have a \n\n\n separating the columns from the data.  We just
+   # pass the result to serialize_columns.  If we omit LIMIT 0, we will
+   # need to send the result to parse_result.
+   result=$( mysql "${dbname}" -t -N --column-type-info -e "${query} LIMIT 0" )
+   serialize_columns "${result}"
+}
+
+
+# The program starts here with parsing of command line options:
+dbname="$1"
+query="$2"
+
+if [ -z $dbname ]; then
+   dbname=information_schema
+fi
+
+if [ -z "$query" ]; then
+   query="SELECT * FROM COLUMNS"
+fi
+
+# The following mainly demonstrates the how the output looks using the RSEP value,
+# before setting IFS=$RSEP to make an array.
+astr=$(get_query_schema)
+echo "${astr}"
+
+IFS="${RSEP}" proparr=( $( echo "${astr}" ) )
+
+echo "There are ${#proparr[@]} columns."
+echo
+printf "%s\n" "${proparr[@]}"
