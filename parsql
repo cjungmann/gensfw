@@ -1,60 +1,87 @@
-#/bin/bash
+#!/bin/bash
 
-# This little program makes an array of strings from the --column-type-info output.
-# It's not perfect, it gets confused by the space and parentheses in the Collation
-# property, which I therefore exclude from the results.  It also does not parse the
-# query results (that's why I append 'LIMIT 0' to the query).
-#
-# The idea of this script is to generate the fields' meta data to know what column
-# heads should be named, then run the query again with -B -N options (batch mode,
-# no column heads) to get the data.  The resulting string can be used immediately
+# This little program makes an array of delimited strings created by parsing the results
+# of running an query with MySQL using the --column-type-info output.  It does not parse
+# the query results and, in fact, attempts to prevent query results from being returned.
+# The purpose of the command is to provide column information to other programs that
+# call MYSQL to create results.
+# 
+# The intended use of this script is to generate, from a query, a string from which a
+# 2-dimensional array of column information can be built to inform the interpretation
+# of the query when submitted to MySQL using the -B and -N options (batch mode, no column
+# heads) to get the data.  The resulting string can be used immediately
 # as an array, or the value can be saved to the environment for later extration
 # by setting IFS=${RSEP}, then extract each field with IFS=${FSEP}.
 #
-# For some reason, it's not working with an adhoc query right now.  It works with
-# the default values, using database information_schema and selects all columns in
-# the COLUMNS table.  I'll fix it later, if I have time (ha ha).
+# In order to prevent any results from being returned, we'll use the function
+# truncate_query to discard any query text that follows the FROM clause and replacing
+# it with 'WHERE 1=0'.
 #
 # I may use this script later to present a nice display of an arbitrary query.
 
-awk_split_from_meta="BEGIN {RS=\"\n\n\n\"; ORS=\"\a\";} { print $1 }"
-awk_split_into_columns="BEGIN {RS=\"\n\n\"; ORS=\"\a\";} {print $1 }"
-awk_split_into_props="BEGIN {RS=\"\n\"; ORS=\"\a\";} {print $1 }"
-
 # These values hold values for printing a Record SEParator (RSEP) and a Field SEParator (FSEP)
 # These values can be used for IFS values to later parse the string into records of fields.
-RSEP=$'\a'
+RSEP=$'\a'    # \007
 FSEP=$'\006'
 
-# I'm using these separator values for a visible output.  The control characters are
-# more appropriate in case some elements contain newlines.
-# RSEP=$'\n'
-FSEP='|'
+# # Replace the invisible record and field separators with visible alternatives for debugging:
+# RSEP=$'\x0b'  # \x0b is a vertical tab.  Using a newline seemed to confuse awk.
+# FSEP=$'|'
 
+awk_split_from_meta="BEGIN{RS=\"\n\n\n\"; ORS=\"${RSEP}\";}{print}"
+awk_split_into_columns="BEGIN{RS=\"\n\n\"; ORS=\"${RSEP}\";}{print}"
+awk_split_into_props="BEGIN{RS=\"\n\"; ORS=\"${RSEP}\";}{print}"
+
+# I have more luck with regular expressions if I assign them to a intermediary variable:
+ts_re='([[:space:]]*)(.*)([[:space:]]*)'
+
+# This function processes a string to remove leading and trailing spaces, as well
+# as back-quotes when a string is thus enclosed.
+trim_string()
+{
+   str="${1}"
+   [[ $str =~ ${ts_re} ]]
+   exval=$?
+   if [ $exval -eq 0 ]; then
+       tval="${BASH_REMATCH[2]}"
+       # echo "1:${tval:0:1}, $:${tval:-1}"
+       if [ "${tval:0:1}" == '`' ] && [ "${tval: -1:1}" == '`' ]; then
+           echo -n "${tval:1: -1}"
+       else
+           echo -n "${tval}"
+       fi
+   elif [ $exval -eq 1 ]; then
+      echo "?${str}?"
+   elif [ $exval -eq 2 ]; then
+       echo "Bad Regexp"
+   fi
+}
 
 serialize_column()
 {
    column="$1"
-   local IFS=$'\a'
+   local IFS="${RSEP}"
    props_arr=( $( echo "${column}" | awk "${awk_split_into_props}" - ) )
-
-   # Note on ( $(echo ...) ) the construction that follows,
-   # I use this to strip out extra spaces.
 
    # Process the first property separately: it contains two values:
    # the position and the column name.
 
    # Split property, then split the propery name for the position
-   IFS=':' first=( $(echo "${props_arr[0]}") )
-   IFS=$' ' # Using IFS=space from here to end
-   posarr=( $(echo "${first[0]}" ) )
-   printf "name:%s${FSEP}pos:%s" $( echo "${first[1]}" ) "${posarr[1]}"
+   IFS=$':' first=( $(echo "${props_arr[0]}") )
+   IFS=$' ' posarr=( $( trim_string "${first[0]}" ) )
+   printf "name:%s${FSEP}pos:%s" $( trim_string "${first[1]}" ) $(trim_string "${posarr[1]}")
 
-   # Process the remainder of the properties   
+   # All subsequent properties will be split on the colon to trim extra spaces, reapplying
+   # the colon when the name/value pair is printed.
+   IFS=':'
+
+   # Process the remainder of the properties
    for prop in "${props_arr[@]:1}"; do
       parr=( $(echo "$prop") )
       if [ "${parr[0]}" != "Collation:" ]; then
-         printf "${FSEP}%s%s" "${parr[@]}"
+         name=$( echo "${parr[0]}" )
+         val=$( trim_string "${parr[1]}" )
+         echo -n "${FSEP}${name}:${val}"
       fi
    done
 
@@ -65,18 +92,21 @@ serialize_columns()
 {
    columns="$1"
 
-   local IFS=$'\a'
+   local IFS="${RSEP}"
    arr=( $( echo "${columns}" | awk "${awk_split_into_columns}" - ) )
 
    for col in "${arr[@]}"; do
-      serialize_column "${col}"
+       serialize_column "${col}"
    done
 }
 
+# This function processes a result that includes records.
+# Not necessary if the query condition prevents records,
+# ie "WHERE 1=0" or "LIMIT 0"
 parse_result()
 {
    result="$1"
-   local IFS=$'\a'
+   local IFS="${RSEP}"
    arr=( $( echo "${result}" | awk "${awk_split_from_meta}" - ) )
    if [ ${#arr[@]} -eq 2 ]; then
       serialize_columns "${arr[0]}"
@@ -89,30 +119,41 @@ get_query_schema()
    # will not have a \n\n\n separating the columns from the data.  We just
    # pass the result to serialize_columns.  If we omit LIMIT 0, we will
    # need to send the result to parse_result.
+
    result=$( mysql "${dbname}" -t -N --column-type-info -e "${query} LIMIT 0" )
    serialize_columns "${result}"
 }
 
+truncate_query()
+{
+   awks="BEGIN{RS=\"WHERE|LIMIT|GROUP BY|HAVING|ORDER BY\"; ORS=\"${RSEP}\";}{print \$0}"
+   local IFS="${RSEP}"
+   qarr=( $( echo "$1" | awk "${awks}" - ) )
+   if [ $? -eq 0 ]; then
+      echo "${qarr[0]} WHERE 1=0"
+      exit 0
+   else
+      exit 1
+   fi
+}
+
 
 # The program starts here with parsing of command line options:
+if [ $# -lt 2 ]; then
+   echo "Usage: parsql <database name> <query>"
+   exit 1
+fi
+
 dbname="$1"
-query="$2"
-
-if [ -z $dbname ]; then
-   dbname=information_schema
+query=$( truncate_query "$2" )
+if [ $? -eq 0 ]; then
+   get_query_schema
 fi
 
-if [ -z "$query" ]; then
-   query="SELECT * FROM COLUMNS"
-fi
 
-# The following mainly demonstrates the how the output looks using the RSEP value,
-# before setting IFS=$RSEP to make an array.
-astr=$(get_query_schema)
-echo "${astr}"
-
-IFS="${RSEP}" proparr=( $( echo "${astr}" ) )
-
-echo "There are ${#proparr[@]} columns."
-echo
-printf "%s\n" "${proparr[@]}"
+## Test output by converting to an array:
+# astr=$(get_query_schema)
+# IFS="${RSEP}" proparr=( $( echo "${astr}" ) )
+# echo "There are ${#proparr[@]} columns."
+# echo
+# printf "%s\n" "${proparr[@]}"
