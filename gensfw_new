@@ -1,0 +1,314 @@
+#!/bin/bash
+
+comargs=(
+    --height=300
+    --width=600
+    --center
+    --borders=10
+    --title "Generate Schema Framework Documents"
+    )
+
+pagetypes=(
+    --list
+    --column "Interaction Type":TXT
+    "List" "Add" "Read" "Update" "Delete" "Import"
+    )
+
+view_flags=(
+    [use]=true
+    [readonly]=false
+    [hidden]=false
+)
+
+view_prompts=(
+    label
+    )
+
+OIFS=$IFS
+IFS=$'\a'
+COMARGS="${comargs[@]}"
+IFS=$OIFS
+
+# These need to match the separators used in parsql
+RSEP=$'\a'   # \007
+FSEP=$'\006'
+VSEP=$':'
+
+valid_mysql_name()
+{
+    if [ $# -ne 1 ]; then
+        exit 1
+    fi
+
+    if [[ "$1" =~ [^A-Za-z0-9_$] ]]; then
+        exit 1
+    else
+        echo "$1"
+        exit 0
+    fi
+}
+
+confirm_dbase_name()
+{
+    dbname=$( valid_mysql_name "$1" )
+    if [ $? -eq 0 ]; then
+        query="SELECT COUNT(*) FROM SCHEMATA WHERE SCHEMA_NAME='${dbname}'"
+        result=$( mysql information_schema -B -N -e "${query}" )
+        if [ $? -eq 0 ] && [ $result -eq 1 ]; then
+            echo $dbname
+            exit 0
+        fi
+    fi
+    exit 1
+}
+
+confirm_table_name()
+{
+    ## Just validate proper form, the existence of the database should already be confirmed:
+    dbname=$( valid_mysql_name "$1" )
+    tname=$( valid_mysql_name "$2" )
+    if [ $? -eq 0 ]; then
+        query="SELECT COUNT(*) FROM TABLES WHERE TABLE_SCHEMA='${dbname}' AND TABLE_NAME='${tname}'"
+        result=$( mysql information_schema -B -N -e "${query}" )
+        if [ $? -eq 0 ] && [ $result -eq 1 ]; then
+            echo $tname
+            exit 0
+        fi
+    fi
+    exit 1
+}
+
+get_column_info_names()
+{
+    column="$1"
+    local IFS="${FSEP}"
+    props=( $column )
+    IFS="${VSEP}"
+    for prop in "${props[@]}"; do
+        val=( $prop )
+        echo "${val[0]}"
+    done
+}
+
+set_column_info_arrays()
+{
+    query="$1"
+
+    # Use external command to collect info for associative array of column info
+    colinfo=$( ./parsql information_schema "${query}" )
+
+    local IFS="${RSEP}"
+    columns=( $colinfo )
+
+    # Maintain separate index of names to preserve column order established by the query:
+    declare -axg ASSARR_NAMES=( $( get_column_info_names "${columns[0]}" ) )
+
+    declare -Axg ASSARR
+
+    for column in "${columns[@]}"; do
+        IFS="${FSEP}"
+        props=( $column )
+        IFS="${VSEP}"
+        for prop in "${procs[@]}"; do
+            val=( $prop )
+            ASSARR["${val[0]}"]="${val[1]}"
+        done
+    done
+}
+
+get_table_fields()
+{
+    dbname=$( confirm_dbase_name "$1" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        tname=$( confirm_table_name "$dbname" "$2" )
+        exval=$?
+    fi
+
+    if [ $exval -ne 0 ]; then
+        echo "dbname = ${dbname}"
+        echo "tname = ${tname}"
+        exit 1
+    fi
+
+    query="\
+SELECT COLUMN_NAME,
+       UPPER(DATA_TYPE),
+       CHARACTER_MAXIMUM_LENGTH,
+       COLUMN_TYPE,
+       NULLIF('0',INSTR(EXTRA,'auto_increment')) AS autoinc,
+       NULLIF('0',INSTR(COLUMN_KEY,'PRI')) AS prikey,
+       NULLIF(IS_NULLABLE,'YES') AS nullable,
+       NUMERIC_PRECISION,
+       NUMERIC_SCALE,
+       COLUMN_DEFAULT
+  FROM COLUMNS
+ WHERE TABLE_SCHEMA='${dbname}' AND TABLE_NAME='${tname}'"
+
+    result=$( mysql information_schema -B -N -e "${query}" )
+    if [ $? -ne 0 ]; then
+        echo "Query failed! ($?) for query;"
+        echo "${query}"
+        exit 1
+    fi
+
+    set_column_info_arrays "${query}"
+    set_table_fields_info "${result}"
+}
+
+
+set_table_fields_info()
+{
+    result="${1}"
+    local IFS=$'\n'
+    rows=( $result )
+    IFS=$'\t'
+    for row in "${rows[@]}"; do
+        vals=( $row )
+        echo "${vals[0]}"
+    done
+}
+
+process_table_itype()
+{
+    dbname="$1"
+    tname="$2"
+    itype="$3"
+
+    options=$(echo "${xml_table_schema}" |  xsltproc --stringparam itype "${itype}"  fields.xsl - )
+    echo yad "${options}"
+}
+
+process_table()
+{
+    dbname=$( valid_mysql_name $1 )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        tname=$( valid_mysql_name $2 )
+        exval=$?
+    fi
+
+    if [ $exval -ne 0 ]; then
+        echo "Invalid MySQL name"
+        exit 1
+    fi
+
+    coldata=$( get_table_fields "$dbname" "$tname" )
+    if [ $? -ne 0 ]; then
+        echo "get_table_fields returned a $?"
+        echo "coldata = ${coldata}"
+        exit 1
+    fi
+
+    echo "${coldata}"
+
+    text="\
+Create default MySQL procedure and SRM scripts for
+
+    Database: $dbname
+       Table: $tname"
+
+    declare -x xml_table_schema=$( xmlify -t $tname $dbname )
+
+    while true; do
+        result=$( yad "${comargs[@]}" "${pagetypes[@]}" --text "${text}" )
+        exval=$?;
+        case $exval in
+            1|252) break;;
+            *)
+                echo "exit value was $exval"
+                process_table_itype $dbname $tname $result
+                ;;
+        esac
+    done
+
+    unset xml_table_schema
+}
+
+# This general purpose function is used by get_database_name
+# and get_table_name to collect selections from the user.
+pick_from_list()
+{
+    largs=(
+        --text "Select a $1 from the following list:"
+        --list
+        --column "$1":TEXT
+        )
+
+    result=$(yad "${comargs[@]}" "${largs[@]}" "${@:2}")
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        echo "${result}"
+        printf 
+    fi
+    exit $exval
+}
+
+get_database_name()
+{
+    dbnames=( $(mysql -B -N -e show\ databases) )
+    dbname=$( pick_from_list "database name" "${dbnames[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then echo "${dbname::-1}"; fi
+    exit $exval
+}
+
+get_table_name()
+{
+    tnames=( $(mysql -B -N "$1" -e show\ tables) )
+    tname=$( pick_from_list "table from $1" "${tnames[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then echo "${tname::-1}"; fi
+    exit $exval
+}
+
+
+
+# Start execution here, starting with confirming the parameters,
+# then launching into the database and table selections.
+arg_count=$#
+if [ $arg_count -gt 0 ]; then
+    p_dbasename=$( valid_mysql_name "$1" )
+    if [ $? -ne 0 ]; then
+        echo "Bad database name"
+        exit 1
+    fi
+fi
+
+if [ $arg_count -gt 1 ]; then
+    p_tablename=$( valid_mysql_name "$2" )
+    if [ $? -ne 0 ]; then
+        echo "Bad table name"
+        exit 1
+    fi
+fi
+
+loop_dbases=true
+while $loop_dbases; do
+    if [ $arg_count -eq 0 ]; then
+        dbname=$( get_database_name )
+        if [ $? -ne 0 ]; then
+            loop_dbases=false
+            break
+        fi
+    else
+        dbname=$p_dbasename
+        loop_dbases=false
+    fi
+
+    loop_tables=true;
+    while $loop_tables; do
+        if [ $arg_count -lt 2 ]; then
+            tname=$( get_table_name $dbname )
+            if [ $? -ne 0 ]; then
+                loop_tables=false
+                break
+            fi
+        else
+            tname=$p_tablename
+            loop_tables=false
+        fi
+
+        process_table "$dbname" "$tname"
+    done
+done
