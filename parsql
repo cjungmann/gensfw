@@ -23,10 +23,7 @@
 # These values can be used for IFS values to later parse the string into records of fields.
 RSEP=$'\a'    # \007
 FSEP=$'\006'
-
-# # Replace the invisible record and field separators with visible alternatives for debugging:
-# RSEP=$'\x0b'  # \x0b is a vertical tab.  Using a newline seemed to confuse awk.
-# FSEP=$'|'
+VSEP=$':'
 
 awk_split_from_meta="BEGIN{RS=\"\n\n\n\"; ORS=\"${RSEP}\";}{print}"
 awk_split_into_columns="BEGIN{RS=\"\n\n\"; ORS=\"${RSEP}\";}{print}"
@@ -44,7 +41,6 @@ trim_string()
    exval=$?
    if [ $exval -eq 0 ]; then
        tval="${BASH_REMATCH[2]}"
-       # echo "1:${tval:0:1}, $:${tval:-1}"
        if [ "${tval:0:1}" == '`' ] && [ "${tval: -1:1}" == '`' ]; then
            echo -n "${tval:1: -1}"
        else
@@ -67,12 +63,12 @@ serialize_column()
    # the position and the column name.
 
    # Split property, then split the propery name for the position
-   IFS=$':' first=( $(echo "${props_arr[0]}") )
-   IFS=$' ' posarr=( $( trim_string "${first[0]}" ) )
+   IFS=$':'; first=( $(echo "${props_arr[0]}") )
+   IFS=$' '; posarr=( $( trim_string "${first[0]}" ) )
    printf "name:%s${FSEP}pos:%s" $( trim_string "${first[1]}" ) $(trim_string "${posarr[1]}")
 
-   # All subsequent properties will be split on the colon to trim extra spaces, reapplying
-   # the colon when the name/value pair is printed.
+   # All subsequent properties will be split on the colon to trim extra spaces, applying the
+   # ${VSEP} value to separate the names from the values.
    IFS=':'
 
    # Process the remainder of the properties
@@ -81,7 +77,7 @@ serialize_column()
       if [ "${parr[0]}" != "Collation:" ]; then
          name=$( echo "${parr[0]}" )
          val=$( trim_string "${parr[1]}" )
-         echo -n "${FSEP}${name}:${val}"
+         echo -n "${FSEP}${name}${VSEP}${val}"
       fi
    done
 
@@ -137,6 +133,76 @@ truncate_query()
    fi
 }
 
+get_assarr_names()
+{
+    column="$1"
+    local IFS="${FSEP}"
+    props=( $column )
+
+    IFS="${VSEP}"
+
+    for prop in "${props[@]}"; do
+        val=( $prop )
+        echo "${val[0]}"
+    done
+}
+
+set_assarr_names()
+{
+    unset ASSARR_NAMES
+    local IFS=$' \n\t'
+    declare -axg ASSARR_NAMES=( $( get_assarr_names "${1}" )  )
+}
+
+assarrayify()
+{
+    column="$1"
+    callback="$2"
+
+    unset ASSARR
+    declare -Axg ASSARR
+    
+    local IFS="${FSEP}"; props=( $column )
+
+    IFS="${VSEP}"
+    for prop in "${props[@]}"; do
+        val=( $prop )
+        if [ "${#val[@]}" -eq 2 ]; then
+           ASSARR["${val[0]}"]="${val[1]}"
+        fi
+    done
+
+    "${callback}"
+
+    unset ASSARR
+}
+
+arrayify()
+{
+    str="$1"
+    callback="$2"
+
+    local IFS="${RSEP}"
+    column_array=( $str )
+
+    set_assarr_names "${column_array[0]}"
+
+    for column in "${column_array[@]}"; do
+        assarrayify "$column" "${callback}"
+    done
+}
+
+demo_array()
+{
+    echo "There are ${#ASSARR_NAMES[@]} names"
+    for name in "${ASSARR_NAMES[@]}"; do
+        val="${ASSARR[${name}]}"
+        printf "%10s %s\n" "${name}" "${val}"
+    done
+    echo
+    echo
+}
+
 
 # The program starts here with parsing of command line options:
 if [ $# -lt 2 ]; then
@@ -146,7 +212,17 @@ fi
 
 dbname="$1"
 query=$( truncate_query "$2" )
-if [ $? -eq 0 ]; then
+if [ $? -ne 0 ]; then
+    exit $?
+fi
+
+if [ $# -gt 2 ] && [ $3 == 'test' ]; then
+    # # Replace the invisible record and field separators with visible alternatives for debugging:
+    RSEP=$'\x0b'  # \x0b is a vertical tab.  Using a newline seemed to confuse awk.
+    FSEP=$'|'
+    rstr=$( get_query_schema )
+    arrayify "${rstr}" "demo_array"
+else 
    get_query_schema
 fi
 
