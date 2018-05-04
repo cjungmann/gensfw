@@ -8,21 +8,16 @@ comargs=(
     --title "Generate Schema Framework Documents"
     )
 
+interaction_types=( List Add Read Update Delete Import )
+view_flags=( use readonly hidden )
+view_prompts=( label )
+
 pagetypes=(
     --list
     --column "Interaction Type":TXT
-    "List" "Add" "Read" "Update" "Delete" "Import"
+    "${interaction_types[@]}"
     )
 
-view_flags=(
-    [use]=true
-    [readonly]=false
-    [hidden]=false
-)
-
-view_prompts=(
-    label
-    )
 
 OIFS=$IFS
 IFS=$'\a'
@@ -30,9 +25,9 @@ COMARGS="${comargs[@]}"
 IFS=$OIFS
 
 # These need to match the separators used in parsql
-RSEP=$'\a'   # \007
-FSEP=$'\006'
-VSEP=$':'
+RSEP=$'\a'   # Record SEParator  ( \a == \007 )
+FSEP=$'\006' # Field SEParator
+VSEP=$':'    # Valuew SEParator
 
 valid_mysql_name()
 {
@@ -50,10 +45,11 @@ valid_mysql_name()
 
 confirm_dbase_name()
 {
-    dbname=$( valid_mysql_name "$1" )
+    local dbname=$( valid_mysql_name "$1" )
+
     if [ $? -eq 0 ]; then
-        query="SELECT COUNT(*) FROM SCHEMATA WHERE SCHEMA_NAME='${dbname}'"
-        result=$( mysql information_schema -B -N -e "${query}" )
+        local query="SELECT COUNT(*) FROM SCHEMATA WHERE SCHEMA_NAME='${dbname}'"
+        local result=$( mysql information_schema -B -N -e "${query}" )
         if [ $? -eq 0 ] && [ $result -eq 1 ]; then
             echo $dbname
             exit 0
@@ -65,11 +61,12 @@ confirm_dbase_name()
 confirm_table_name()
 {
     ## Just validate proper form, the existence of the database should already be confirmed:
-    dbname=$( valid_mysql_name "$1" )
-    tname=$( valid_mysql_name "$2" )
+    local dbname=$( valid_mysql_name "$1" )
+    local tname=$( valid_mysql_name "$2" )
+
     if [ $? -eq 0 ]; then
-        query="SELECT COUNT(*) FROM TABLES WHERE TABLE_SCHEMA='${dbname}' AND TABLE_NAME='${tname}'"
-        result=$( mysql information_schema -B -N -e "${query}" )
+        local query="SELECT COUNT(*) FROM TABLES WHERE TABLE_SCHEMA='${dbname}' AND TABLE_NAME='${tname}'"
+        local result=$( mysql information_schema -B -N -e "${query}" )
         if [ $? -eq 0 ] && [ $result -eq 1 ]; then
             echo $tname
             exit 0
@@ -78,60 +75,112 @@ confirm_table_name()
     exit 1
 }
 
-get_column_info_names()
+column_index_by_name()
 {
-    column="$1"
-    local IFS="${FSEP}"
-    props=( $column )
-    IFS="${VSEP}"
-    for prop in "${props[@]}"; do
-        val=( $prop )
-        echo "${val[0]}"
+    target="$1"
+    index=0
+    for name in "${COLUMNARR_NAMES[@]}"; do
+        if [ $name == $target ]; then
+            echo "$index"
+            exit 0
+        fi
+        (( index++ ))
+    done
+
+    exit 1
+}
+
+get_column_names()
+{
+    local column props val
+    for column in "$@"; do
+       local IFS="${FSEP}"
+       props=( $column )
+       IFS="${VSEP}"
+       for prop in "${props[@]}"; do
+           val=( $prop )
+           echo "${val[0]}"
+       done
     done
 }
 
-set_column_info_arrays()
+save_column_info_into_COLUMNARR_and_COLUMNARR_NAMES()
 {
-    query="$1"
+    local query="$1"
 
     # Use external command to collect info for associative array of column info
-    colinfo=$( ./parsql information_schema "${query}" )
+    local colinfo=$( ./parsql information_schema "${query}" )
 
     local IFS="${RSEP}"
-    columns=( $colinfo )
+    local columns=( $colinfo )
 
     # Maintain separate index of names to preserve column order established by the query:
-    declare -axg ASSARR_NAMES=( $( get_column_info_names "${columns[0]}" ) )
+    IFS=$'\n'; declare -axg COLUMNARR_NAMES=( $( get_column_names "${columns[0]}" ) )
 
-    declare -Axg ASSARR
+    declare -Axg COLUMNARR
 
+    local column prop val
     for column in "${columns[@]}"; do
-        IFS="${FSEP}"
-        props=( $column )
+        IFS="${FSEP}"; props=( $column )
         IFS="${VSEP}"
         for prop in "${procs[@]}"; do
             val=( $prop )
-            ASSARR["${val[0]}"]="${val[1]}"
+            COLUMNARR["${val[0]}"]="${val[1]}"
         done
+    done
+}
+
+debug_dump_COLUMNARR()
+{
+    echo "There are ${#COLUMNARR_NAMES[@]} columns:"
+
+    local name
+    for name in "${COLUMNARR_NAMES[@]}"; do
+        echo "Column '${name}': ${COLUMNARR[$name]}"
+    done
+}
+
+save_table_rows_into_ROWARR()
+{
+    local result="${1}"
+    local IFS=$'\n'; rows=( $result )
+
+    declare -axg ROWARR;
+    IFS=$'\t'
+    local row index=0
+    for row in "${rows[@]}"; do
+        ROWARR[$index]=$( echo "${row}" | tr $'\t' "${FSEP}" )
+        (( index++ ))
+    done
+}
+
+debug_dump_ROWARR()
+{
+    echo "There are ${#ROWARR[@]} rows in the rows array."
+    local row index=0
+    for row in "${ROWARR[@]}"; do
+        echo "Row ${index}: ${row}"
+        (( index++ ))
     done
 }
 
 get_table_fields()
 {
-    dbname=$( confirm_dbase_name "$1" )
-    exval=$?
-    if [ $exval -eq 0 ]; then
-        tname=$( confirm_table_name "$dbname" "$2" )
-        exval=$?
-    fi
+    local dbname=$( confirm_dbase_name "$1" )
+    local -i exval="$?"
 
+    local tname
+    if [ "$exval" -eq 0 ]; then
+        tname=$( confirm_table_name "$dbname" "$2" )
+        exval="$?"
+    fi
     if [ $exval -ne 0 ]; then
         echo "dbname = ${dbname}"
         echo "tname = ${tname}"
         exit 1
     fi
 
-    query="\
+    local query="\
 SELECT COLUMN_NAME,
        UPPER(DATA_TYPE),
        CHARACTER_MAXIMUM_LENGTH,
@@ -145,64 +194,100 @@ SELECT COLUMN_NAME,
   FROM COLUMNS
  WHERE TABLE_SCHEMA='${dbname}' AND TABLE_NAME='${tname}'"
 
-    result=$( mysql information_schema -B -N -e "${query}" )
+    local result=$( mysql information_schema -B -N -e "${query}" )
     if [ $? -ne 0 ]; then
         echo "Query failed! ($?) for query;"
         echo "${query}"
         exit 1
     fi
 
-    set_column_info_arrays "${query}"
-    set_table_fields_info "${result}"
+    save_column_info_into_COLUMNARR_and_COLUMNARR_NAMES "${query}"
+    save_table_rows_into_ROWARR "${result}"
 }
 
-
-set_table_fields_info()
+make_default_interaction_array()
 {
-    result="${1}"
-    local IFS=$'\n'
-    rows=( $result )
-    IFS=$'\t'
-    for row in "${rows[@]}"; do
-        vals=( $row )
-        echo "${vals[0]}"
+    local type="$1"
+    local fname flag ndx_name
+
+    ndx_name=$( column_index_by_name "name" )
+    exval=$?
+    if [ $exval -ne 0 ]; then
+        echo "Failed to column_index_by_name (${exval}): DEBUG_DUMP:"
+        debug_dump_COLUMNARR
+        exit 1
+    fi
+
+    local IFS="${FSEP}"
+    for row in "${ROWARR[@]}"; do
+        rowarr=( $row )
+        fname="${rowarr[$ndx_name]}"
+        echo "${fname}"
+        for flag in "${view_flags[@]}"; do
+            echo "true"
+        done
     done
 }
 
+make_interaction_arrays()
+{
+    local IFS=$' \n\t'
+
+    local itype
+    for itype in "${interaction_types[@]}"; do
+        echo "itype is '${itype}'"
+        IFS=$' \n\t'; arr=( $( make_default_interaction_array "${itype}" ) )
+        IFS="${VSEP}"; line="${arr[@]}"
+        echo "line is '$line'"
+    done
+}
+
+
 process_table_itype()
 {
-    dbname="$1"
-    tname="$2"
-    itype="$3"
+    local dbname="$1"
+    local tname="$2"
+    local itype="$3"
 
+    local options
     options=$(echo "${xml_table_schema}" |  xsltproc --stringparam itype "${itype}"  fields.xsl - )
     echo yad "${options}"
 }
 
 process_table()
 {
-    dbname=$( valid_mysql_name $1 )
-    exval=$?
+    local dbname=$( valid_mysql_name $1 )
+    local -i exval="$?"
+    local tname
     if [ $exval -eq 0 ]; then
         tname=$( valid_mysql_name $2 )
-        exval=$?
+        exval="$?"
     fi
 
     if [ $exval -ne 0 ]; then
-        echo "Invalid MySQL name"
-        exit 1
+        local ename
+        if [ -n $tname ]; then
+            ename="$tname"
+        else
+            ename="$dbname"
+        fi
+        echo "'$ename' is an invalid MySQL name is exval='${exval}'"
+        exit $exval
     fi
 
-    coldata=$( get_table_fields "$dbname" "$tname" )
+    get_table_fields "$dbname" "$tname"
     if [ $? -ne 0 ]; then
         echo "get_table_fields returned a $?"
         echo "coldata = ${coldata}"
         exit 1
     fi
 
-    echo "${coldata}"
+    # debug_dump_COLUMNARR
+    # debug_dump_ROWARR
 
-    text="\
+    vals=$( make_interaction_arrays )
+
+    local text="\
 Create default MySQL procedure and SRM scripts for
 
     Database: $dbname
@@ -210,9 +295,10 @@ Create default MySQL procedure and SRM scripts for
 
     declare -x xml_table_schema=$( xmlify -t $tname $dbname )
 
+    local result
     while true; do
         result=$( yad "${comargs[@]}" "${pagetypes[@]}" --text "${text}" )
-        exval=$?;
+        exval="$?"
         case $exval in
             1|252) break;;
             *)
@@ -229,36 +315,56 @@ Create default MySQL procedure and SRM scripts for
 # and get_table_name to collect selections from the user.
 pick_from_list()
 {
-    largs=(
+    local largs=(
         --text "Select a $1 from the following list:"
         --list
         --column "$1":TEXT
-        )
+    )
 
+    local result
     result=$(yad "${comargs[@]}" "${largs[@]}" "${@:2}")
-    exval=$?
+    local -i exval=$?
+
     if [ $exval -eq 0 ]; then
-        echo "${result}"
-        printf 
+        echo "${result:0: -1}"
     fi
     exit $exval
 }
 
 get_database_name()
 {
+    local dbnames dbname
     dbnames=( $(mysql -B -N -e show\ databases) )
+    local -i exval=$?
+    if [ $exval -ne 0 ]; then
+        echo "Failed to get database names from MySQL"
+        exit $exval
+    fi
+
     dbname=$( pick_from_list "database name" "${dbnames[@]}" )
     exval=$?
-    if [ $exval -eq 0 ]; then echo "${dbname::-1}"; fi
+    if [ $exval -eq 0 ]; then
+        echo "${dbname}"
+    fi
     exit $exval
 }
 
 get_table_name()
 {
-    tnames=( $(mysql -B -N "$1" -e show\ tables) )
+    local tnames tname
+    local dbname="$1"
+    tnames=( $(mysql -B -N "$dbname" -e show\ tables) )
+    local -i exval=$?
+    if [ $exval -ne 0 ]; then
+        echo "Failed to get MySQL table names from '$dbname'"
+        exit "$exval"
+    fi
+
     tname=$( pick_from_list "table from $1" "${tnames[@]}" )
     exval=$?
-    if [ $exval -eq 0 ]; then echo "${tname::-1}"; fi
+    if [ $exval -eq 0 ]; then
+        echo "${tname}"
+    fi
     exit $exval
 }
 
@@ -287,7 +393,8 @@ loop_dbases=true
 while $loop_dbases; do
     if [ $arg_count -eq 0 ]; then
         dbname=$( get_database_name )
-        if [ $? -ne 0 ]; then
+        exval=$?
+        if [ $exval -ne 0 ]; then
             loop_dbases=false
             break
         fi
