@@ -65,7 +65,7 @@ serialize_column()
    # Split property, then split the propery name for the position
    IFS=$':'; first=( $(echo "${props_arr[0]}") )
    IFS=$' '; posarr=( $( trim_string "${first[0]}" ) )
-   printf "name:%s${FSEP}pos:%s" $( trim_string "${first[1]}" ) $(trim_string "${posarr[1]}")
+   printf "Name:%s${FSEP}Position:%s" $( trim_string "${first[1]}" ) $(trim_string "${posarr[1]}")
 
    # All subsequent properties will be split on the colon to trim extra spaces, applying the
    # ${VSEP} value to separate the names from the values.
