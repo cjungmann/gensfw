@@ -43,9 +43,11 @@ ts_re='([[:space:]]*)(.*)([[:space:]]*)'
 # as back-quotes when a string is thus enclosed.
 trim_string()
 {
-   str="${1}"
+   local str="${1}"
+   local tval
+
    [[ $str =~ ${ts_re} ]]
-   exval=$?
+   local exval=$?
    if [ $exval -eq 0 ]; then
        tval="${BASH_REMATCH[2]}"
        if [ "${tval:0:1}" == '`' ] && [ "${tval: -1:1}" == '`' ]; then
@@ -62,12 +64,15 @@ trim_string()
 
 serialize_column()
 {
-   column="$1"
+   local column="$1"
    local IFS="${RSEP}"
-   props_arr=( $( echo "${column}" | awk "${awk_split_into_props}" - ) )
+   local -a props_arr=( $( echo "${column}" | awk "${awk_split_into_props}" - ) )
 
    # Process the first property separately: it contains two values:
    # the position and the column name.
+
+   local -a first
+   local -a posarr
 
    # Split property, then split the propery name for the position
    IFS=$':'; first=( $(echo "${props_arr[0]}") )
@@ -77,6 +82,8 @@ serialize_column()
    # All subsequent properties will be split on the colon to trim extra spaces, applying the
    # ${VSEP} value to separate the names from the values.
    IFS=":"
+
+   local prop parr name val
 
    # Process the remainder of the properties
    for prop in "${props_arr[@]:1}"; do
@@ -91,18 +98,18 @@ serialize_column()
 
 serialize_columns()
 {
-   columns="$1"
+   local columns="$1"
 
    local IFS="${RSEP}"
    local -a arr=( $( echo "${columns}" | awk "${awk_split_into_columns}" - ) )
 
    local col
-   local first=true
+   local -i first=1
 
    for col in "${arr[@]}"; do
        # Conserve record separators by adding only before records above #1:
-       if [ $first ]; then
-           first=false
+       if [ "$first" -eq 1 ]; then
+           first=0
        else
            echo -n "${RSEP}"
        fi
@@ -115,9 +122,9 @@ serialize_columns()
 # ie "WHERE 1=0" or "LIMIT 0"
 parse_result()
 {
-   result="$1"
+   local result="$1"
    local IFS="${RSEP}"
-   arr=( $( echo "${result}" | awk "${awk_split_from_meta}" - ) )
+   local -a arr=( $( echo "${result}" | awk "${awk_split_from_meta}" - ) )
    if [ ${#arr[@]} -eq 2 ]; then
       serialize_columns "${arr[0]}"
    fi 
@@ -130,15 +137,15 @@ get_query_schema()
    # pass the result to serialize_columns.  If we omit LIMIT 0, we will
    # need to send the result to parse_result.
 
-   result=$( mysql "${dbname}" -t -N --column-type-info -e "${query} LIMIT 0" )
+   local result=$( mysql "${dbname}" -t -N --column-type-info -e "${query} LIMIT 0" )
    serialize_columns "${result}"
 }
 
 truncate_query()
 {
-   awks="BEGIN{RS=\"WHERE|LIMIT|GROUP BY|HAVING|ORDER BY\"; ORS=\"${RSEP}\";}{print \$0}"
+   local awks="BEGIN{RS=\"WHERE|LIMIT|GROUP BY|HAVING|ORDER BY\"; ORS=\"${RSEP}\";}{print \$0}"
    local IFS="${RSEP}"
-   qarr=( $( echo "$1" | awk "${awks}" - ) )
+   local -a qarr=( $( echo "$1" | awk "${awks}" - ) )
    if [ $? -eq 0 ]; then
       echo "${qarr[0]} WHERE 1=0"
       exit 0
@@ -149,12 +156,13 @@ truncate_query()
 
 get_assarr_names()
 {
-    column="$1"
+    local column="$1"
     local IFS="${FSEP}"
-    props=( $column )
+    local -a props=( $column )
 
     IFS="${VSEP}"
 
+    local prop val
     for prop in "${props[@]}"; do
         val=( $prop )
         echo "${val[0]}"
@@ -170,14 +178,15 @@ set_assarr_names()
 
 assarrayify()
 {
-    column="$1"
-    callback="$2"
+    local column="$1"
+    local callback="$2"
 
     unset ASSARR
     declare -Axg ASSARR
     
     local IFS="${FSEP}"; props=( $column )
 
+    local prop val
     IFS="${VSEP}"
     for prop in "${props[@]}"; do
         val=( $prop )
@@ -193,14 +202,15 @@ assarrayify()
 
 arrayify()
 {
-    str="$1"
-    callback="$2"
+    local str="$1"
+    local callback="$2"
 
     local IFS="${RSEP}"
-    column_array=( $str )
+    local -a column_array=( $str )
 
     set_assarr_names "${column_array[0]}"
 
+    local column
     for column in "${column_array[@]}"; do
         assarrayify "$column" "${callback}"
     done
