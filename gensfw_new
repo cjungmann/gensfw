@@ -1,7 +1,15 @@
 #!/bin/bash
 
+# These need to match the separators used in parsql
+RSEP=$'\a'   # Record SEParator  ( \a == \007 )
+FSEP=$'\006' # Field SEParator
+VSEP=$':'    # Valuew SEParator
+
+# Generic array separator for adhoc use
+ASEP=$'\a'   # Array SEParator, common array separator for returning and restoring arrays
+
 comargs=(
-    --height=300
+    --height=400
     --width=600
     --center
     --borders=10
@@ -18,18 +26,23 @@ pagetypes=(
     "${interaction_types[@]}"
     )
 
-
 OIFS=$IFS
 IFS=$'\a'
 COMARGS="${comargs[@]}"
 IFS=$OIFS
 
-# These need to match the separators used in parsql
-RSEP=$'\a'   # Record SEParator  ( \a == \007 )
-FSEP=$'\006' # Field SEParator
-VSEP=$':'    # Valuew SEParator
+# These global names will be used to access the properties of a result row
+declare -a META_COLUMN_NAMES
+declare -a META_COLUMNS
 
-valid_mysql_name()
+declare -A RECORD_COLUMN_NAMES
+declare -A RESULT_ROW_NAMES_MAP
+declare -a RESULT_ROW_NAMES_ORDERED
+
+# This global name provides access to rows of a query
+declare -a RECORD_ROWS
+
+validate_mysql_name()
 {
     if [ $# -ne 1 ]; then
         exit 1
@@ -45,7 +58,7 @@ valid_mysql_name()
 
 confirm_dbase_name()
 {
-    local dbname=$( valid_mysql_name "$1" )
+    local dbname=$( validate_mysql_name "$1" )
 
     if [ $? -eq 0 ]; then
         local query="SELECT COUNT(*) FROM SCHEMATA WHERE SCHEMA_NAME='${dbname}'"
@@ -61,8 +74,8 @@ confirm_dbase_name()
 confirm_table_name()
 {
     ## Just validate proper form, the existence of the database should already be confirmed:
-    local dbname=$( valid_mysql_name "$1" )
-    local tname=$( valid_mysql_name "$2" )
+    local dbname=$( validate_mysql_name "$1" )
+    local tname=$( validate_mysql_name "$2" )
 
     if [ $? -eq 0 ]; then
         local query="SELECT COUNT(*) FROM TABLES WHERE TABLE_SCHEMA='${dbname}' AND TABLE_NAME='${tname}'"
@@ -75,18 +88,69 @@ confirm_table_name()
     exit 1
 }
 
-column_index_by_name()
+
+
+debug_dump_row_by_column_index()
 {
-    target="$1"
-    index=0
-    for name in "${COLUMNARR_NAMES[@]}"; do
-        if [ $name == $target ]; then
+    local ndx=$1
+    local rawrow row
+    local IFS="${FSEP}"
+    local -i index=0
+    for rawrow in "${RECORD_ROWS[@]}"; do
+        row=( $rawrow )
+        echo "col $index: ${row[$nd]}" >&2
+        (( index++ ))
+    done
+}
+
+# Returns the index to an array element that matches a target value
+# Usage:
+# array_index_by_value [target] "${arr[@]}"
+#
+# Where target is the string to be found, and an expansion of the target
+# array expansion follows.  The function can search the parameters for
+# the target, setting the exit status to indicate success or failure,
+# and echoing the index value upon success.
+array_index_by_value()
+{
+    local target="$1"
+
+    local index=0
+    for el in "${@:2}"; do
+        if [ "$el" == "$target" ]; then
             echo "$index"
             exit 0
         fi
         (( index++ ))
     done
+    exit 1
+}
 
+row_index_by_name()
+{
+    local target="$1"
+    local meta_index=0
+    local name
+    for name in "${META_COLUMN_NAMES[@]}"; do
+        if [ $name == $target ]; then
+            break;
+        fi
+        (( meta_index++ ))
+    done
+
+    local rowindex rawrow row
+    rowindex=0
+    local IFS="${FSEP}"
+    for rawrow in "${RECORD_ROWS[@]}"; do
+        row=( ${rawrow} )
+        if [ "${row[$meta_index]}" == $target ]; then
+            return ${rowindex}
+            exit 0
+        fi
+        (( ++rowindex ))
+    done
+
+    debug_dump_row_by_column_index $meta_index
     exit 1
 }
 
@@ -104,7 +168,25 @@ get_column_names()
     done
 }
 
-save_column_info_into_COLUMNARR_and_COLUMNARR_NAMES()
+get_prop_list_from_column_element()
+{
+    local column="$1"
+    local val prop
+    local -a props
+
+    local IFS="${FSEP}"
+    props=( $( echo "$column" ) )
+
+    for prop in "${props[@]}"; do
+        IFS="${VSEP}"
+        val=( $prop )
+        if [ $val[0] ]; then
+            printf "%s${FSEP}" "${val[1]}"
+        fi
+    done
+}
+
+save_column_info_into_META_COLUMNS_and_META_COLUMN_NAMES()
 {
     local query="$1"
 
@@ -115,56 +197,86 @@ save_column_info_into_COLUMNARR_and_COLUMNARR_NAMES()
     local columns=( $colinfo )
 
     # Maintain separate index of names to preserve column order established by the query:
-    IFS=$'\n'; declare -axg COLUMNARR_NAMES=( $( get_column_names "${columns[0]}" ) )
+    IFS=$'\n'; declare -axg META_COLUMN_NAMES=( $( get_column_names "${columns[0]}" ) )
 
-    declare -Axg COLUMNARR
+    declare -axg META_COLUMNS
 
-    local column prop val
+    local column proplist
+    local -i index=0
+
     for column in "${columns[@]}"; do
-        IFS="${FSEP}"; props=( $column )
-        IFS="${VSEP}"
-        for prop in "${procs[@]}"; do
-            val=( $prop )
-            COLUMNARR["${val[0]}"]="${val[1]}"
-        done
+        proplist=$( get_prop_list_from_column_element "${column}" )
+        if [ $? ]; then
+            META_COLUMNS[$index]=$( get_prop_list_from_column_element "${column}" )
+            (( index++ ))
+        fi
+        
     done
 }
 
-debug_dump_COLUMNARR()
+make_RECORD_COLUMN_NAMES_from_META_COLUMNS()
 {
-    echo "There are ${#COLUMNARR_NAMES[@]} columns:"
-
+    RECORD_COLUMN_NAMES=()
+    local -i index=0
+    local -i ndxName="${RESULT_ROW_NAMES_MAP['Name']}"
+    local -a props
     local name
-    for name in "${COLUMNARR_NAMES[@]}"; do
-        echo "Column '${name}': ${COLUMNARR[$name]}"
+    local IFS="${FSEP}"
+    for meta_column in "${META_COLUMNS[@]}"; do
+        props=( $meta_column )
+        name="${props[$ndxName]}"
+        RECORD_COLUMN_NAMES[$name]=$index
+        (( index++ ))
     done
 }
 
-save_table_rows_into_ROWARR()
+save_table_rows_into_RECORD_ROWS()
 {
     local result="${1}"
     local IFS=$'\n'; rows=( $result )
 
-    declare -axg ROWARR;
+    declare -axg RECORD_ROWS;
     IFS=$'\t'
     local row index=0
     for row in "${rows[@]}"; do
-        ROWARR[$index]=$( echo "${row}" | tr $'\t' "${FSEP}" )
+        RECORD_ROWS[$index]=$( echo "${row}" | tr $'\t' "${FSEP}" )
         (( index++ ))
     done
 }
 
-debug_dump_ROWARR()
+make_RESULT_ROW_NAMES_MAP_from_RECORD_ROWS()
 {
-    echo "There are ${#ROWARR[@]} rows in the rows array."
-    local row index=0
-    for row in "${ROWARR[@]}"; do
-        echo "Row ${index}: ${row}"
-        (( index++ ))
+    RESULT_ROW_NAMES_MAP=()
+    local -i ndxNameCol="${RECORD_COLUMN_NAMES['Name']}"
+    local row props name
+    local -i ndxRow=0
+    for row in "${RECORD_ROWS[@]}"; do
+        local IFS="${FSEP}"
+        props=( $row )
+        name="${props[$ndxNameCol]}"
+        RESULT_ROW_NAMES_MAP["${name}"]=$ndxRow
+        (( ndxRow++ ))
     done
 }
 
-get_table_fields()
+
+make_RESULT_ROW_NAMES_ORDERED_from_RECORD_ROWS()
+{
+    RESULT_ROW_NAMES_ORDERED=()
+    local -i ndxNameCol="${RECORD_COLUMN_NAMES['Name']}"
+    local row props name
+    local -i ndxRow=0
+    for row in "${RECORD_ROWS[@]}"; do
+        local IFS="${FSEP}"
+        props=( $row )
+        name="${props[$ndxNameCol]}"
+        RESULT_ROW_NAMES_ORDERED[$ndxRow]="${name}"
+        (( ndxRow++ ))
+    done
+}
+
+
+collect_table_fields()
 {
     local dbname=$( confirm_dbase_name "$1" )
     local -i exval="$?"
@@ -182,7 +294,7 @@ get_table_fields()
 
     local query="\
 SELECT COLUMN_NAME,
-       UPPER(DATA_TYPE),
+       UPPER(DATA_TYPE) AS DATA_TYPE,
        CHARACTER_MAXIMUM_LENGTH,
        COLUMN_TYPE,
        NULLIF('0',INSTR(EXTRA,'auto_increment')) AS autoinc,
@@ -201,8 +313,22 @@ SELECT COLUMN_NAME,
         exit 1
     fi
 
-    save_column_info_into_COLUMNARR_and_COLUMNARR_NAMES "${query}"
-    save_table_rows_into_ROWARR "${result}"
+    save_column_info_into_META_COLUMNS_and_META_COLUMN_NAMES "${query}"
+    make_RECORD_COLUMN_NAMES_from_META_COLUMNS
+    save_table_rows_into_RECORD_ROWS "${result}"
+    make_RESULT_ROW_NAMES_ORDERED_from_RECORD_ROWS
+    make_RESULT_ROW_NAMES_MAP_from_RECORD_ROWS
+
+    # echo "META_COLUMNS:"
+    # printf "%s\n" "${META_COLUMNS[@]}"
+    # echo
+    # echo "META_COLUMN_NAMES:"
+    # printf "%s\n" "${META_COLUMN_NAMES[@]}"
+
+    # echo "RESULT_ROW_NAMES_MAP:"
+    # printf "%s\n" "${!RESULT_ROW_NAMES_MAP[@]}"
+    # echo "RESULT_ROW_NAMES_ORDERED:"
+    # printf "%s\n" "${RESULT_ROW_NAMES_ORDERED[@]}"
 }
 
 make_default_interaction_array()
@@ -210,16 +336,16 @@ make_default_interaction_array()
     local type="$1"
     local fname flag ndx_name
 
-    ndx_name=$( column_index_by_name "name" )
+    # ndx_name=$( row_index_by_name "name" )
+    ndx_name="${RESULT_ROW_NAMES_MAP['Name']}"
     exval=$?
     if [ $exval -ne 0 ]; then
-        echo "Failed to column_index_by_name (${exval}): DEBUG_DUMP:"
-        debug_dump_COLUMNARR
+        echo "Failed to row_index_by_name (${exval}): DEBUG_DUMP:"
         exit 1
     fi
 
     local IFS="${FSEP}"
-    for row in "${ROWARR[@]}"; do
+    for row in "${RECORD_ROWS[@]}"; do
         rowarr=( $row )
         fname="${rowarr[$ndx_name]}"
         echo "${fname}"
@@ -242,6 +368,52 @@ make_interaction_arrays()
     done
 }
 
+get_list_options_array_string()
+{
+    local options=(
+        --list
+        --always-print-result
+        --print-all
+        --editable
+        --editable-cols 5
+        --column "Name":TEXT
+        --column "Use":CHK
+        --column "Hide":CHK
+        --column "Disable":CHK
+        --column "Label"
+    )
+
+    local IFS="$1"
+    echo -n "${options[*]}"
+}
+
+
+prepare_default_list_values()
+{
+    local ASEP="$1"
+    local itype="$2"
+
+    local ndxName="${RECORD_COLUMN_NAMES['COLUMN_NAME']}"
+    local ndxPriKey="${RECORD_COLUMN_NAMES['prikey']}"
+    local ndxDefault="${RECORD_COLUMN_NAMES['COLUMN_DEFAULT']}"
+
+    local -a valsarr=(name true false false)
+    valsarr[4]=
+
+    local currow rowvals
+    local IFS="${FSEP}"
+
+    for currow in "${RECORD_ROWS[@]}"; do
+        IFS="${FSEP}"
+        rowvals=( $currow )
+
+        valsarr[0]="${rowvals[$ndxName]}"
+
+        IFS="${ASEP}"
+        echo -n "${valsarr[*]}" "${IFS}"
+    done
+}
+
 
 process_table_itype()
 {
@@ -249,18 +421,23 @@ process_table_itype()
     local tname="$2"
     local itype="$3"
 
-    local options
-    options=$(echo "${xml_table_schema}" |  xsltproc --stringparam itype "${itype}"  fields.xsl - )
-    echo yad "${options}"
+    local IFS="${ASEP}"
+    local -a list_options=( $( get_list_options_array_string "${ASEP}" ) )
+    local -a list_values=( $( prepare_default_list_values "${ASEP}" "${itype}" ) )
+
+    local result
+
+    result=$( yad "${comargs[@]}" "${list_options[@]}" "${list_values[@]}" )
+    echo "result is ${result}"
 }
 
-process_table()
+collect_table_information()
 {
-    local dbname=$( valid_mysql_name $1 )
+    local dbname=$( validate_mysql_name $1 )
     local -i exval="$?"
     local tname
     if [ $exval -eq 0 ]; then
-        tname=$( valid_mysql_name $2 )
+        tname=$( validate_mysql_name $2 )
         exval="$?"
     fi
 
@@ -275,17 +452,23 @@ process_table()
         exit $exval
     fi
 
-    get_table_fields "$dbname" "$tname"
+    collect_table_fields "$dbname" "$tname"
     if [ $? -ne 0 ]; then
-        echo "get_table_fields returned a $?"
+        echo "collect_table_fields returned a $?"
         echo "coldata = ${coldata}"
         exit 1
     fi
+}
 
-    # debug_dump_COLUMNARR
-    # debug_dump_ROWARR
+process_table()
+{
+    # Accept dbname and tname values, they've been validated by now
+    local dbname="$1"
+    local tname="$2"
 
     vals=$( make_interaction_arrays )
+
+    tabarr=$( make_table_array "$dbname" "$tname" )
 
     local text="\
 Create default MySQL procedure and SRM scripts for
@@ -297,12 +480,12 @@ Create default MySQL procedure and SRM scripts for
 
     local result
     while true; do
+        local IFS=$'\n'
         result=$( yad "${comargs[@]}" "${pagetypes[@]}" --text "${text}" )
         exval="$?"
         case $exval in
             1|252) break;;
             *)
-                echo "exit value was $exval"
                 process_table_itype $dbname $tname $result
                 ;;
         esac
@@ -311,9 +494,9 @@ Create default MySQL procedure and SRM scripts for
     unset xml_table_schema
 }
 
-# This general purpose function is used by get_database_name
-# and get_table_name to collect selections from the user.
-pick_from_list()
+# This general purpose function is used by dialog_pick_database
+# and dialog_pick_table to collect selections from the user.
+yad_pick_from_list()
 {
     local largs=(
         --text "Select a $1 from the following list:"
@@ -331,7 +514,7 @@ pick_from_list()
     exit $exval
 }
 
-get_database_name()
+dialog_pick_database()
 {
     local dbnames dbname
     dbnames=( $(mysql -B -N -e show\ databases) )
@@ -341,7 +524,7 @@ get_database_name()
         exit $exval
     fi
 
-    dbname=$( pick_from_list "database name" "${dbnames[@]}" )
+    dbname=$( yad_pick_from_list "database name" "${dbnames[@]}" )
     exval=$?
     if [ $exval -eq 0 ]; then
         echo "${dbname}"
@@ -349,7 +532,7 @@ get_database_name()
     exit $exval
 }
 
-get_table_name()
+dialog_pick_table()
 {
     local tnames tname
     local dbname="$1"
@@ -360,7 +543,7 @@ get_table_name()
         exit "$exval"
     fi
 
-    tname=$( pick_from_list "table from $1" "${tnames[@]}" )
+    tname=$( yad_pick_from_list "table from $1" "${tnames[@]}" )
     exval=$?
     if [ $exval -eq 0 ]; then
         echo "${tname}"
@@ -368,13 +551,11 @@ get_table_name()
     exit $exval
 }
 
-
-
 # Start execution here, starting with confirming the parameters,
 # then launching into the database and table selections.
 arg_count=$#
 if [ $arg_count -gt 0 ]; then
-    p_dbasename=$( valid_mysql_name "$1" )
+    p_dbasename=$( validate_mysql_name "$1" )
     if [ $? -ne 0 ]; then
         echo "Bad database name"
         exit 1
@@ -382,7 +563,7 @@ if [ $arg_count -gt 0 ]; then
 fi
 
 if [ $arg_count -gt 1 ]; then
-    p_tablename=$( valid_mysql_name "$2" )
+    p_tablename=$( validate_mysql_name "$2" )
     if [ $? -ne 0 ]; then
         echo "Bad table name"
         exit 1
@@ -392,7 +573,7 @@ fi
 loop_dbases=true
 while $loop_dbases; do
     if [ $arg_count -eq 0 ]; then
-        dbname=$( get_database_name )
+        dbname=$( dialog_pick_database )
         exval=$?
         if [ $exval -ne 0 ]; then
             loop_dbases=false
@@ -406,7 +587,7 @@ while $loop_dbases; do
     loop_tables=true;
     while $loop_tables; do
         if [ $arg_count -lt 2 ]; then
-            tname=$( get_table_name $dbname )
+            tname=$( dialog_pick_table $dbname )
             if [ $? -ne 0 ]; then
                 loop_tables=false
                 break
@@ -416,6 +597,12 @@ while $loop_dbases; do
             loop_tables=false
         fi
 
-        process_table "$dbname" "$tname"
+        collect_table_information "$dbname" "$tname"
+
+        if [ $? -eq 0 ]; then
+            process_table "$dbname" "$tname"
+        else
+            echo "Unexpected column name suggests changed query.  Please check."
+        fi
     done
 done
