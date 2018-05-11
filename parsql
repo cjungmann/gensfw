@@ -25,6 +25,13 @@ RSEP=$'\a'    # \007
 FSEP=$'\006'
 VSEP=$':'
 
+# These must be set before the awk_split strings are created:
+if [ $# -gt 2 ] && [ $3 != "test" ]; then
+    RSEP="${3:0:1}"
+    FSEP="${3:1:1}"
+    VSEP="${3:2:1}"
+fi
+
 awk_split_from_meta="BEGIN{RS=\"\n\n\n\"; ORS=\"${RSEP}\";}{print}"
 awk_split_into_columns="BEGIN{RS=\"\n\n\"; ORS=\"${RSEP}\";}{print}"
 awk_split_into_props="BEGIN{RS=\"\n\"; ORS=\"${RSEP}\";}{print}"
@@ -65,11 +72,11 @@ serialize_column()
    # Split property, then split the propery name for the position
    IFS=$':'; first=( $(echo "${props_arr[0]}") )
    IFS=$' '; posarr=( $( trim_string "${first[0]}" ) )
-   printf "Name:%s${FSEP}Position:%s" $( trim_string "${first[1]}" ) $(trim_string "${posarr[1]}")
+   printf "Name${VSEP}%s${FSEP}Position${VSEP}%s" $( trim_string "${first[1]}" ) $(trim_string "${posarr[1]}")
 
    # All subsequent properties will be split on the colon to trim extra spaces, applying the
    # ${VSEP} value to separate the names from the values.
-   IFS=':'
+   IFS=":"
 
    # Process the remainder of the properties
    for prop in "${props_arr[@]:1}"; do
@@ -80,8 +87,6 @@ serialize_column()
          echo -n "${FSEP}${name}${VSEP}${val}"
       fi
    done
-
-   echo -n "${RSEP}"
 }
 
 serialize_columns()
@@ -89,9 +94,18 @@ serialize_columns()
    columns="$1"
 
    local IFS="${RSEP}"
-   arr=( $( echo "${columns}" | awk "${awk_split_into_columns}" - ) )
+   local -a arr=( $( echo "${columns}" | awk "${awk_split_into_columns}" - ) )
+
+   local col
+   local first=true
 
    for col in "${arr[@]}"; do
+       # Conserve record separators by adding only before records above #1:
+       if [ $first ]; then
+           first=false
+       else
+           echo -n "${RSEP}"
+       fi
        serialize_column "${col}"
    done
 }
@@ -206,7 +220,12 @@ demo_array()
 
 # The program starts here with parsing of command line options:
 if [ $# -lt 2 ]; then
-   echo "Usage: parsql <database name> <query>"
+   echo "Usage: parsql <database name> <query> [test|<separators string>] "
+   echo
+   echo "option \"test\" writes a test output"
+   echo "option <separators string> should be a three character string:"
+   echo "       Record SEParator, Field SEParator, Value SEParator"
+
    exit 1
 fi
 
@@ -222,9 +241,13 @@ if [ $# -gt 2 ] && [ $3 == 'test' ]; then
     FSEP=$'|'
     rstr=$( get_query_schema )
     arrayify "${rstr}" "demo_array"
-else 
-   get_query_schema
+
+    # return failure in case gensfw accidentally calls this command inappropriately
+    exit 1
 fi
+
+get_query_schema
+
 
 
 ## Test output by converting to an array:
