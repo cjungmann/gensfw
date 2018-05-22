@@ -1,0 +1,495 @@
+#!/bin/bash
+
+SEPS=$( bashmysql -S )
+RSEP="${SEPS:0:1}"
+FSEP="${SEPS:1:1}"
+VSEP="${SEPS:2:1}"
+
+YSEP="${FSEP}"
+YSEP='^'
+
+declare -gx GF_DBNAME
+declare -gx GF_TNAME
+
+declare -gi COL_NAME
+declare -gi COL_TYPE
+declare -gi COL_PRIKEY
+declare -gi COL_DEFAULT
+
+declare -gi G_PLUG_NUM=$$
+
+declare -a DBASE_NAMES=( $( mysql -BN -e "show databases" ) ) 
+declare -a TABLE_NAMES
+
+
+declare -a YAD_COMMON_ARGS=(
+    --height 500
+    --width 600
+    --center
+    --borders 10
+    --separator "${YSEP}"
+    --title "Generate Schema Framework Scripts"
+)
+
+declare -a IACT_TYPES_ARGS=(
+    --list
+    --column "Interaction Type":TEXT
+)
+
+declare -a IACT_TOP_PANE=(
+    --tabnum=1
+    --form
+    --separator "${YSEP}"
+    --field "Interaction":RO
+    --field "Include":CHK
+    )
+
+declare -a IACT_LIST_PANE=(
+    --tabnum=2
+    --list
+    --always-print-result
+    --separator "${YSEP}"
+    --print-all
+    --editable
+    --editable-cols 6
+    --column "Column Name":TEXT
+    --column "Type":TEXT
+    --column "Use":CHK
+    --column "Readonly":CHK
+    --column "Hide":CHK
+    --column "Label":TEXT
+)
+
+declare -a IACT_PANED_PAGE=(
+    --paned
+    # --orient vert
+    --splitter 80
+    --tab="Tab1"
+    --tab="Tab2"
+    )
+
+declare -a IACT_NAMES=( List Add Read Update Delete Import )
+
+declare -A IACT_DATA=(
+    [List]="FALSE"
+    [Add]="FALSE"
+    [Read]="FALSE"
+    [Update]="FALSE"
+    [Delete]="FALSE"
+    [Import]="FALSE"
+ )
+
+declare COLS_QUERY="\
+SELECT COLUMN_NAME,
+       UPPER(DATA_TYPE) AS DATA_TYPE,
+       CHARACTER_MAXIMUM_LENGTH,
+       COLUMN_TYPE,
+       CASE WHEN INSTR(EXTRA,'auto_increment') THEN 'YES' ELSE NULL END AS autoinc,
+       CASE WHEN INSTR(COLUMN_KEY,'PRI') THEN 'YES' ELSE NULL END AS prikey,
+       NULLIF(IS_NULLABLE,'NO') AS nullable,
+       NUMERIC_PRECISION,
+       NUMERIC_SCALE,
+       COLUMN_DEFAULT
+  FROM COLUMNS"
+
+
+# Save column indexes to global variables for repeated access
+collect_column_indexes()
+{
+    declare -i ndx
+    declare -i exval=0
+
+    # Use nested function to reuse repeated code.
+    # First failure to find skips the rest.
+    get_index()
+    {
+        if [ $exval -eq 0 ]; then
+            ndx=$( find_column_index "$1" )
+            exval=$?
+            if [ $exval -ne 0 ]; then
+                echo "Can't find column '$1'." >&2
+                exit $exval
+            fi
+        fi
+    }
+
+    get_index "COLUMN_NAME";    COL_NAME=$ndx
+    get_index "DATA_TYPE";      COL_TYPE=$ndx
+    get_index "prikey";         COL_PRIKEY=$ndx
+    get_index "COLUMN_DEFAULT"; COL_DEFAULT=$ndx
+}
+
+get_iact_meta_vals_str()
+{
+    local -i exval
+    local itype="$1"
+    local metastr
+    local -a savedvals
+    local LSEP="${YSEP}"
+
+    metastr="${IACT_DATA[$itype]}"
+    exval=$?
+    if [ $exval -ne 0 ]; then
+        echo "Error retrieving data for the '${itype}' interaction." >&2
+        exit $exval
+    fi
+    savedvals=( $( echo "$metastr" ) )
+    echo "${itype}${LSEP}${savedvals[0]}"
+}
+
+get_iact_list_data_str()
+{
+    local itype="$1"
+    local IFS="${YSEP}"
+
+    # Using a local alias for output separator
+    local LSEP="${YSEP}"
+
+    # First check if the interaction type has a saved value:
+    local -i exval
+    local -a vals ovals
+    local valstr="${IACT_DATA[$itype]}"
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        IFS="${YSEP}"
+        vals=( $( echo "${valstr}" ) )
+        exval=$?
+        if [ $exval -eq 0 -a "${#vals[@]}" -gt 1 ]; then
+            IFS="${LSEP}"
+            echo "${vals[*]:1}"
+
+            vals_copy=( $( echo "${vals[*]:1}" ) )
+            return 0
+        fi
+    fi
+
+    # If no saved value, return a default string to start with:
+    local rowstr
+    local -a row
+    local -i is_index
+
+    # Reset IFS to parse fields from rowstr from bashmysql:
+    IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "$rowstr") )
+
+        is_index=$( [ -n "${row[$COL_PRIKEY]}" ]; echo $? )
+
+        # Skip field if not a new record:
+        if [ $itype == "Add" -a $is_index -eq 0 ]; then
+            continue
+        fi
+
+        # Information/Identification column (name and datatype)
+        echo -n "${row[COL_NAME]}${LSEP}${row[COL_TYPE]}"
+
+        # Always include column (since we've eliminated to Add interaction):
+        echo -n "${LSEP}TRUE"
+
+        # Readonly and Hide (For index fields)
+        if [ $is_index -eq 0 ]; then
+            echo -n "${LSEP}TRUE${LSEP}TRUE"
+        else
+            echo -n "${LSEP}FALSE${LSEP}FALSE"
+        fi
+
+        # Blank element for the label, printing newline at end of row
+        echo -n "${LSEP}"
+        echo -n "${LSEP}"
+
+    done
+}
+
+
+save_iact_choices()
+{
+    local IFS
+    local line
+    local -a lines choices row
+
+    # These are used to set and build a record value:
+    local iact_name
+    local iact_incl
+    local -a iact_frows
+
+    # First split to rows:
+    IFS=$'\n'
+    lines=( $(echo "$1" ) )
+
+    for line in "${lines[@]}"; do
+        IFS="${YSEP}"
+        row=( $( echo "${line}" ) )
+        if [ "${#row[@]}" -lt 4 ]; then
+            iact_name="${row[0]}"
+            iact_incl="${row[1]}"
+        else
+            iact_frows=( "${iact_frows[@]}" "${row[@]}" )
+        fi
+    done
+
+    IFS="${YSEP}"
+    IACT_DATA["$iact_name"]="${iact_incl}${YSEP}${iact_frows[*]}"
+
+    # echo "IACT_DATA[${iact_name}] = '${IACT_DATA[${iact_name}]}'" >&2
+}
+
+string_in_array()
+{
+    local target="$1"
+    local el
+    for el in "${@:2}"; do
+        if [ "$el" == "$target" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+confirm_dbase_name()
+{
+    if string_in_array "${GF_DBNAME}" "${DBASE_NAMES[@]}"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+confirm_table_name()
+{
+    if string_in_array "${GF_TNAME}" "${TABLE_NAMES[@]}"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+set_dbase_name()
+{
+    if string_in_array "$1" "${DBASE_NAMES[@]}" ; then
+        GF_DBNAME="$1"
+        TABLE_NAMES=( $( mysql "${GF_DBNAME}" -BN -e "show tables" ) )
+    else
+        echo "'$1' is not a database name on this server." >&2
+        exit 1
+    fi
+}
+
+set_table_name()
+{
+    if string_in_array "$1" "${TABLE_NAMES[@]}"; then
+        GF_TNAME="$1"
+    else
+        echo "'$1' is not a table name in the ${GF_DBNAME} database." >&2
+        exit 1
+    fi
+}
+
+
+# This function can terminate the script with an unknown database
+# or table name.  Thus, there is no return value for this function.
+parse_args()
+{
+    local arg
+    for arg in "$@"; do
+        if [ -z "$GF_DBNAME" ]; then
+            set_dbase_name "$arg"
+        elif [ -z "$GF_TNAME" ]; then
+            set_table_name "$arg"
+        fi
+    done
+}
+
+# Uses first parameter as subject value, then puts the rest of the parameters
+# into a list element.
+pick_from_array()
+{
+    local subject="$1"
+
+    local cmd=(
+        "${YAD_COMMON_ARGS[@]}"
+        --list
+        --text "Select a ${subject} from the following list."
+        --no-headers
+        --column "${subject}":TEXT
+        "${@:2}"
+    )
+
+    local -i exval
+
+    result=$( yad "${cmd[@]}" )
+    exval=$?
+    if [ $exval -ne 0 ]; then
+        return $exval
+    fi
+    local IFS="${YSEP}"
+    arr=( $( echo "${result}" ) )
+
+    echo "${arr[0]}"
+    return 0
+}
+
+get_dbname()
+{
+    local -a dbnames
+    local -i exval
+    local result
+
+    result=$( pick_from_array "Database" "${DBASE_NAMES[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        set_dbase_name "${result}"
+    fi
+    return $exval
+}
+
+get_tname()
+{
+    local -i exval
+    local result
+
+    result=$( pick_from_array "Table" "${TABLE_NAMES[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        set_table_name "${result}"
+    fi
+    return $exval
+}
+
+show_interaction_type_dialog()
+{
+    # IFS for parsing YAD result:
+    local IFS="${YSEP}"
+    local iact_arr=( $( echo $1 ) )
+    local iact=${iact_arr[0]}
+
+    local meta_vals_str=$( get_iact_meta_vals_str "${iact}" )
+    local list_vals_str=$( get_iact_list_data_str "${iact}" )
+
+    # IFS for parsing our stuff:
+    IFS="${YSEP}"
+    local -a meta_vals=( $( echo "${meta_vals_str}" ) )
+    local -a list_vals=( $( echo "${list_vals_str}" ) )
+
+    local result
+    local -i exval
+    local -i PLUG_NUM=$(( G_PLUG_NUM + 1 ))
+
+    local -a top_pane=(
+        --plug "${PLUG_NUM}"
+        "${IACT_TOP_PANE[@]}"
+        "${meta_vals[@]}"
+    )
+
+    local -a list_pane=(
+        --plug "${PLUG_NUM}"
+        "${IACT_LIST_PANE[@]}"
+        "${list_vals[@]}"
+    )
+
+    local -a paned_dialog=(
+        --key "${PLUG_NUM}"
+        "${IACT_PANED_PAGE[@]}"
+        "${YAD_COMMON_ARGS[@]}"
+    )
+
+    result=$(
+        yad "${top_pane[@]}" &
+        yad "${list_pane[@]}" &
+        yad "${paned_dialog[@]}"
+ )
+    # yad "${top_pane[@]}" &
+    # yad "${list_pane[@]}" &
+    # result= $( yad "${paned_dialog[@]}" )
+    exval=$?
+
+    case $exval in
+        0) save_iact_choices "${result}" ;; # Pressed OK
+        1) ;; # Pressed Cancel
+        252) ;; # Pressed ESC or window close
+    esac
+}
+
+show_iacts_dialog()
+{
+    local result
+    local -i exval
+    while true; do
+        result=$( yad "${YAD_COMMON_ARGS[@]}" "${IACT_TYPES_ARGS[@]}" "${IACT_NAMES[@]}" )
+        exval=$?
+        case $exval in
+            0) show_interaction_type_dialog "$result" ;; # Pressed OK
+            1) break ;; # Pressed Cancel
+            252) break ;; # Pressed ESC or window close
+        esac
+    done
+
+}
+
+use_table_info()
+{
+    collect_column_indexes
+    show_iacts_dialog
+}
+    
+collect_table_info()
+{
+    if ! confirm_dbase_name || ! confirm_table_name ; then
+        echo "SQL Injection test failed.  Attempt to set" >&2
+        echo "Database name = '${GF_DBNAME}', and" >&2
+        echo "Table name = '${GF_TNAME}'" >&2
+        exit 1
+    fi
+
+    query="\
+${COLS_QUERY}
+WHERE TABLE_SCHEMA='${GF_DBNAME}'
+AND TABLE_NAME='${GF_TNAME}'"
+
+    source bashmysql "information_schema" "${query}" -c use_table_info
+}
+
+
+loop_for_context()
+{
+    local -i do_loop=0
+    local -i do_dbase_loop=$( test -z "$GF_DBNAME"; echo $? )
+
+    local tresult dresult
+    local -i exval
+
+    while [ $do_loop -eq 0 ]; do
+        if [ $do_dbase_loop -eq 0 ]; then
+            get_dbname
+            exval=$?
+            if [ $exval -ne 0 ]; then
+                GF_DBNAME=
+                do_dbase_loop=1
+                do_loop=1
+            fi
+        fi
+
+        while [ -n "$GF_DBNAME" ]; do
+            get_tname
+            exval=$?
+            if [ $exval -eq 0 ]; then
+                collect_table_info
+            elif [ $do_dbase_loop -ne 0 ]; then
+                do_loop=1
+                break
+            else
+                break
+            fi
+        done
+    done
+}
+
+
+parse_args "$@"
+if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
+    collect_table_info
+else
+    loop_for_context
+fi
+
+
+
