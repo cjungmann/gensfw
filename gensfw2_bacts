@@ -1,0 +1,135 @@
+#!/bin/bash
+
+write_scripts()
+{
+    echo "Not done, yet"
+}
+
+get_saved_settings_string()
+{
+    local iname
+    for iname in "${IACT_NAMES[@]}"; do
+        echo -n "${iname}${FSEP}${IACT_DATA[$iname]}${RSEP}"
+    done
+}
+
+save_settings_to_file()
+{
+    local fpath="$1"
+
+    local IFS="${RSEP}"
+
+    local meta_rec="${GF_DBNAME}${FSEP}${GF_TNAME}"
+    local -a settings
+    settings=( $( get_saved_settings_string ) )
+
+
+    local -a filearr
+    filearr=(
+        "${meta_rec}"
+        "${settings[@]}"
+    )
+
+    IFS="${RSEP}"
+    printf "'%s'\n\n" "${filearr[*]}" >&2
+    
+    echo -n "${filearr[*]}" > $fpath
+}
+
+gsf_load_IACT_DATA()
+{
+    reset_IACT_DATA
+
+    local IFS="${FSEP}"
+    local recstr name
+
+    local -a rec valarr
+    for recstr in "${GSF_RECS[@]:1}"; do
+        rec=( $( echo "${recstr}" ) )
+        name="${rec[0]}"
+        if confirm_iact_name "${name}"; then
+            # Use sliced array to reconstruct values using asterisk expansion
+            valarr=( "${rec[@]:1}" )
+            IACT_DATA["${name}"]="${valarr[*]}"
+        fi
+    done
+
+    declare -p IACT_DATA
+
+    show_iacts_dialog
+}
+
+gsf_open_table_from_record()
+{
+    local IFS="${FSEP}"
+    local -i exval
+    local -a dnt
+    dnt=( $( echo "$1" ) )
+    if [ $? -eq 0 -a "${#dnt[@]}" -eq 2 ]; then
+        set_dbase_name "${dnt[0]}"
+        exval=$?
+        if [ $exval -eq 0 ]; then
+            set_table_name "${dnt[1]}"
+            exval=$?
+            if [ $exval -eq 0 ]; then
+                collect_table_info gsf_load_IACT_DATA
+            fi
+        fi
+    fi
+    return $exval
+}
+
+gsf_read_settings_from_file()
+{
+    # existence of file already confirmed
+    local fname="$1"
+
+    local IFS="${RSEP}"
+    local -i exval
+    local -a GSF_RECS=( $( cat "$fname" ) )
+
+    gsf_open_table_from_record "${GSF_RECS[0]}"
+}
+
+open_gsf_file()
+{
+    local result
+    local -i exval
+    local -a cmd
+
+    cmd=(
+        "${YAD_COMMON_ARGS[@]}"
+        --text "Select a settings file to load."
+        --file
+        --filename "\*.gsf"
+    )
+
+    result=$( yad "${cmd[@]}" )
+    exval=$?
+
+    if [ $exval -eq 0 -a -f "${result}" ]; then
+        gsf_read_settings_from_file "${result}"
+    fi
+}
+
+save_settings()
+{
+    local result
+    local -i exval
+    local -a cmd
+
+    cmd=(
+        "${YAD_COMMON_ARGS[@]}"
+        --text "\
+Select a file name into which the settings should be saved."
+        --file
+        --filename "${GF_DBNAME}_${GF_TNAME}.gsf"
+        --save
+    )
+
+    result=$( yad "${cmd[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        save_settings_to_file "${result}"
+    fi
+}
