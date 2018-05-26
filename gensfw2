@@ -33,6 +33,10 @@ declare -a YAD_COMMON_ARGS=(
 
 declare -a IACT_TYPES_ARGS=(
     --list
+    --button "Save Settings":3
+    --button "Write Scripts":2
+    --button "Cancel":1
+    --button "OK":0
     --column "Interaction Type":TEXT
 )
 
@@ -70,14 +74,18 @@ declare -a IACT_PANED_PAGE=(
 
 declare -a IACT_NAMES=( List Add Read Update Delete Import )
 
-declare -A IACT_DATA=(
-    [List]="FALSE"
-    [Add]="FALSE"
-    [Read]="FALSE"
-    [Update]="FALSE"
-    [Delete]="FALSE"
-    [Import]="FALSE"
- )
+declare -A IACT_DATA
+
+reset_IACT_DATA()
+{
+    IACT_DATA=()
+    local name
+    for name in "${IACT_NAMES[@]}"; do
+        IACT_DATA[$name]="FALSE"
+    done
+}
+# Intialize for first use:
+reset_IACT_DATA
 
 declare COLS_QUERY="\
 SELECT COLUMN_NAME,
@@ -91,6 +99,8 @@ SELECT COLUMN_NAME,
        NUMERIC_SCALE,
        COLUMN_DEFAULT
   FROM COLUMNS"
+
+source gensfw2_bacts
 
 
 # Save column indexes to global variables for repeated access
@@ -247,26 +257,36 @@ string_in_array()
 
 confirm_dbase_name()
 {
-    if string_in_array "${GF_DBNAME}" "${DBASE_NAMES[@]}"; then
-        return 0
-    else
-        return 1
-    fi
+    string_in_array "${GF_DBNAME}" "${DBASE_NAMES[@]}"
+    # if string_in_array "${GF_DBNAME}" "${DBASE_NAMES[@]}"; then
+    #     return 0
+    # else
+    #     return 1
+    # fi
 }
 
 confirm_table_name()
 {
-    if string_in_array "${GF_TNAME}" "${TABLE_NAMES[@]}"; then
-        return 0
-    else
-        return 1
-    fi
+    string_in_array "${GF_TNAME}" "${TABLE_NAMES[@]}"
+    # if string_in_array "${GF_TNAME}" "${TABLE_NAMES[@]}"; then
+    #     return 0
+    # else
+    #     return 1
+    # fi
+}
+
+confirm_iact_name()
+{
+    string_in_array "$1" "${IACT_NAMES[@]}"
 }
 
 set_dbase_name()
 {
+    GF_TNAME=
+    TABLE_NAMES=()
     if string_in_array "$1" "${DBASE_NAMES[@]}" ; then
         GF_DBNAME="$1"
+        local IFS=$'\n'
         TABLE_NAMES=( $( mysql "${GF_DBNAME}" -BN -e "show tables" ) )
     else
         echo "'$1' is not a database name on this server." >&2
@@ -291,7 +311,10 @@ parse_args()
 {
     local arg
     for arg in "$@"; do
-        if [ -z "$GF_DBNAME" ]; then
+        if [ -f "${arg}" ]; then
+            gsf_read_settings_from_file "${arg}"
+            break
+        elif [ -z "$GF_DBNAME" ]; then
             set_dbase_name "$arg"
         elif [ -z "$GF_TNAME" ]; then
             set_table_name "$arg"
@@ -309,6 +332,9 @@ pick_from_array()
         "${YAD_COMMON_ARGS[@]}"
         --list
         --text "Select a ${subject} from the following list."
+        --button "Open File":2
+        --button "Cancel":1
+        --button "OK":0
         --no-headers
         --column "${subject}":TEXT
         "${@:2}"
@@ -318,13 +344,21 @@ pick_from_array()
 
     result=$( yad "${cmd[@]}" )
     exval=$?
-    if [ $exval -ne 0 ]; then
-        return $exval
-    fi
-    local IFS="${YSEP}"
-    arr=( $( echo "${result}" ) )
+    case "$exval" in
+        0)
+            local IFS="${YSEP}"
+            arr=( $( echo "${result}" ) )
+            echo "${arr[0]}"
+            return 0
+            ;;
+        2)
+            open_gsf_file
+            return 1
+            ;;
+        *)
+            return $exval ;;
+    esac
 
-    echo "${arr[0]}"
     return 0
 }
 
@@ -419,6 +453,8 @@ show_iacts_dialog()
         case $exval in
             0) show_interaction_type_dialog "$result" ;; # Pressed OK
             1) break ;; # Pressed Cancel
+            2) write_scripts ;;
+            3) save_settings ;;
             252) break ;; # Pressed ESC or window close
         esac
     done
@@ -428,11 +464,13 @@ show_iacts_dialog()
 use_table_info()
 {
     collect_column_indexes
-    show_iacts_dialog
+    $use_table_info_callback
 }
-    
+
 collect_table_info()
 {
+    local use_table_info_callback="${1:-show_iacts_dialog}"
+
     if ! confirm_dbase_name || ! confirm_table_name ; then
         echo "SQL Injection test failed.  Attempt to set" >&2
         echo "Database name = '${GF_DBNAME}', and" >&2
@@ -472,7 +510,7 @@ loop_for_context()
             get_tname
             exval=$?
             if [ $exval -eq 0 ]; then
-                collect_table_info
+                collect_table_info show_iacts_dialog
             elif [ $do_dbase_loop -ne 0 ]; then
                 do_loop=1
                 break
@@ -486,7 +524,7 @@ loop_for_context()
 
 parse_args "$@"
 if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
-    collect_table_info
+    collect_table_info show_iacts_dialog
 else
     loop_for_context
 fi
