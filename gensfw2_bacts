@@ -23,7 +23,6 @@ save_settings_to_file()
     local -a settings
     settings=( $( get_saved_settings_string ) )
 
-
     local -a filearr
     filearr=(
         "${meta_rec}"
@@ -54,8 +53,6 @@ gsf_load_IACT_DATA()
         fi
     done
 
-    declare -p IACT_DATA
-
     show_iacts_dialog
 }
 
@@ -63,13 +60,13 @@ gsf_open_table_from_record()
 {
     local IFS="${FSEP}"
     local -i exval
-    local -a dnt
-    dnt=( $( echo "$1" ) )
-    if [ $? -eq 0 -a "${#dnt[@]}" -eq 2 ]; then
-        set_dbase_name "${dnt[0]}"
+    local -a names
+    names=( $( echo "$1" ) )
+    if [ $? -eq 0 -a "${#names[@]}" -eq 2 ]; then
+        set_dbase_name "${names[0]}"
         exval=$?
         if [ $exval -eq 0 ]; then
-            set_table_name "${dnt[1]}"
+            set_table_name "${names[1]}"
             exval=$?
             if [ $exval -eq 0 ]; then
                 collect_table_info gsf_load_IACT_DATA
