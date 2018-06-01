@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Primary Dialogs in this application (many dialogs have sub-dialogs):
+# 1: Select Database from List (or open GSF file)
+# 2: Select Table from List (or open GSF file)
+# 3: Edit Table Preferences Dialog, can start dialogs 4, 5, and 6
+# 4: Edit Interaction Preferences Dialog
+# 5: Set Default Column Labels
+# 6: Save Files Dialog
+
 SEPS=$( bashmysql -S )
 RSEP="${SEPS:0:1}"
 FSEP="${SEPS:1:1}"
@@ -10,6 +18,8 @@ YSEP='^'
 
 declare -gx GF_DBNAME
 declare -gx GF_TNAME
+declare -gx GF_SCRIPTS_FILE
+declare -gx GF_SETTTINGS_FILE
 
 declare -gi COL_NAME
 declare -gi COL_TYPE
@@ -21,7 +31,8 @@ declare -gi G_PLUG_NUM=$$
 declare -a DBASE_NAMES=( $( mysql -BN -e "show databases" ) ) 
 declare -a TABLE_NAMES
 
-
+# All primary yad dialogs should use this
+# (Not paned or notebook plugs):
 declare -a YAD_COMMON_ARGS=(
     --height 500
     --width 600
@@ -31,15 +42,45 @@ declare -a YAD_COMMON_ARGS=(
     --title "Generate Schema Framework Scripts"
 )
 
-declare -a IACT_TYPES_ARGS=(
-    --list
-    --button "Save Settings":3
-    --button "Write Scripts":2
+
+### Dialog #3: Table Preferences Dialog ###
+### Usde in function: show_table_preferences_dialog()
+# Primary yad dialog, for current dbase/table
+# - Select interaction types to edit
+# - Set default column labels
+# - Save script and settings files
+declare -a TABLE_PREFERENCES_DIALOG=(
+    "${YAD_COMMON_ARGS[@]}"
+    --paned
+    --tab "Tab1"
+    --tab "Tab2"
+    --button "Set Labels":3
+    --button "Save Files":2
     --button "Cancel":1
     --button "OK":0
+    )
+
+# Dialog #3 top pane, call start_table_preferences_meta_pane()
+
+# Dialog #3, bottom pane, before adding data:
+declare -a IACT_TYPES_LIST=(
+    --text "Click on an interaction type to set column preferences."
+    --list
+    --separator "${YSEP}"
     --column "Interaction Type":TEXT
 )
 
+
+### Dialog #4: Interaction Settings Dialog
+### Use in function: show_interaction_preferences_dialog()
+# Primary yad dialog, set column preferences for the interaction.
+declare -a INTERACTION_PREFERENCES_DIALOG=(
+    --paned
+    --tab="Tab1"
+    --tab="Tab2"
+    )
+
+# Dialog #4 top pane, before data added:
 declare -a IACT_TOP_PANE=(
     --tabnum=1
     --form
@@ -48,6 +89,7 @@ declare -a IACT_TOP_PANE=(
     --field "Include":CHK
     )
 
+# Dialog #4 bottom pane, before data added:
 declare -a IACT_LIST_PANE=(
     --tabnum=2
     --list
@@ -64,18 +106,13 @@ declare -a IACT_LIST_PANE=(
     --column "Label":TEXT
 )
 
-declare -a IACT_PANED_PAGE=(
-    --paned
-    # --orient vert
-    --splitter 80
-    --tab="Tab1"
-    --tab="Tab2"
-    )
+declare -a IACT_FIELD_LABELS
 
 declare -a IACT_NAMES=( List Add Read Update Delete Import )
 
 declare -A IACT_DATA
 
+# Set every interaction type values to not included."
 reset_IACT_DATA()
 {
     IACT_DATA=()
@@ -86,6 +123,12 @@ reset_IACT_DATA()
 }
 # Intialize for first use:
 reset_IACT_DATA
+
+declare -a GSF_FIELD_NAMES
+declare -a GSF_FIELD_LABELS
+
+get_fields_count() { echo "${#GSF_FIELD_NAMES[@]}"; }
+
 
 declare COLS_QUERY="\
 SELECT COLUMN_NAME,
@@ -129,8 +172,25 @@ collect_column_indexes()
     get_index "COLUMN_DEFAULT"; COL_DEFAULT=$ndx
 }
 
+# Get field names from global table information
+update_field_names_array()
+{
+    GSF_FIELD_NAMES=()
+
+    declare rowstr
+    declare -a row
+    declare -i ndx=0
+    local IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "${rowstr}" ) ) 
+        GSF_FIELD_NAMES[ $(( ndx++ )) ]="${row[$COL_NAME]}"
+    done
+}
+
 get_iact_meta_vals_str()
 {
+    echo "Prying open '$1'" >&2
+
     local -i exval
     local itype="$1"
     local metastr
@@ -258,21 +318,11 @@ string_in_array()
 confirm_dbase_name()
 {
     string_in_array "${GF_DBNAME}" "${DBASE_NAMES[@]}"
-    # if string_in_array "${GF_DBNAME}" "${DBASE_NAMES[@]}"; then
-    #     return 0
-    # else
-    #     return 1
-    # fi
 }
 
 confirm_table_name()
 {
     string_in_array "${GF_TNAME}" "${TABLE_NAMES[@]}"
-    # if string_in_array "${GF_TNAME}" "${TABLE_NAMES[@]}"; then
-    #     return 0
-    # else
-    #     return 1
-    # fi
 }
 
 confirm_iact_name()
@@ -312,6 +362,7 @@ parse_args()
     local arg
     for arg in "$@"; do
         if [ -f "${arg}" ]; then
+            GF_SETTINGS_FILE="${arg}"
             gsf_read_settings_from_file "${arg}"
             break
         elif [ -z "$GF_DBNAME" ]; then
@@ -322,6 +373,7 @@ parse_args()
     done
 }
 
+# Utility that produces Dialog #1 and Dialog #2.
 # Uses first parameter as subject value, then puts the rest of the parameters
 # into a list element.
 pick_from_array()
@@ -389,12 +441,186 @@ get_tname()
     return $exval
 }
 
-show_interaction_type_dialog()
+# Dialog #5 callout
+# This dialog is used where there is a larger number of fields.
+# If there are few enough fields, this default label feature is
+# handled with a form for a more user-friendly interaction.
+start_default_labels_list_dialog()
 {
-    # IFS for parsing YAD result:
-    local IFS="${YSEP}"
-    local iact_arr=( $( echo $1 ) )
-    local iact=${iact_arr[0]}
+    local -i plug=0
+    local -a cmd
+
+    if [ $# -ge 2 ]; then
+        plug="$1"
+        cmd=( --plug "$1" --tabnum "$2" )
+    else
+        cmd=( "${YAD_COMMON_ARGS[@]}" )
+    fi
+
+    cmd=( "${cmd[@]}"
+          --list
+          --always-print-result
+          --editable
+          --editable-cols 2
+          --column "Column":TEXT
+          --column "Label":TEXT
+        )
+
+    local rowstr
+    local -a row arr_data
+
+    # Add list rows
+    local -i ndx="${#cmd[@]}"
+    local IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "$rowstr") )
+        cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}"
+        cmd[ $(( ndx++ )) ]=""
+    done
+
+    if [ "$plug" -gt 0 ]; then
+        yad "${cmd[@]}" &
+    else
+        local result
+        local -i exval
+        result=$( yad "${cmd[@]}" )
+        exval=$?
+        if [ $exval -eq 0 ]; then
+            process_default_labels_form "${result}"
+        fi
+    fi
+}
+
+# Dialog #5 callout
+# This dialog is used where there is a larger number of fields.
+# If there are few enough fields, this default label feature is
+# handled with a form for a more user-friendly interaction.
+#
+# This verion is not fully operational, yet.
+alternate_start_default_labels_list_dialog()
+{
+    local -i plug=0
+    local -a cmd
+
+    if [ $# -ge 2 ]; then
+        plug="$1"
+        cmd=( --plug "$1" --tabnum "$2" )
+    else
+        cmd=( "${YAD_COMMON_ARGS[@]}" )
+    fi
+
+    cmd=( "${cmd[@]}"
+          --list
+          --always-print-result
+          --dclick-action set_field_label
+          --column "Column":TEXT
+        )
+
+    local rowstr
+    local -a row arr_data
+
+    # Add list rows
+    local -i ndx="${#cmd[@]}"
+    local IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "$rowstr") )
+        cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}"
+    done
+
+    if [ "$plug" -gt 0 ]; then
+        yad "${cmd[@]}" &
+    else
+        yad "${cmd[@]}"
+    fi
+}
+
+# Dialog #5 callout
+# This dialog is used where there is a smaller number of fields.
+# If there are too many fields, this default label feature is
+# handled, less conveniently, with a list dialog.
+start_default_labels_form_dialog()
+{
+    local -i plug=0
+    local -a cmd
+
+    if [ $# -ge 2 ]; then
+        plug="$1"
+        cmd=( --plug "$1" --tabnum "$2" )
+    else
+        cmd=( "${YAD_COMMON_ARGS[@]}" )
+    fi
+
+    cmd=( "${cmd[@]}"
+          --text "Set default field labels."
+          --always-print-result
+          --form
+        )
+
+    local rowstr
+    local -a row arr_data
+
+    # Add list rows
+    local -i ndx="${#cmd[@]}"
+    local IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "$rowstr") )
+        cmd[ $(( ndx++ )) ]="--field"
+        cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}:"
+        cmd[ $(( ndx++ )) ]=""
+    done
+
+    if [ "$plug" -gt 0 ]; then
+        yad "${cmd[@]}" &
+    else
+        local -i exval
+        local result
+        result=$( yad "${cmd[@]}" )
+        exval=$?
+        if [ $exval -eq 0 ]; then
+            process_default_labels_form "${result}"
+        fi
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo "yad failed:" >&2
+        printf "'%s'\n" "${cmd[@]}" >&2
+        return 1
+    else
+        return 0
+    fi
+}
+
+process_default_labels_form()
+{
+    echo "process_default_labels_form: Result is '$1'" >&2
+}
+
+
+# Run Dialog #4
+show_interaction_preferences_dialog()
+{
+    # Break result into lines for each pane:
+    local IFS=$'\n'
+    local -a lines=( $( echo "$1" ) )
+
+    # Break each line into an array.  The array with
+    # a single element will be the chosen interaction.
+
+    # IFS for parsing YAD value from each line
+    IFS="${YSEP}"
+
+    local -a row
+    local line iact
+    for line in "${lines[@]}"; do
+        row=( $( echo "$line" ) )
+        echo "line '${line}' converts to array with ${#row[@]} elements." >&2
+        if [ "${#row[@]}" -eq 1 ]; then
+            iact="${row[0]}"
+            break
+        fi
+    done
+    
+    local iastr=$( get_iact_meta_vals_str "${iact}" )
 
     local meta_vals_str=$( get_iact_meta_vals_str "${iact}" )
     local list_vals_str=$( get_iact_list_data_str "${iact}" )
@@ -410,6 +636,7 @@ show_interaction_type_dialog()
 
     local -a top_pane=(
         --plug "${PLUG_NUM}"
+        --text "Interaction Editor for ${GF_DBNAME}.${GF_TNAME}"
         "${IACT_TOP_PANE[@]}"
         "${meta_vals[@]}"
     )
@@ -422,54 +649,114 @@ show_interaction_type_dialog()
 
     local -a paned_dialog=(
         --key "${PLUG_NUM}"
-        "${IACT_PANED_PAGE[@]}"
         "${YAD_COMMON_ARGS[@]}"
+        "${INTERACTION_PREFERENCES_DIALOG[@]}"
     )
 
     result=$(
         yad "${top_pane[@]}" &
         yad "${list_pane[@]}" &
         yad "${paned_dialog[@]}"
- )
-    # yad "${top_pane[@]}" &
-    # yad "${list_pane[@]}" &
-    # result= $( yad "${paned_dialog[@]}" )
+          )
     exval=$?
 
     case $exval in
         0) save_iact_choices "${result}" ;; # Pressed OK
-        1) ;; # Pressed Cancel
-        252) ;; # Pressed ESC or window close
+        1|252) break ;; # Pressed Cancel (1) or ESC or window close (252)
     esac
 }
 
-show_iacts_dialog()
+## Dialog #6:
+show_save_files_dialog()
 {
+    write_scripts # to write SRM file
+    save_settings # to write gsf file
+}
+
+## Dialog #5:
+show_default_column_labels_dialog()
+{
+    local -i fcount=$( get_fields_count )
+    if [ "$fcount" -lt 1 ]; then
+        echo "About to start forms version of default labeller." >&2
+        start_default_labels_form_dialog
+    else
+        echo "About to start LIST version of default labeller." >&2
+        start_default_labels_list_dialog
+    fi
+}
+
+## Dialog #3: 
+show_table_preferences_dialog()
+{
+    local -i pnum=$$
     local result
     local -i exval
+
     while true; do
-        result=$( yad "${YAD_COMMON_ARGS[@]}" "${IACT_TYPES_ARGS[@]}" "${IACT_NAMES[@]}" )
+        result=$(
+            # start_default_labels_list_dialog "${pnum}" 1
+            start_table_preferences_meta_pane "${pnum}" 1
+            yad --tabnum 2 --plug "${pnum}" "${IACT_TYPES_LIST[@]}" "${IACT_NAMES[@]}" &
+            yad --key "${pnum}" "${TABLE_PREFERENCES_DIALOG[@]}"
+            )
+
+        # result=$( yad "${YAD_COMMON_ARGS[@]}" "${IACT_TYPES_ARGS[@]}" "${IACT_NAMES[@]}" )
         exval=$?
         case $exval in
-            0) show_interaction_type_dialog "$result" ;; # Pressed OK
-            1) break ;; # Pressed Cancel
-            2) write_scripts ;;
-            3) save_settings ;;
-            252) break ;; # Pressed ESC or window close
+            1|252) break ;; # Pressed  Cancel (1) or ESC or window close (252)
+            0) show_interaction_preferences_dialog "$result" ;; # Pressed OK
+            2) show_save_files_dialog ;;
+            3) show_default_column_labels_dialog ;;
         esac
     done
 
 }
 
+# Sub-dialog for Dialog #3:
+start_table_preferences_meta_pane()
+{
+    local -i plug="$1"
+    local -i tnum="$2"
+
+    local -i fcount=$( get_fields_count )
+
+    if [ -z "${GF_SETTINGS_FILE}" ]; then
+        name_settings="${GF_DBNAME}_${GF_TNAME}.gsf"
+    else
+        name_settings="${GF_SETTINGS_FILE}"
+    fi
+
+    cmd=( --plug "${plug}"
+          --tabnum "${tnum}"
+          --form
+          --separator "${YSEP}"
+          --field "Database":RO "${GF_DBNAME}"
+          --field "Table":RO "${GF_TNAME}"
+          --field "Field Count":RO "${fcount}"
+        )
+
+    if [ -n "${GF_SETTINGS_FILE}" ]; then
+        cmd=( "${cmd[@]}"
+              --field "Settings File":RO "${name_settings}"
+            )
+    fi
+
+    yad "${cmd[@]}" &
+}
+
+
+
 use_table_info()
 {
     collect_column_indexes
+    update_field_names_array
     $use_table_info_callback
 }
 
 collect_table_info()
 {
-    local use_table_info_callback="${1:-show_iacts_dialog}"
+    local use_table_info_callback="${1:-show_table_preferences_dialog}"
 
     if ! confirm_dbase_name || ! confirm_table_name ; then
         echo "SQL Injection test failed.  Attempt to set" >&2
@@ -510,7 +797,7 @@ loop_for_context()
             get_tname
             exval=$?
             if [ $exval -eq 0 ]; then
-                collect_table_info show_iacts_dialog
+                collect_table_info show_table_preferences_dialog
             elif [ $do_dbase_loop -ne 0 ]; then
                 do_loop=1
                 break
@@ -524,7 +811,7 @@ loop_for_context()
 
 parse_args "$@"
 if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
-    collect_table_info show_iacts_dialog
+    collect_table_info show_table_preferences_dialog
 else
     loop_for_context
 fi
