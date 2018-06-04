@@ -7,6 +7,7 @@ write_scripts()
 
 get_saved_settings_string()
 {
+    local IFS
     local iname
     for iname in "${IACT_NAMES[@]}"; do
         echo -n "${iname}${FSEP}${IACT_DATA[$iname]}${RSEP}"
@@ -30,7 +31,6 @@ save_settings_to_file()
     )
 
     IFS="${RSEP}"
-    printf "'%s'\n\n" "${filearr[*]}" >&2
     
     echo -n "${filearr[*]}" > $fpath
 }
@@ -53,7 +53,7 @@ gsf_load_IACT_DATA()
         fi
     done
 
-    show_iacts_dialog
+    show_table_preferences_dialog
 }
 
 gsf_open_table_from_record()
