@@ -8,7 +8,14 @@
 # 5: Set Default Column Labels
 # 6: Save Files Dialog
 
-SEPS=$( bashmysql -S )
+source gensfw2_bacts
+
+# One or the other of the following, either override
+# default SEPS (first line), or get the default SEPS
+# values from bashmysql:
+SEPS='@#$'
+# SEPS=$( bashmysql -S )
+
 RSEP="${SEPS:0:1}"
 FSEP="${SEPS:1:1}"
 VSEP="${SEPS:2:1}"
@@ -79,8 +86,8 @@ declare -a TABLE_PREFERENCES_DIALOG=(
     --paned
     --tab "Tab1"
     --tab "Tab2"
-    --button "Set Labels":3
-    --button "Save Files":2
+    --button "Set _Labels":3
+    --button "Save _Files":2
     --button "Cancel":1
     --button "OK":0
     )
@@ -160,8 +167,6 @@ SELECT COLUMN_NAME,
        COLUMN_DEFAULT
   FROM COLUMNS"
 
-source gensfw2_bacts
-
 
 # Save column indexes to global variables for repeated access
 collect_column_indexes()
@@ -178,8 +183,7 @@ collect_column_indexes()
             exval=$?
             if [ $exval -ne 0 ]; then
                 echo "Can't find column '$1'." >&2
-
-                                exit $exval
+                exit $exval
             fi
         fi
     }
@@ -209,8 +213,6 @@ update_field_names_array()
 
 get_iact_meta_vals_str()
 {
-    echo "Prying open '$1'" >&2
-
     local -i exval
     local itype="$1"
     local metastr
@@ -218,6 +220,7 @@ get_iact_meta_vals_str()
     local LSEP="${YSEP}"
 
     metastr="${IACT_DATA[$itype]}"
+
     exval=$?
     if [ $exval -ne 0 ]; then
         echo "Error retrieving data for the '${itype}' interaction." >&2
@@ -318,8 +321,6 @@ save_iact_choices()
 
     IFS="${YSEP}"
     IACT_DATA["$iact_name"]="${iact_incl}${YSEP}${iact_frows[*]}"
-
-    # echo "IACT_DATA[${iact_name}] = '${IACT_DATA[${iact_name}]}'" >&2
 }
 
 string_in_array()
@@ -419,7 +420,7 @@ pick_from_array()
         "${YAD_COMMON_ARGS[@]}"
         --list
         --text "Select a ${subject} from the following list."
-        --button "Open File":2
+        --button "_Open File":2
         --button "Cancel":1
         --button "OK":0
         --no-headers
@@ -492,8 +493,6 @@ show_table_preferences_dialog()
             yad --tabnum 2 --plug "${pnum}" "${IACT_TYPES_LIST[@]}" "${IACT_NAMES[@]}" &
             yad --key "${pnum}" "${TABLE_PREFERENCES_DIALOG[@]}"
             )
-
-        # result=$( yad "${YAD_COMMON_ARGS[@]}" "${IACT_TYPES_ARGS[@]}" "${IACT_NAMES[@]}" )
         exval=$?
         case $exval in
             1|252) break ;; # Pressed  Cancel (1) or ESC or window close (252)
@@ -553,15 +552,12 @@ show_interaction_preferences_dialog()
     local line iact
     for line in "${lines[@]}"; do
         row=( $( echo "$line" ) )
-        echo "line '${line}' converts to array with ${#row[@]} elements." >&2
         if [ "${#row[@]}" -eq 1 ]; then
             iact="${row[0]}"
             break
         fi
     done
     
-    local iastr=$( get_iact_meta_vals_str "${iact}" )
-
     local meta_vals_str=$( get_iact_meta_vals_str "${iact}" )
     local list_vals_str=$( get_iact_list_data_str "${iact}" )
 
@@ -600,10 +596,13 @@ show_interaction_preferences_dialog()
           )
     exval=$?
 
-    case $exval in
-        0) save_iact_choices "${result}" ;; # Pressed OK
-        1|252) break ;; # Pressed Cancel (1) or ESC or window close (252)
-    esac
+    # Removed case statement with break for escape/cancel because the
+    # break was breaking the loop in the calling function (dialog #3).
+    # I was trying to use bash case like c/c++ case statement.
+    
+    if [ $exval -eq 0 ]; then
+        save_iact_choices "${result}"
+    fi
 }
 
 ## Dialog #5: Set default field labels for current table.
@@ -758,7 +757,7 @@ ${COLS_QUERY}
 WHERE TABLE_SCHEMA='${GF_DBNAME}'
 AND TABLE_NAME='${GF_TNAME}'"
 
-    source bashmysql "information_schema" "${query}" -c use_table_info
+    source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
 }
 
 
