@@ -9,6 +9,7 @@
 # 6: Save Files Dialog
 
 source gensfw2_bacts
+source gensfw2_scripts
 
 # One or the other of the following, either override
 # default SEPS (first line), or get the default SEPS
@@ -24,6 +25,8 @@ YSEP="${FSEP}"
 YSEP='^'
 
 declare -a IACT_NAMES=( List Add Read Update Delete Import )
+declare -a IACT_COLUMNS=( Type Param Result Readonly Hide Label )
+
 declare -gi G_PLUG_NUM=$$ ## Commence plug numbers from process id
 
 # COL_xxxx integers are indexes to column for result of COLS_QUERY
@@ -51,6 +54,9 @@ declare -a TABLE_NAMES
 declare -a GSF_FIELD_NAMES  # Initialized when a table is selected
 declare -a GSF_FIELD_LABELS # From settings file or by using Dialog 5 (default labels)
 
+declare -a IACT_FIELD_LABELS
+declare -A IACT_DATA
+
 # Clear variables that might retain info from previous table:
 reset_for_new_table()
 {
@@ -67,7 +73,7 @@ get_fields_count() { echo "${#GSF_FIELD_NAMES[@]}"; }
 # (Not paned or notebook plugs):
 declare -a YAD_COMMON_ARGS=(
     --height 500
-    --width 600
+    --width 750
     --center
     --borders 10
     --separator "${YSEP}"
@@ -89,7 +95,7 @@ declare -a TABLE_PREFERENCES_DIALOG=(
     --button "Set _Labels":3
     --button "Save _Files":2
     --button "Cancel":1
-    --button "OK":0
+    --button "_OK":0
     )
 
 # Dialog #3 top pane, call start_table_preferences_meta_pane()
@@ -110,6 +116,10 @@ declare -a INTERACTION_PREFERENCES_DIALOG=(
     --paned
     --tab="Tab1"
     --tab="Tab2"
+    --button "Show S_RM":3
+    --button "Show S_QL":2
+    --button "Cancel":1
+    --button "_Ok":0
     )
 
 # Dialog #4 top pane, before data added:
@@ -120,6 +130,7 @@ declare -a IACT_TOP_PANE=(
     --field "Interaction":RO
     --field "Include":CHK
     )
+
 
 # Dialog #4 bottom pane, before data added:
 declare -a IACT_LIST_PANE=(
@@ -132,14 +143,12 @@ declare -a IACT_LIST_PANE=(
     --editable-cols 6
     --column "Column Name":TEXT
     --column "Type":TEXT
-    --column "Use":CHK
+    --column "Param":CHK
+    --column "Result":CHK
     --column "Readonly":CHK
     --column "Hide":CHK
     --column "Label":TEXT
 )
-
-declare -a IACT_FIELD_LABELS
-declare -A IACT_DATA
 
 # Set every interaction type values to not included."
 reset_IACT_DATA()
@@ -269,15 +278,34 @@ get_iact_list_data_str()
         is_index=$( [ -n "${row[$COL_PRIKEY]}" ]; echo $? )
 
         # Skip field if not a new record:
-        if [ $itype == "Add" -a $is_index -eq 0 ]; then
+        if [[ $is_index -eq 0 && " Add Import " =~ "${itype}" ]]; then
             continue
         fi
 
         # Information/Identification column (name and datatype)
         echo -n "${row[COL_NAME]}${LSEP}${row[COL_TYPE]}"
 
-        # Always include column (since we've eliminated to Add interaction):
-        echo -n "${LSEP}TRUE"
+        # The Param and Result columns a flags to include the field
+        # in the respective domain.  Fields for which the Param flag
+        # is set will be include the field in the parameter list.
+        # Likewise, fields for which the Result flag will be included
+        # in the results by adding the field to the  SELECT clause
+        # of the query.
+
+        # Param column, FALSE for List, Read, and Delete, TRUE otherwise
+        local param_false=" List Read Delete "
+        if [[ $is_index -ne 0 && " List Read Delete " =~ " ${itype} " ]]; then
+            echo -n "${LSEP}FALSE"
+        else
+            echo -n "${LSEP}TRUE"
+        fi
+
+        # Result column, TRUE for List, Read, otherwise FALSE
+        if [ $itype == "List" -o $itype == "Read" ]; then
+            echo -n "${LSEP}TRUE"
+        else
+            echo -n "${LSEP}FALSE"
+        fi
 
         # Readonly and Hide (For index fields)
         if [ $is_index -eq 0 ]; then
@@ -604,20 +632,27 @@ show_interaction_preferences_dialog()
         "${INTERACTION_PREFERENCES_DIALOG[@]}"
     )
 
-    result=$(
-        yad "${top_pane[@]}" &
-        yad "${list_pane[@]}" &
-        yad "${paned_dialog[@]}"
-          )
-    exval=$?
+    local script_text
 
-    # Removed case statement with break for escape/cancel because the
-    # break was breaking the loop in the calling function (dialog #3).
-    # I was trying to use bash case like c/c++ case statement.
-    
-    if [ $exval -eq 0 ]; then
-        save_iact_choices "${result}"
-    fi
+    while true; do
+        result=$(
+            yad "${top_pane[@]}" &
+            yad "${list_pane[@]}" &
+            yad "${paned_dialog[@]}"
+              )
+        exval=$?
+
+        case $exval in
+            0) save_iact_choices "${result}" ;;
+            2) script_text=$( gsf_parse_type_prefs "${iact}" "sql" )
+               if [ $? -eq 0 ]; then  echo "${script_text}"; fi
+               ;;
+            2) script_text=$( gsf_parse_type_prefs "${iact}" "srm" )
+               if [ $? -eq 0 ]; then  echo "${script_text}"; fi
+               ;;
+            1|252) break ;;
+        esac
+    done
 }
 
 ## Dialog #5: Set default field labels for current table.
