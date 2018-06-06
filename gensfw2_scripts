@@ -1,0 +1,88 @@
+#!/bin/bash
+
+write_scripts()
+{
+    local name IFS
+    local -a IACT_ROW
+    IFS="${YSEP}"
+
+    for name in "${IACT_NAMES[@]}"; do
+        IACT_ROW=( $( echo "${IACT_DATA[$name]}" ) )
+        if [ "${IACT_ROW[0]}" == 'TRUE' ]; then
+            "gsf_script_${name}_sql" "${name}"
+        fi
+    done
+}
+
+gsf_parse_type_prefs()
+{
+    local tname="$1"
+    local IFS="${YSEP}"
+
+    local -a data
+    data=( $( echo "${IACT_DATA[$tname]}" ) )
+    data=( "${data[@]:1}" )
+
+    local name
+    declare -A IACT_COL_PREFS=()
+    local -i ndx stop="${#data[@]}" interval="${#IACT_COLUMNS[@]}"
+    echo "stop is ${stop}, interval=${interval}" >&2
+    for (( ndx=0; $ndx<$stop; ndx+=$interval )); do
+        name="${data[$ndx]}"
+        (( ndx++ ))
+        IACT_COL_PREFS[$name]="${data[*]:$ndx:$interval}"
+   done
+
+    declare -p IACT_COL_PREFS 
+
+}
+
+gsf_write_script_sql()
+{
+    local name="$1"
+    local row=( $( echo "${IACT_DATA[$name]}" ) )
+    echo "For interaction ${name}, the data is '${IACT_DATA[$name]}'"
+}
+
+gsf_add_params_sql()
+{
+    echo "row is ${IACT_ROW[@]}"
+}
+
+gsf_script_intro_sql()
+{
+    echo "DROP PROCEDURE IF EXISTS ${IACT_NAME} \$\$"
+    echo -n "CREATE PROCEDURE ${IACT_NAME}("
+    gsf_add_params
+    echo ") \$\$"
+}
+
+gsf_script_List_sql()
+{
+    gsf_script_intro_sql
+}
+
+gsf_script_Add_sql()
+{
+    echo -n "in gsf_script_Add_sql" >&2
+}
+
+gsf_script_Read_sql()
+{
+    echo -n "in gsf_script_Read_sql" >&2
+}
+
+gsf_script_Update_sql()
+{
+    echo -n "in gsf_script_Update_sql" >&2
+}
+
+gsf_script_Delete_sql()
+{
+    echo -n "in gsf_script_Delete_sql" >&2
+}
+
+gsf_script_Import_sql()
+{
+    echo -n "in gsf_script_Import_sql" >&2
+}
