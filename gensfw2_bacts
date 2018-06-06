@@ -1,10 +1,5 @@
 #!/bin/bash
 
-write_scripts()
-{
-    echo "Not done, yet"
-}
-
 get_saved_settings_string()
 {
     local IFS
@@ -22,6 +17,11 @@ save_settings_to_file()
 
     local meta_rec="${GF_DBNAME}${FSEP}${GF_TNAME}"
     local -a settings
+    local settings_str=$( get_saved_settings_string )
+
+    echo "${settings_str}" >&2
+
+
     settings=( $( get_saved_settings_string ) )
 
     IFS="${FSEP}"
@@ -30,7 +30,8 @@ save_settings_to_file()
         "${meta_rec}"
         "${GSF_FIELD_NAMES[*]}"
         "${GSF_FIELD_LABELS[*]}"
-        "${settings[@]}"
+        "${settings_str}"
+        # "${settings[@]}"
     )
 
     IFS="${RSEP}"
