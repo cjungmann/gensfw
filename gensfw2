@@ -540,16 +540,16 @@ show_select_table_dialog()
 ## Dialog #3: 
 show_table_preferences_dialog()
 {
-    local -i pnum=$$
     local result
     local -i exval
+    local -i PLUG_NUM=$(( G_PLUG_NUM++ ))
 
     while true; do
         result=$(
-            # start_default_labels_list_dialog "${pnum}" 1
-            start_table_preferences_meta_pane "${pnum}" 1
-            start_table_preferences_list_pane "${pnum}" 2
-            yad --key "${pnum}" "${TABLE_PREFERENCES_DIALOG[@]}"
+            # start_default_labels_list_dialog "${PLUG_NUM}" 1
+            start_table_preferences_meta_pane "${PLUG_NUM}" 1
+            start_table_preferences_list_pane "${PLUG_NUM}" 2
+            yad --key "${PLUG_NUM}" "${TABLE_PREFERENCES_DIALOG[@]}"
             )
         exval=$?
         case $exval in
@@ -804,8 +804,25 @@ start_default_labels_list_dialog()
 ## Dialog #6:
 show_save_files_dialog()
 {
-    write_scripts # to write SRM file
-    save_settings # to write gsf file
+    local -a cmd
+    cmd=(
+        "${YAD_COMMON_ARGS[@]}"
+        --form
+        --field "Write settings file":CHK "FALSE"
+        --field "GSF file name":SFL "bogus.gsf"
+        --field "Write scripts file":CHK "FALSE"
+        --field "SRM file name":SFL "bogus.srm"
+    )
+
+    local result=$( yad "${cmd[@]}" )
+    local -i exval=$?
+
+    if [ $exval -eq 0 ]; then
+        echo "result is ${result}" >&2
+    fi
+
+    # write_scripts # to write SRM file
+    # save_settings # to write gsf file
 }
 
 
