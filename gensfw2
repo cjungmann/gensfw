@@ -321,10 +321,10 @@ get_iact_list_data_str()
     done
 }
 
+# save_iact_choices():
 # Converts result of dialog #4 to a string with table fields
 # separated by FSEP and the field preferences separated by YSEP,
 # with the string saved to the Associated array IACT_DATA
-
 save_iact_choices()
 {
     local IFS
