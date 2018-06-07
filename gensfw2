@@ -356,12 +356,13 @@ make_iact_choices_string()
             # Add extra YSEP in case of empty final field:
             rowstr="${row[*]}${YSEP}"
 
+            IFS="${FSEP}"
             iact_frows=( "${iact_frows[@]}" "${rowstr}" )
         fi
     done
 
     IFS="${FSEP}"
-    echo  -n "${iact_incl}${FSEP}${iact_frows[*]}"
+    echo -n "${iact_incl}${FSEP}${iact_frows[*]}"
 }
 
 # save_iact_choices():
@@ -683,12 +684,17 @@ show_interaction_preferences_dialog()
 
         case $exval in
             0) save_iact_choices "${result}"; break ;;
-            2) script_text=$( gsf_parse_type_prefs "${iact}" "sql" )
-               if [ $? -eq 0 ]; then  echo "${script_text}"; fi
-               ;;
-            2) script_text=$( gsf_parse_type_prefs "${iact}" "srm" )
-               if [ $? -eq 0 ]; then  echo "${script_text}"; fi
-               ;;
+            2|3)
+                local stype datastr
+                datastr=$( make_iact_choices_string "${result}" )
+                if [ $exval -eq 2 ]; then
+                    stype="sql"
+                else
+                    stype="srm"
+                fi
+                script_text=$( gsf_parse_type_prefs "${datastr}" "$stype" )
+                if [ $? -eq 0 ]; then  echo "${script_text}"; fi
+                ;;
             1|252) break ;;
         esac
     done
