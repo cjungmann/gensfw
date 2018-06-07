@@ -326,11 +326,10 @@ get_iact_list_data_str()
     done
 }
 
-# save_iact_choices():
+# make_iact_choices_string()
 # Converts result of dialog #4 to a string with table fields
-# separated by FSEP and the field preferences separated by YSEP,
-# with the string saved to the Associated array IACT_DATA
-save_iact_choices()
+# separated by FSEP and the field preferences separated by YSEP.
+make_iact_choices_string()
 {
     local IFS
     local line
@@ -362,8 +361,21 @@ save_iact_choices()
     done
 
     IFS="${FSEP}"
-    IACT_DATA["$iact_name"]="${iact_incl}${FSEP}${iact_frows[*]}"
-    # echo "$iact_name is ${IACT_DATA[$iact_name]}" >&2
+    echo  -n "${iact_incl}${FSEP}${iact_frows[*]}"
+}
+
+# save_iact_choices():
+# Saves the result of make_iact_choices_string() to IACT_DATA
+# to reopen and to serialize to disk.
+save_iact_choices()
+{
+    local -i exval
+    local choices
+    choices_str=$( make_iact_choices_string "$1" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        IACT_DATA[$IACT_NAME]="$choices_str"
+    fi
 }
 
 index_in_array()
@@ -633,6 +645,8 @@ show_interaction_preferences_dialog()
     IFS="${YSEP}"
     local -a meta_vals=( $( echo "${meta_vals_str}" ) )
     local -a list_vals=( $( echo "${list_vals_str}" ) )
+
+    local IACT_NAME="${meta_vals[0]}"
 
     local result
     local -i exval
