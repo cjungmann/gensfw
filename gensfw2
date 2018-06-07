@@ -225,8 +225,6 @@ get_iact_meta_vals_str()
     local -i exval
     local itype="$1"
     local metastr
-    local -a savedvals
-    local LSEP="${YSEP}"
 
     metastr="${IACT_DATA[$itype]}"
 
@@ -235,34 +233,39 @@ get_iact_meta_vals_str()
         echo "Error retrieving data for the '${itype}' interaction." >&2
         exit $exval
     fi
+
+    local -a savedvals
+    local IFS="${FSEP}"
     savedvals=( $( echo "$metastr" ) )
-    echo "${itype}${LSEP}${savedvals[0]}"
+    echo "${itype}${YSEP}${savedvals[0]}"
 }
 
 # get_iact_list_data_str()
-# This function unpacks the data that was compiled by save_iact_choices().
+# This function unpacks the data that was compiled by
+# save_iact_choices().
 get_iact_list_data_str()
 {
     local itype="$1"
-    local IFS="${YSEP}"
-
-    # Using a local alias for output separator
-    local LSEP="${YSEP}"
+    local IFS
 
     # First check if the interaction type has a saved value:
     local -i exval
+    local -a fields
     local -a vals ovals
     local valstr="${IACT_DATA[$itype]}"
     exval=$?
     if [ $exval -eq 0 ]; then
-        IFS="${YSEP}"
-        vals=( $( echo "${valstr}" ) )
+        IFS="${FSEP}"
+        fields=( $( echo "${valstr}" ) )
         exval=$?
-        if [ $exval -eq 0 -a "${#vals[@]}" -gt 1 ]; then
-            IFS="${LSEP}"
-            echo "${vals[*]:1}"
-
-            vals_copy=( $( echo "${vals[*]:1}" ) )
+        if [ $exval -eq 0 -a "${#fields[@]}" -gt 1 ]; then
+            for fieldstr in "${fields[@]}"; do
+                IFS="${YSEP}"
+                vals=( $( echo "${fieldstr}" ) )
+                if [ ${#vals[@]} -gt 1 ]; then
+                    echo -n "${vals[*]}${YSEP}"
+                fi
+            done
             return 0
         fi
     fi
@@ -285,7 +288,7 @@ get_iact_list_data_str()
         fi
 
         # Information/Identification column (name and datatype)
-        echo -n "${row[COL_NAME]}${LSEP}${row[COL_TYPE]}"
+        echo -n "${row[COL_NAME]}${YSEP}${row[COL_TYPE]}"
 
         # The Param and Result columns a flags to include the field
         # in the respective domain.  Fields for which the Param flag
@@ -297,28 +300,28 @@ get_iact_list_data_str()
         # Param column, FALSE for List, Read, and Delete, TRUE otherwise
         local param_false=" List Read Delete "
         if [[ $is_index -ne 0 && " List Read Delete " =~ " ${itype} " ]]; then
-            echo -n "${LSEP}FALSE"
+            echo -n "${YSEP}FALSE"
         else
-            echo -n "${LSEP}TRUE"
+            echo -n "${YSEP}TRUE"
         fi
 
         # Result column, TRUE for List, Read, otherwise FALSE
         if [ $itype == "List" -o $itype == "Read" ]; then
-            echo -n "${LSEP}TRUE"
+            echo -n "${YSEP}TRUE"
         else
-            echo -n "${LSEP}FALSE"
+            echo -n "${YSEP}FALSE"
         fi
 
         # Readonly and Hide (For index fields)
         if [ $is_index -eq 0 ]; then
-            echo -n "${LSEP}TRUE${LSEP}TRUE"
+            echo -n "${YSEP}TRUE${YSEP}TRUE"
         else
-            echo -n "${LSEP}FALSE${LSEP}FALSE"
+            echo -n "${YSEP}FALSE${YSEP}FALSE"
         fi
 
-        # Blank element for the label, printing newline at end of row
-        echo -n "${LSEP}"
-        echo -n "${LSEP}"
+        # Blank element for the label
+        echo -n "${YSEP}"
+        echo -n "${YSEP}"
 
     done
 }
@@ -350,18 +353,17 @@ save_iact_choices()
             iact_incl="${row[1]}"
         else
             IFS="${YSEP}"
-            rowstr="${row[*]}"
-            IFS="${FSEP}"
-            # iact_frows=( "${iact_frows[@]}" "${row[@]}" )
+
+            # Add extra YSEP in case of empty final field:
+            rowstr="${row[*]}${YSEP}"
+
             iact_frows=( "${iact_frows[@]}" "${rowstr}" )
         fi
     done
 
     IFS="${FSEP}"
     IACT_DATA["$iact_name"]="${iact_incl}${FSEP}${iact_frows[*]}"
-
-    echo "${IACT_DATA[$iact_name]}" >&2
-
+    # echo "$iact_name is ${IACT_DATA[$iact_name]}" >&2
 }
 
 index_in_array()
