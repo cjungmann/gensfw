@@ -8,7 +8,7 @@ write_scripts()
 
     for name in "${IACT_NAMES[@]}"; do
         IACT_ROW=( $( echo "${IACT_DATA[$name]}" ) )
-        if [ "${IACT_ROW[0]}" == 'TRUE' ]; then
+        if [ "${IACT_ROW[0]}" = 'TRUE' ]; then
             "gsf_script_${name}_sql" "${name}"
         fi
     done
@@ -36,7 +36,7 @@ gsf_add_params_sql()
     for rowstr in "${IACT_COL_PREFS[@]}"; do
         IFS="${YSEP}"
         row=( $( echo "${rowstr}" ) )
-        if [ "${row[2]}" == "TRUE" ]; then
+        if [ "${row[2]}" = "TRUE" ]; then
             if [ $(( commas++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${indent_chars}"
@@ -65,7 +65,7 @@ gsf_add_selects_sql()
     for rowstr in "${IACT_COL_PREFS[@]}"; do
         IFS="${YSEP}"
         row=( $( echo "${rowstr}" ) )
-        if [ "${row[3]}" == "TRUE" ]; then
+        if [ "${row[3]}" = "TRUE" ]; then
             if [ $(( commas++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${indent_chars}"
@@ -104,6 +104,19 @@ gsf_script_intro_sql()
 
 declare gsf_script_indent="  "
 
+declare GSF_SELECT_LINE="${gsf_script_indent}SELECT "
+declare   GSF_FROM_LINE="${gsf_script_indent}  FROM "
+declare    GSF_SET_LINE="${gsf_script_indent}   SET "
+declare  GSF_WHERE_LINE="${gsf_script_indent} WHERE "
+declare    GSF_AND_LINE="${gsf_script_indent}   AND "
+
+
+declare GSF_UPDATE_FIELDS_LINE="${gsf_script_indent}       ("
+declare GSF_UPDATE_VALUES_LINE="${gsf_script_indent}VALUES ("
+
+declare GSF_SELECT_SPACES="${GSF_SELECT_LINE//?/ }"
+declare GSF_UPDATE_SPACES_LINE="${GSF_UPDATE_VALUES_LINE//?/ }"
+
 gsf_sql_proc_body_List()
 {
     local prefix="t"
@@ -111,11 +124,11 @@ gsf_sql_proc_body_List()
 
     lambda()
     {
-        if [ "${CALLBACK_ROW[2]}" == "YES" ]; then
+        if [ "${CALLBACK_ROW[2]}" = "TRUE" ]; then
             # Line-up where parts under the first part:
             if [ $(( where_count++ )) -gt 0 ]; then
                 echo
-                echo -n "${where_line//?/ }AND "
+                echo -n "${GSF_AND_LINE}"
             fi
 
             local fname="${CALLBACK_ROW[0]}"
@@ -127,23 +140,18 @@ gsf_sql_proc_body_List()
         fi
     }
 
-    local select_line="${gsf_script_indent}SELECT "
-    local   from_line="${gsf_script_indent}  FROM "
-    local  where_line="${gsf_script_indent} WHERE "
-
     # Build the query/procedure body:
-    echo -n "${select_line}"
-    gsf_add_selects_sql "${select_line//?/ }" "${prefix}"
+    echo -n "${GSF_SELECT_LINE}"
+    gsf_add_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
     echo
-    echo "${from_line}${GF_TNAME} ${prefix}"
-    echo -n "${where_line}"
+    echo "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
+    echo -n "${GSF_WHERE_LINE}"
     gsf_callback_prefs_rows "lambda"
     echo ";"
 }
 
 gsf_sql_proc_body_Add()
 {
-    local prefix="t"
     local -i lambda_count=0
     local select_line="${gsf_script_indent}       ("
     local values_line="${gsf_script_indent}VALUES ("
@@ -151,23 +159,23 @@ gsf_sql_proc_body_Add()
 
     lambda_values()
     {
-        if [ "${CALLBACK_ROW[2]}" == "TRUE" ]; then
+        if [ "${CALLBACK_ROW[2]}" = "TRUE" ]; then
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
-                echo -n "${line_indent}"
+                echo -n "${GSF_UPDATE_SPACES_LINE}"
             fi
             echo -n "${fname}"
         fi
     }
 
-    echo "${gsf_script_indent}INSERT INTO ${GT_FNAME} ${prefix}"
+    echo "${gsf_script_indent}INSERT INTO ${GF_TNAME}"
     lambda_count=0
-    echo -n "${select_line}"
+    echo -n "${GSF_UPDATE_FIELDS_LINE}"
     gsf_callback_prefs_rows "lambda_values"
     echo ")"
     lambda_count=0
-    echo -n "${values_line}"
+    echo -n "${GSF_UPDATE_VALUES_LINE}"
     gsf_callback_prefs_rows "lambda_values"
     echo ");"
 }
@@ -175,8 +183,30 @@ gsf_sql_proc_body_Add()
 gsf_sql_proc_body_Read()
 {
     local prefix="t"
-    local -i lambda_count=0
+    local -i where_count=0
 
+    lambda()
+    {
+        if [ "${CALLBACK_ROW[2]}" = "TRUE" ]; then
+            # Line-up where parts under the first part:
+            if [ $(( where_count++ )) -gt 0 ]; then
+                echo
+                echo -n "${GSF_AND_LINE}"
+            fi
+
+            local fname="${CALLBACK_ROW[0]}"
+            echo -n "${prefix}.${fname}=${fname}"
+        fi
+    }
+
+    # Build the query/procedure body:
+    echo -n "${GSF_SELECT_LINE}"
+    gsf_add_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
+    echo
+    echo "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
+    echo -n "${GSF_WHERE_LINE}"
+    gsf_callback_prefs_rows "lambda"
+    echo ";"
 }
 
 gsf_sql_proc_body_Update()
@@ -184,12 +214,8 @@ gsf_sql_proc_body_Update()
     local prefix="t"
     local -i lambda_count=0
 
-    local   set_line="${gsf_script_indent}   SET "
-    local where_line="${gsf_script_indent} WHERE "
-
     cb_is_param() { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
     cb_is_index() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
-
 
     lambda_set()
     {
@@ -197,7 +223,7 @@ gsf_sql_proc_body_Update()
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
-                echo -n "${set_line//?/ }"
+                echo -n "${GSF_SELECT_SPACES}"
             fi
             echo -n "${prefix}.${fname} = ${fname}"
         fi
@@ -209,18 +235,18 @@ gsf_sql_proc_body_Update()
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
-                echo -n "${where_line//?/ }AND "
+                echo -n "${GSF_AND_LINE}"
             fi
             echo -n "${prefix}.${fname} = ${fname}"
         fi
     }
 
     echo "${gsf_script_indent}UPDATE ${GF_TNAME}"
-    echo -n "${set_line}"
+    echo -n "${GSF_SET_LINE}"
     lambda_count=0
     gsf_callback_prefs_rows "lambda_set"
     echo
-    echo -n "${where_line}"
+    echo -n "${GSF_WHERE_LINE}"
     lambda_count=0
     gsf_callback_prefs_rows "lambda_where"
     echo ";"
