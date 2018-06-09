@@ -145,25 +145,31 @@ gsf_sql_proc_body_Add()
 {
     local prefix="t"
     local -i lambda_count=0
-    local   set_line="${gsf_script_indent}   SET "
+    local select_line="${gsf_script_indent}       ("
+    local values_line="${gsf_script_indent}VALUES ("
+    local line_indent="${values_line//?/ }"
 
-    lambda_set()
+    lambda_values()
     {
-        if [ "${CALLBACK_ROW[3]}" == "YES" ]; then
+        if [ "${CALLBACK_ROW[2]}" == "TRUE" ]; then
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
-                echo ","
-                echo -n "${set_line//?/ }"
+                echo ", "
+                echo -n "${line_indent}"
             fi
-            echo -n "${prefix}.${fname} = ${fname}"
+            echo -n "${fname}"
         fi
     }
 
     echo "${gsf_script_indent}INSERT INTO ${GT_FNAME} ${prefix}"
-    echo -n "${set_line}"
     lambda_count=0
+    echo -n "${select_line}"
     gsf_callback_prefs_rows "lambda_values"
-    echo ";"
+    echo ")"
+    lambda_count=0
+    echo -n "${values_line}"
+    gsf_callback_prefs_rows "lambda_values"
+    echo ");"
 }
 
 gsf_sql_proc_body_Read()
