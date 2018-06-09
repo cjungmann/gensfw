@@ -685,14 +685,16 @@ show_interaction_preferences_dialog()
         case $exval in
             0) save_iact_choices "${result}"; break ;;
             2|3)
-                local stype datastr
-                datastr=$( make_iact_choices_string "${result}" )
+                local cmd_to_call
                 if [ $exval -eq 2 ]; then
-                    stype="sql"
+                    cmd_to_call="gsf_write_script_sql"
                 else
-                    stype="srm"
+                    cmd_to_call="gsf_write_script_srm"
                 fi
-                script_text=$( gsf_parse_type_prefs "${datastr}" "$stype" )
+                IFS="${FSEP}"
+                local -a IACT_COL_PREFS
+                IACT_COL_PREFS=( $( make_iact_choices_string "${result}" ) )
+                script_text=$( $cmd_to_call "${IACT_NAME}" )
                 if [ $? -eq 0 ]; then  echo "${script_text}"; fi
                 ;;
             1|252) break ;;
@@ -870,6 +872,22 @@ WHERE TABLE_SCHEMA='${GF_DBNAME}'
 AND TABLE_NAME='${GF_TNAME}'"
 
     source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
+}
+
+table_field_is_index()
+{
+    local IFS="${FSEP}"
+    local name="$1"
+    local lrowstr
+    local -a row
+
+    for lrowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "${lrowstr}" ) )
+        if [ "${row[$COL_NAME]}" = "$name" -a -n "${row[$COL_PRIKEY]}" ]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 
