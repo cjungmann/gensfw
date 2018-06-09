@@ -14,75 +14,222 @@ write_scripts()
     done
 }
 
-gsf_parse_type_prefs()
-{
-    local tname="$1"
-    local IFS="${YSEP}"
-
-    local -a data
-    data=( $( echo "${IACT_DATA[$tname]}" ) )
-    data=( "${data[@]:1}" )
-
-    local name
-    declare -A IACT_COL_PREFS=()
-    local -i ndx stop="${#data[@]}" interval="${#IACT_COLUMNS[@]}"
-    echo "stop is ${stop}, interval=${interval}" >&2
-    for (( ndx=0; $ndx<$stop; ndx+=$interval )); do
-        name="${data[$ndx]}"
-        (( ndx++ ))
-        IACT_COL_PREFS[$name]="${data[*]:$ndx:$interval}"
-   done
-
-    declare -p IACT_COL_PREFS 
-
-}
-
 gsf_write_script_sql()
 {
-    local name="$1"
-    local row=( $( echo "${IACT_DATA[$name]}" ) )
-    echo "For interaction ${name}, the data is '${IACT_DATA[$name]}'"
+    gsf_script_intro_sql
+
+    echo "BEGIN"
+    gsf_sql_proc_body_${IACT_NAME}
+    echo "END  \$\$"
 }
 
+# gsf_add_params_sql()
+# Adds an indented list of stored procedure parameters
+# for field prefs that have the Param flag set.
 gsf_add_params_sql()
 {
-    echo "row is ${IACT_ROW[@]}"
+    local indent_chars="$1"
+    local IFS
+    local -t row
+    local -i commas=0
+    local rowstr
+    for rowstr in "${IACT_COL_PREFS[@]}"; do
+        IFS="${YSEP}"
+        row=( $( echo "${rowstr}" ) )
+        if [ "${row[2]}" == "TRUE" ]; then
+            if [ $(( commas++ )) -gt 0 ]; then
+                echo ","
+                echo -n "${indent_chars}"
+            fi
+            echo -n "${row[0]} ${row[1]}" 
+        fi
+    done
+}
+
+# gsf_add_selects_sql()
+# Adds field names to a select statement for fields prefs
+# that have the Result flag set.
+gsf_add_selects_sql()
+{
+    local indent_chars="$1"
+    local prefix=""
+
+    if [ $# -gt 1 ]; then
+        prefix="$2."
+    fi
+
+    local IFS
+    local -t row
+    local -i commas=0
+    local rowstr
+    for rowstr in "${IACT_COL_PREFS[@]}"; do
+        IFS="${YSEP}"
+        row=( $( echo "${rowstr}" ) )
+        if [ "${row[3]}" == "TRUE" ]; then
+            if [ $(( commas++ )) -gt 0 ]; then
+                echo ","
+                echo -n "${indent_chars}"
+            fi
+            echo -n "${prefix}${row[0]}" 
+        fi
+    done
+}
+
+gsf_callback_prefs_rows()
+{
+    local callback="$1"
+    local IFS="${YSEP}"
+    local -t CALLBACK_ROW
+    local rowstr
+    for rowstr in "${IACT_COL_PREFS[@]}"; do
+        CALLBACK_ROW=( $( echo "${rowstr}" ) )
+        if [ "${#CALLBACK_ROW[@]}" -gt 2 ]; then
+            $callback
+        fi
+    done
 }
 
 gsf_script_intro_sql()
 {
     echo "DROP PROCEDURE IF EXISTS ${IACT_NAME} \$\$"
-    echo -n "CREATE PROCEDURE ${IACT_NAME}("
-    gsf_add_params
-    echo ") \$\$"
+    local str_create_proc="CREATE PROCEDURE ${IACT_NAME}("
+
+    echo -n "${str_create_proc}"
+
+    # parameter expansion to replace all characters with a space for
+    # aligning all the parameters with the open paren:
+    gsf_add_params_sql "${str_create_proc//?/ }"
+    echo ")"
 }
 
-gsf_script_List_sql()
+declare gsf_script_indent="  "
+
+gsf_sql_proc_body_List()
 {
-    gsf_script_intro_sql
+    local prefix="t"
+    local -i where_count=0
+
+    lambda()
+    {
+        if [ "${CALLBACK_ROW[2]}" == "YES" ]; then
+            # Line-up where parts under the first part:
+            if [ $(( where_count++ )) -gt 0 ]; then
+                echo
+                echo -n "${where_line//?/ }AND "
+            fi
+
+            local fname="${CALLBACK_ROW[0]}"
+            if table_field_is_index "${fname}"; then
+                echo -n "(${fname} IS NULL OR ${prefix}.${fname}=${fname})"
+            else
+                echo -n "${prefix}.${fname}=${fname}"
+            fi
+        fi
+    }
+
+    local select_line="${gsf_script_indent}SELECT "
+    local   from_line="${gsf_script_indent}  FROM "
+    local  where_line="${gsf_script_indent} WHERE "
+
+    # Build the query/procedure body:
+    echo -n "${select_line}"
+    gsf_add_selects_sql "${select_line//?/ }" "${prefix}"
+    echo
+    echo "${from_line}${GF_TNAME} ${prefix}"
+    echo -n "${where_line}"
+    gsf_callback_prefs_rows "lambda"
+    echo ";"
 }
 
-gsf_script_Add_sql()
+gsf_sql_proc_body_Add()
 {
-    echo -n "in gsf_script_Add_sql" >&2
+    local prefix="t"
+    local -i lambda_count=0
+    local   set_line="${gsf_script_indent}   SET "
+
+    lambda_set()
+    {
+        if [ "${CALLBACK_ROW[3]}" == "YES" ]; then
+            local fname="${CALLBACK_ROW[0]}"
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo ","
+                echo -n "${set_line//?/ }"
+            fi
+            echo -n "${prefix}.${fname} = ${fname}"
+        fi
+    }
+
+    echo "${gsf_script_indent}INSERT INTO ${GT_FNAME} ${prefix}"
+    echo -n "${set_line}"
+    lambda_count=0
+    gsf_callback_prefs_rows "lambda_values"
+    echo ";"
 }
 
-gsf_script_Read_sql()
+gsf_sql_proc_body_Read()
 {
-    echo -n "in gsf_script_Read_sql" >&2
+    local prefix="t"
+    local -i lambda_count=0
+
 }
 
-gsf_script_Update_sql()
+gsf_sql_proc_body_Update()
 {
-    echo -n "in gsf_script_Update_sql" >&2
+    local prefix="t"
+    local -i lambda_count=0
+
+    local   set_line="${gsf_script_indent}   SET "
+    local where_line="${gsf_script_indent} WHERE "
+
+    cb_is_param() { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
+    cb_is_index() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
+
+
+    lambda_set()
+    {
+        if ! cb_is_index -a cb_is_param; then
+            local fname="${CALLBACK_ROW[0]}"
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo ","
+                echo -n "${set_line//?/ }"
+            fi
+            echo -n "${prefix}.${fname} = ${fname}"
+        fi
+    }
+
+    lambda_where()
+    {
+        if cb_is_index -a cb_is_param; then
+            local fname="${CALLBACK_ROW[0]}"
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo
+                echo -n "${where_line//?/ }AND "
+            fi
+            echo -n "${prefix}.${fname} = ${fname}"
+        fi
+    }
+
+    echo "${gsf_script_indent}UPDATE ${GF_TNAME}"
+    echo -n "${set_line}"
+    lambda_count=0
+    gsf_callback_prefs_rows "lambda_set"
+    echo
+    echo -n "${where_line}"
+    lambda_count=0
+    gsf_callback_prefs_rows "lambda_where"
+    echo ";"
 }
 
-gsf_script_Delete_sql()
+gsf_sql_proc_body_Delete()
 {
-    echo -n "in gsf_script_Delete_sql" >&2
+    local prefix="t"
+    local -i lambda_count=0
+
 }
 
-gsf_script_Import_sql()
+gsf_sql_proc_body_Import()
 {
-    echo -n "in gsf_script_Import_sql" >&2
+    local prefix="t"
+    local -i lambda_count=0
+
 }
