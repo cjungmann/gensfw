@@ -153,9 +153,6 @@ gsf_sql_proc_body_List()
 gsf_sql_proc_body_Add()
 {
     local -i lambda_count=0
-    local select_line="${gsf_script_indent}       ("
-    local values_line="${gsf_script_indent}VALUES ("
-    local line_indent="${values_line//?/ }"
 
     lambda_values()
     {
@@ -169,6 +166,8 @@ gsf_sql_proc_body_Add()
         fi
     }
 
+    echo "${gsf_script_indent}DECLARE newid INT UNSIGNED;"
+    echo
     echo "${gsf_script_indent}INSERT INTO ${GF_TNAME}"
     lambda_count=0
     echo -n "${GSF_UPDATE_FIELDS_LINE}"
@@ -178,6 +177,11 @@ gsf_sql_proc_body_Add()
     echo -n "${GSF_UPDATE_VALUES_LINE}"
     gsf_callback_prefs_rows "lambda_values"
     echo ");"
+    echo
+    echo "${gsf_script_indent}IF ROW_COUNT() > 0 THEN"
+    echo "${gsf_script_indent}   SET newid = LAST_INSERT_ID();"
+    echo "${gsf_script_indent}   CALL List(newid);"
+    echo "${gsf_script_indent}END IF;"
 }
 
 gsf_sql_proc_body_Read()
@@ -250,6 +254,15 @@ gsf_sql_proc_body_Update()
     lambda_count=0
     gsf_callback_prefs_rows "lambda_where"
     echo ";"
+
+    local prikey_name
+    prikey_name=$( table_get_primary_key )
+    if [ $? -eq 0 ]; then
+        echo
+        echo "${gsf_script_indent}IF ROW_COUNT() > 0 THEN"
+        echo "${gsf_script_indent}   CALL List(${prikey_name});"
+        echo "${gsf_script_indent}END IF;"
+    fi
 }
 
 gsf_sql_proc_body_Delete()
