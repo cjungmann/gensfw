@@ -270,6 +270,26 @@ gsf_sql_proc_body_Delete()
     local prefix="t"
     local -i lambda_count=0
 
+    cb_is_param() { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
+
+    lambda_where()
+    {
+        if cb_is_param; then
+            local fname="${CALLBACK_ROW[0]}"
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo
+                echo -n "${GSF_AND_LINE}"
+            fi
+            echo -n "${prefix}.${fname} = ${fname}"
+        fi
+    }
+
+    echo "${gsf_script_indent}DELETE"
+    echo "${gsf_script_indent}  FROM ${prefix} USING ${GF_TNAME} AS ${prefix}"
+    echo -n "${GSF_WHERE_LINE}"
+    lambda_count=0
+    gsf_callback_prefs_rows "lambda_where"
+    echo ";"
 }
 
 gsf_sql_proc_body_Import()
