@@ -890,6 +890,20 @@ table_field_is_index()
     return 1
 }
 
+table_get_primary_key()
+{
+    local rowstr
+    local -a row
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "${rowstr}" ) )
+        if [ -n "${row[$COL_PRIKEY]}" ]; then
+            echo "${row[$COL_NAME]}"
+            return 0
+        fi
+    done
+    return 1
+}
+
 
 loop_for_context()
 {
