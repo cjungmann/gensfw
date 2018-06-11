@@ -52,7 +52,8 @@ gsf_write_script_sql_import()
 
 
     gsf_sql_import_table
-    # gsf_sql_import_proc_review
+    echo
+    gsf_sql_import_proc_review
     # gsf_sql_import_proc_abandon
     # gsf_sql_import_proc_accept
 }
@@ -346,3 +347,29 @@ gsf_sql_import_table()
     echo "GRANT FILE ON *.* to 'webuser'@'localhost';"
 }
 
+gsf_sql_import_proc_review()
+{
+    local proc_name="App_${GF_TNAME}_Import_Review"
+
+    local -i lambda_count=0
+    lambda_selects()
+    {
+        if CB_ROW_IS_PARAM; then
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo ","
+                echo  -n "${GSF_SELECT_SPACES}"
+            fi
+            echo -n "${CALLBACK_ROW[0]}"
+        fi
+    }
+
+    echo "DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    echo "CREATE PROCEDURE ${proc_name}()"
+    echo "BEGIN"
+    echo -n "${GSF_SELECT_LINE}"
+    gsf_callback_prefs_rows "lambda_selects"
+    echo
+    echo "${GSF_FROM_LINE}${QT_NAME}"
+    echo "${GSF_WHERE_LINE}id_session = @session_confirmed_id;"
+    echo "END \$\$"
+}
