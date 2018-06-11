@@ -703,7 +703,7 @@ show_interaction_preferences_dialog()
         case $exval in
             0) save_iact_choices "${result}"; break ;;
             2|3)
-                Local cmd_to_call
+                local cmd_to_call
                 if [ $exval -eq 2 ]; then
                     cmd_to_call="gsf_write_script_sql"
                 else
