@@ -480,6 +480,26 @@ array_str_from_list_result()
     done
 }
 
+# split_yad_arrs()
+# Used in dialog #4 (show_interaction_preferences_dialog()) to split
+# an array of YAD arrays into a single array.  Use the output of to
+# create a new array for submission to YAD.
+split_yad_arrs()
+{
+    local LSEP="${IFS:0:1}"
+    local IFS="${YSEP}"
+    local str el
+    local -a row
+    for str in "$@"; do
+        row=( $( echo "$str" ) )
+        for el in "${row[@]}"; do
+            echo -n "$el${LSEP}"
+        done
+    done
+}
+
+
+
 
 # Uses first parameter as subject value, then puts the rest
 # of the parameters into a list element.
@@ -657,13 +677,11 @@ show_interaction_preferences_dialog()
         --plug "${PLUG_NUM}"
         --text "Interaction Editor for ${GF_DBNAME}.${GF_TNAME}"
         "${IACT_TOP_PANE[@]}"
-        "${meta_vals[@]}"
     )
 
     local -a list_pane=(
         --plug "${PLUG_NUM}"
         "${IACT_LIST_PANE[@]}"
-        "${list_vals[@]}"
     )
 
     local -a paned_dialog=(
@@ -676,8 +694,8 @@ show_interaction_preferences_dialog()
 
     while true; do
         result=$(
-            yad "${top_pane[@]}" &
-            yad "${list_pane[@]}" &
+            yad "${top_pane[@]}" "${meta_vals[@]}" &
+            yad "${list_pane[@]}" "${list_vals[@]}" &
             yad "${paned_dialog[@]}"
               )
         exval=$?
@@ -685,7 +703,7 @@ show_interaction_preferences_dialog()
         case $exval in
             0) save_iact_choices "${result}"; break ;;
             2|3)
-                local cmd_to_call
+                Local cmd_to_call
                 if [ $exval -eq 2 ]; then
                     cmd_to_call="gsf_write_script_sql"
                 else
@@ -696,6 +714,10 @@ show_interaction_preferences_dialog()
                 IACT_COL_PREFS=( $( make_iact_choices_string "${result}" ) )
                 script_text=$( $cmd_to_call "${IACT_NAME}" )
                 if [ $? -eq 0 ]; then  echo "${script_text}"; fi
+
+                # Update array for re-initialize the dialog:
+                meta_vals=( "${iact}" $( split_yad_arrs "${IACT_COL_PREFS[0]}" ) )
+                list_vals=( $( split_yad_arrs "${IACT_COL_PREFS[@]:1}" ) )
                 ;;
             1|252) break ;;
         esac
