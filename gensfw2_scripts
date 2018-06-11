@@ -20,11 +20,41 @@ write_scripts()
 
 gsf_write_script_sql()
 {
-    gsf_script_intro_sql
+    if [ "${IACT_NAME}" = "Import" ]; then
+        gsf_write_script_sql_import
+    else
+        gsf_script_intro_sql
 
-    echo "BEGIN"
-    gsf_sql_proc_body_${IACT_NAME}
-    echo "END  \$\$"
+        echo "BEGIN"
+        gsf_sql_proc_body_${IACT_NAME}
+        echo "END  \$\$"
+    fi
+}
+
+gsf_write_script_sql_import()
+{
+    # Environment values for all import functions:
+    local QT_NAME="QT_${GF_TNAME}"
+    local ID_FIELD_NAME="id_session"
+    local -i MAX_NAME_LEN="${#ID_FIELD_NAME}"
+    lambda_max_name_len()
+    {
+        local -i len
+        if CB_ROW_IS_PARAM; then
+            len="${#CALLBACK_ROW[0]}"
+            if [ $len -gt $MAX_NAME_LEN ]; then
+                MAX_NAME_LEN=$len
+            fi
+        fi
+    }
+    # Scan for longest field name length:
+    gsf_callback_prefs_rows "lambda_max_name_len"
+
+
+    gsf_sql_import_table
+    # gsf_sql_import_proc_review
+    # gsf_sql_import_proc_abandon
+    # gsf_sql_import_proc_accept
 }
 
 # gsf_add_params_sql()
@@ -291,9 +321,28 @@ gsf_sql_proc_body_Delete()
     echo ";"
 }
 
-gsf_sql_proc_body_Import()
+gsf_sql_import_table()
 {
     local prefix="t"
     local -i lambda_count=0
 
+    local param_format="${gsf_script_indent}%-${MAX_NAME_LEN}s %s,\n"
+
+    lambda_fields()
+    {
+        if CB_ROW_IS_PARAM; then
+            printf ${param_format} "${CALLBACK_ROW[0]}" "${CALLBACK_ROW[1]}"
+        fi
+    }
+
+    echo "CREATE TABLE IF NOT EXISTS ${QT_NAME}"
+    echo "("
+    printf "${gsf_script_indent}%-${max_name_len}s INT UNSIGNED,\n" "${ID_FIELD_NAME}"
+    gsf_callback_prefs_rows "lambda_fields"
+    echo "${gsf_script_indent}INDEX(${ID_FIELD_NAME})"
+    echo ");"
+    echo
+    echo "GRANT INSERT ON ${QT_NAME} TO 'webuser'@'localhost';"
+    echo "GRANT FILE ON *.* to 'webuser'@'localhost';"
 }
+
