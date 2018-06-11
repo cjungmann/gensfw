@@ -1,5 +1,9 @@
 #!/bin/bash
 
+CB_ROW_IS_PARAM() { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
+CB_ROW_IS_INDEX() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
+
+
 write_scripts()
 {
     local name IFS
@@ -124,7 +128,7 @@ gsf_sql_proc_body_List()
 
     lambda()
     {
-        if [ "${CALLBACK_ROW[2]}" = "TRUE" ]; then
+        if CB_ROW_IS_PARAM; then
             # Line-up where parts under the first part:
             if [ $(( where_count++ )) -gt 0 ]; then
                 echo
@@ -156,7 +160,7 @@ gsf_sql_proc_body_Add()
 
     lambda_values()
     {
-        if [ "${CALLBACK_ROW[2]}" = "TRUE" ]; then
+        if CB_ROW_IS_PARAM; then
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
@@ -191,7 +195,7 @@ gsf_sql_proc_body_Read()
 
     lambda()
     {
-        if [ "${CALLBACK_ROW[2]}" = "TRUE" ]; then
+        if CB_ROW_IS_PARAM; then
             # Line-up where parts under the first part:
             if [ $(( where_count++ )) -gt 0 ]; then
                 echo
@@ -218,12 +222,9 @@ gsf_sql_proc_body_Update()
     local prefix="t"
     local -i lambda_count=0
 
-    cb_is_param() { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
-    cb_is_index() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
-
     lambda_set()
     {
-        if ! cb_is_index -a cb_is_param; then
+        if ! CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
@@ -235,7 +236,7 @@ gsf_sql_proc_body_Update()
 
     lambda_where()
     {
-        if cb_is_index -a cb_is_param; then
+        if CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
@@ -270,11 +271,9 @@ gsf_sql_proc_body_Delete()
     local prefix="t"
     local -i lambda_count=0
 
-    cb_is_param() { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
-
     lambda_where()
     {
-        if cb_is_param; then
+        if CB_ROW_IS_PARAM; then
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
