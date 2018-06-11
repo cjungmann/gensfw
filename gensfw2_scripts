@@ -35,6 +35,7 @@ gsf_write_script_sql_import()
 {
     # Environment values for all import functions:
     local QT_NAME="QT_${GF_TNAME}"
+    local IMPORT_PROC_ROOT="App_${GF_TNAME}_Import_"
     local ID_FIELD_NAME="id_session"
     local -i MAX_NAME_LEN="${#ID_FIELD_NAME}"
     lambda_max_name_len()
@@ -54,8 +55,10 @@ gsf_write_script_sql_import()
     gsf_sql_import_table
     echo
     gsf_sql_import_proc_review
-    # gsf_sql_import_proc_abandon
-    # gsf_sql_import_proc_accept
+    echo
+    gsf_sql_import_proc_abandon
+    echo
+    gsf_sql_import_proc_accept
 }
 
 # gsf_add_params_sql()
@@ -349,7 +352,7 @@ gsf_sql_import_table()
 
 gsf_sql_import_proc_review()
 {
-    local proc_name="App_${GF_TNAME}_Import_Review"
+    local proc_name="${IMPORT_PROC_ROOT}Review"
 
     local -i lambda_count=0
     lambda_selects()
@@ -371,5 +374,60 @@ gsf_sql_import_proc_review()
     echo
     echo "${GSF_FROM_LINE}${QT_NAME}"
     echo "${GSF_WHERE_LINE}id_session = @session_confirmed_id;"
+    echo "END \$\$"
+}
+
+gsf_sql_import_proc_abandon()
+{
+    local proc_name="${IMPORT_PROC_ROOT}Abandon"
+    echo "DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    echo "CREATE PROCEDURE ${proc_name}()"
+    echo "BEGIN"
+    echo "${gsf_script_indent}DELETE"
+    echo "${gsf_script_indent}  FROM ${GT_NAME}"
+    echo "${GSF_WHERE_LINE}id_session = @session_confirmed_id;"
+    echo "END \$\$"
+}
+
+gsf_sql_import_proc_accept()
+{
+    local -i lambda_count=0
+    local ispaces
+
+    lambda_values()
+    {
+        if CB_ROW_IS_PARAM; then
+            local fname="${CALLBACK_ROW[0]}"
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo ", "
+                echo -n "${ispaces}"
+            fi
+            echo -n "${fname}"
+        fi
+    }
+
+    local proc_name="${IMPORT_PROC_ROOT}Accept"
+
+    echo "DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    echo "CREATE PROCEDURE ${proc_name}()"
+    echo "BEGIN"
+    echo "${gsf_script_indent}INSERT INTO ${GF_TNAME}"
+
+    lambda_count=0
+    echo -n "${GSF_UPDATE_FIELDS_LINE}"
+    ispaces="${GSF_UPDATE_SPACES_LINE}"
+    gsf_callback_prefs_rows "lambda_values"
+    echo ")"
+
+    lambda_count=0
+    echo -n "${GSF_SELECT_LINE}"
+    ispaces="${GSF_SELECT_SPACES}"
+    gsf_callback_prefs_rows "lambda_values"
+    echo
+    echo "${GSF_FROM_LINE}${QT_NAME}"
+    echo "${GSF_WHERE_LINE}id_session = @session_confirmed_id;"
+    echo
+    echo "${gsf_script_indent}CALL ${IMPORT_PROC_ROOT}Abandon();"
+
     echo "END \$\$"
 }
