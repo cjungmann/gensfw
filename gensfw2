@@ -341,7 +341,7 @@ get_iact_list_data_str()
         fi
 
         # Result column, TRUE for List, Read, otherwise FALSE
-        if [ $itype == "List" -o $itype == "Read" ]; then
+        if [ $itype = "List" -o $itype = "Read" ]; then
             echo -n "${YSEP}TRUE"
         else
             echo -n "${YSEP}FALSE"
@@ -420,7 +420,7 @@ index_in_array()
     local el
     local -i ndx=0
     for el in "${@:2}"; do
-        if [ "$el" == "$target" ]; then
+        if [ "$el" = "$target" ]; then
             echo "$ndx"
             return 0
         fi
@@ -434,7 +434,7 @@ string_in_array()
     local target="$1"
     local el
     for el in "${@:2}"; do
-        if [ "$el" == "$target" ]; then
+        if [ "$el" = "$target" ]; then
             return 0
         fi
     done
@@ -613,6 +613,10 @@ show_table_preferences_dialog()
     local -i exval
     local -i PLUG_NUM=$(( G_PLUG_NUM++ ))
 
+    if [ -z "${GF_FILE_ARG}" ]; then
+        set_file_path_defaults "${PWD}/${GF_DBNAME}_${GF_TNAME}.gsf"
+    fi
+
     while true; do
         result=$(
             # start_default_labels_list_dialog "${PLUG_NUM}" 1
@@ -637,10 +641,6 @@ start_table_preferences_meta_pane()
     local -i tnum="$2"
 
     local -i fcount=$( get_fields_count )
-
-    if [ -z "${GF_FILE_ARG}" ]; then
-        set_file_path_defaults "${PWD}/${GF_DBNAME}_${GF_TNAME}.gsf"
-    fi
 
     cmd=( --plug "${plug}"
           --tabnum "${tnum}"
@@ -903,16 +903,16 @@ show_save_files_dialog()
         rarr=( $( echo "${result}" ) )
         
 
-        if [ "${rarr[$(( index++ ))]}" -eq "TRUE" ]; then
-            save_settings_to_file "${rarr[$(( index++))]}"
+        if [ "${rarr[ $(( index++ )) ]}" = "TRUE" ]; then
+            save_settings_to_file "${rarr[ $(( index++)) ]}"
         fi
 
-        if [ "${arr[$(( index++ ))]}" -eq "TRUE" ]; then
-            save_srm_to_file "${rarr[$$(( index++ ))]}"
+        if [ "${arr[ $(( index++ )) ]}" = "TRUE" ]; then
+            save_srm_to_file "${rarr[ $$(( index++ )) ]}"
         fi
 
-        if [ "${arr[$(( index++ ))]}" -eq "TRUE" ]; then
-            save_sql_to_file "${rarr[$(( index++ ))]}"
+        if [ "${arr[ $(( index++ )) ]}" = "TRUE" ]; then
+            save_sql_to_file "${rarr[ $(( index++ )) ]}"
         fi
     fi
 }
@@ -940,8 +940,6 @@ collect_table_info()
 ${COLS_QUERY}
 WHERE TABLE_SCHEMA='${GF_DBNAME}'
 AND TABLE_NAME='${GF_TNAME}'"
-
-    echo "About to execute '${query}'" >&2
 
     source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
 }
