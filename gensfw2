@@ -45,8 +45,10 @@ declare -gx GF_DBNAME
 declare -gx GF_TNAME
 
 # 
-declare -gx GF_SETTINGS_FILE
-declare -gx GF_SCRIPTS_FILE
+declare -gx GF_FILE_ARG
+declare -gx GF_FILEPATH_GSF
+declare -gx GF_FILEPATH_SQL
+declare -gx GF_FILEPATH_SRM
 
 # This array changes when GF_DBNAME changes (from Dialog 1):
 declare -a TABLE_NAMES
@@ -60,10 +62,43 @@ declare -A IACT_DATA
 # Clear variables that might retain info from previous table:
 reset_for_new_table()
 {
-    GF_SETTINGS_FILE=
-    GF_SCRIPTS_FILE=
+    GF_FILEPATH_GSF=
+    GF_FILEPATH_SQL=
+    GF_FILEPATH_SRM=
     GSF_FIELD_NAMES=()
     GSF_FIELD_LABELS=()
+}
+
+set_file_path_defaults()
+{
+    local IFS="/"
+    local lpath fname froot
+    local -a tarr farr=( $( echo "$1" ) )
+    local -i tlen flen="${#farr[@]}"
+    if [ $flen -eq 1 ]; then
+        fname="$1"
+        lpath=""
+    else
+        tarr=( "${farr[@]:0:$(( flen-1 ))}" )
+        lpath="${tarr[*]}"
+        fname="${farr[ $(( flen-1 )) ]}"
+    fi
+
+
+    IFS="\."
+    tarr=( $( echo "${fname}" ) )
+    tlen="${#tarr[@]}"
+    if [ $tlen -eq 0 ]; then
+        froot="${fname}"
+    else
+        froot="${tarr[*]:0:$(( tlen-1 ))}"
+    fi
+    froot="${tarr[@]:0:$(( tlen-1 ))}"
+
+    local fbase="${lpath}/${froot}"
+    GF_FILEPATH_GSF="$1"
+    GF_FILEPATH_SQL="${fbase}.sql"
+    GF_FILEPATH_SRM="${fbase}.srm"
 }
 
 # Convenient function to avoid having to know the array name:
@@ -442,8 +477,9 @@ parse_args()
     local arg
     for arg in "$@"; do
         if [ -f "${arg}" ]; then
-            GF_SETTINGS_FILE="${arg}"
-            gsf_read_settings_from_file "${arg}"
+            GF_FILE_ARG="${arg}"
+            set_file_path_defaults "${arg}"
+            gsf_read_settings_from_file "${GF_FILEPATH_GSF}"
             break
         elif [ -z "$GF_DBNAME" ]; then
             set_dbase_name "$arg"
@@ -602,10 +638,8 @@ start_table_preferences_meta_pane()
 
     local -i fcount=$( get_fields_count )
 
-    if [ -z "${GF_SETTINGS_FILE}" ]; then
-        name_settings="${GF_DBNAME}_${GF_TNAME}.gsf"
-    else
-        name_settings="${GF_SETTINGS_FILE}"
+    if [ -z "${GF_FILE_ARG}" ]; then
+        set_file_path_defaults "${PWD}/${GF_DBNAME}_${GF_TNAME}.gsf"
     fi
 
     cmd=( --plug "${plug}"
@@ -617,9 +651,9 @@ start_table_preferences_meta_pane()
           --field "Field Count":RO "${fcount}"
         )
 
-    if [ -n "${GF_SETTINGS_FILE}" ]; then
+    if [ -n "${GF_FILE_ARG}" ]; then
         cmd=( "${cmd[@]}"
-              --field "Settings File":RO "${name_settings}"
+              --field "Settings File":RO "${GF_FILEPATH_GSF}"
             )
     fi
 
@@ -853,20 +887,34 @@ show_save_files_dialog()
         "${YAD_COMMON_ARGS[@]}"
         --form
         --field "Write settings file":CHK "FALSE"
-        --field "GSF file name":SFL "bogus.gsf"
-        --field "Write scripts file":CHK "FALSE"
-        --field "SRM file name":SFL "bogus.srm"
+        --field "GSF file name":SFL "${GF_FILEPATH_GSF}"
+        --field "Write SQL script":CHK "FALSE"
+        --field "SQL file name":SFL "${GF_FILEPATH_SQL}"
+        --field "Write SRM script":CHK "FALSE"
+        --field "SRM file name":SFL "${GF_FILEPATH_SRM}"
     )
 
     local result=$( yad "${cmd[@]}" )
     local -i exval=$?
 
     if [ $exval -eq 0 ]; then
-        echo "result is ${result}" >&2
-    fi
+        local IFS="${YSEP}"
+        local -i index=0
+        rarr=( $( echo "${result}" ) )
+        
 
-    # write_scripts # to write SRM file
-    # save_settings # to write gsf file
+        if [ "${rarr[$(( index++ ))]}" -eq "TRUE" ]; then
+            save_settings_to_file "${rarr[$(( index++))]}"
+        fi
+
+        if [ "${arr[$(( index++ ))]}" -eq "TRUE" ]; then
+            save_srm_to_file "${rarr[$$(( index++ ))]}"
+        fi
+
+        if [ "${arr[$(( index++ ))]}" -eq "TRUE" ]; then
+            save_sql_to_file "${rarr[$(( index++ ))]}"
+        fi
+    fi
 }
 
 
@@ -892,6 +940,8 @@ collect_table_info()
 ${COLS_QUERY}
 WHERE TABLE_SCHEMA='${GF_DBNAME}'
 AND TABLE_NAME='${GF_TNAME}'"
+
+    echo "About to execute '${query}'" >&2
 
     source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
 }
@@ -951,7 +1001,7 @@ loop_for_context()
             show_select_table_dialog
             exval=$?
             if [ $exval -eq 0 ]; then
-                collect_table_info show_table_preferences_dialog
+                collect_table_info "show_table_preferences_dialog"
             elif [ $do_dbase_loop -ne 0 ]; then
                 do_loop=1
                 break
@@ -964,10 +1014,12 @@ loop_for_context()
 
 
 parse_args "$@"
-if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
-    collect_table_info show_table_preferences_dialog
-else
-    loop_for_context
+if [ -z "$GF_FILE_ARG" ]; then
+    if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
+        collect_table_info "show_table_preferences_dialog"
+    else
+        loop_for_context
+    fi
 fi
 
 
