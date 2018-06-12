@@ -101,7 +101,7 @@ gsf_open_table_from_record()
             set_table_name "${names[1]}"
             exval=$?
             if [ $exval -eq 0 ]; then
-                collect_table_info gsf_load_IACT_DATA
+                collect_table_info "gsf_load_IACT_DATA"
             fi
         fi
     fi
@@ -116,7 +116,6 @@ gsf_read_settings_from_file()
 {
     # existence of file already confirmed
     local fname="$1"
-
     local IFS="${RSEP}"
     local -i exval
     local -a GSF_RECS=( $( cat "$fname" ) )
