@@ -95,7 +95,10 @@ set_file_path_defaults()
     fi
     froot="${tarr[@]:0:$(( tlen-1 ))}"
 
-    local fbase="${lpath}/${froot}"
+    local fbase="${froot}"
+    if [ -n "${lpath}" ]; then
+        fbase="${lpath}/${froot}"
+    fi
     GF_FILEPATH_GSF="$1"
     GF_FILEPATH_SQL="${fbase}.sql"
     GF_FILEPATH_SRM="${fbase}.srm"
