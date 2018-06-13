@@ -1,8 +1,5 @@
 #!/bin/bash
 
-CB_ROW_IS_PARAM() { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
-CB_ROW_IS_INDEX() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
-
 gsf_write_script_sql()
 {
     if [ "${IACT_NAME}" = "Import" ]; then
@@ -94,20 +91,6 @@ gsf_add_selects_sql()
                 echo -n "${indent_chars}"
             fi
             echo -n "${prefix}${row[0]}" 
-        fi
-    done
-}
-
-gsf_callback_prefs_rows()
-{
-    local callback="$1"
-    local IFS="${YSEP}"
-    local -t CALLBACK_ROW
-    local rowstr
-    for rowstr in "${IACT_COL_PREFS[@]}"; do
-        CALLBACK_ROW=( $( echo "${rowstr}" ) )
-        if [ "${#CALLBACK_ROW[@]}" -gt 2 ]; then
-            $callback
         fi
     done
 }

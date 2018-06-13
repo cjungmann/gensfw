@@ -9,7 +9,7 @@
 # 6: Save Files Dialog
 
 source gensfw2_bacts
-source gensfw2_scripts
+source gensfw2_scripts_sql
 
 # One or the other of the following, either override
 # default SEPS (first line), or get the default SEPS
@@ -214,6 +214,35 @@ SELECT COLUMN_NAME,
        COLUMN_DEFAULT
   FROM COLUMNS"
 
+
+# gsf_callback_prefs_rows()
+# Scans and expands preferences data into arrays, which are made 
+# accessible through a callback function.
+# 
+# This function is designed to be called from the script-writing options
+# of Dialog #4, from which the IACT_COL_PREFS array is instantiated from
+# the results of a column preferences page.  That said, the same array
+# could be instantiated in other contexts, in particular, in processing
+# an entire GSF settings file by creating an IACT_COL_PREFS array from
+# each interaction record.
+gsf_callback_prefs_rows()
+{
+    local callback="$1"
+    local IFS="${YSEP}"
+    local -t CALLBACK_ROW
+    local rowstr
+    for rowstr in "${IACT_COL_PREFS[@]}"; do
+        CALLBACK_ROW=( $( echo "${rowstr}" ) )
+        if [ "${#CALLBACK_ROW[@]}" -gt 2 ]; then
+            $callback
+        fi
+    done
+}
+
+# These simple functions interpret the callback data from function
+# gsf_callback_prefs_rows().
+CB_ROW_IS_PARAM() { [ "${CALLBACK_ROW[2]}"="TRUE" ]; return $?; }
+CB_ROW_IS_INDEX() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
 
 # Save column indexes to global variables for repeated access
 collect_column_indexes()
