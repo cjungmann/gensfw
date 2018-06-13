@@ -108,8 +108,6 @@ gsf_script_intro_sql()
     echo ")"
 }
 
-declare gsf_script_indent="  "
-
 declare GSF_SELECT_LINE="${gsf_script_indent}SELECT "
 declare   GSF_FROM_LINE="${gsf_script_indent}  FROM "
 declare    GSF_SET_LINE="${gsf_script_indent}   SET "

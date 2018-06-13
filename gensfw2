@@ -244,6 +244,9 @@ gsf_callback_prefs_rows()
 CB_ROW_IS_PARAM() { [ "${CALLBACK_ROW[2]}"="TRUE" ]; return $?; }
 CB_ROW_IS_INDEX() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
 
+# Universal script indentation string
+declare gsf_script_indent="  "
+
 # Save column indexes to global variables for repeated access
 collect_column_indexes()
 {
