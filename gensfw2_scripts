@@ -3,21 +3,6 @@
 CB_ROW_IS_PARAM() { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
 CB_ROW_IS_INDEX() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
 
-
-write_scripts()
-{
-    local name IFS
-    local -a IACT_ROW
-    IFS="${YSEP}"
-
-    for name in "${IACT_NAMES[@]}"; do
-        IACT_ROW=( $( echo "${IACT_DATA[$name]}" ) )
-        if [ "${IACT_ROW[0]}" = 'TRUE' ]; then
-            "gsf_script_${name}_sql" "${name}"
-        fi
-    done
-}
-
 gsf_write_script_sql()
 {
     if [ "${IACT_NAME}" = "Import" ]; then
