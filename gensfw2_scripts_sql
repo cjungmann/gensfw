@@ -17,7 +17,7 @@ gsf_write_script_sql_import()
 {
     # Environment values for all import functions:
     local QT_NAME="QT_${GF_TNAME}"
-    local IMPORT_PROC_ROOT="App_${GF_TNAME}_Import_"
+    local IMPORT_PROC_ROOT="{GF_PROC_ROOT}Import_"
     local ID_FIELD_NAME="id_session"
     local -i MAX_NAME_LEN="${#ID_FIELD_NAME}"
     lambda_max_name_len()
@@ -97,8 +97,8 @@ gsf_add_selects_sql()
 
 gsf_script_intro_sql()
 {
-    echo "DROP PROCEDURE IF EXISTS ${IACT_NAME} \$\$"
-    local str_create_proc="CREATE PROCEDURE ${IACT_NAME}("
+    echo "DROP PROCEDURE IF EXISTS ${GF_PROC_ROOT}${IACT_NAME} \$\$"
+    local str_create_proc="CREATE PROCEDURE ${GF_PROC_ROOT}${IACT_NAME}("
 
     echo -n "${str_create_proc}"
 

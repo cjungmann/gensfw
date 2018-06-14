@@ -47,6 +47,8 @@ declare -a DBASE_NAMES=( $( mysql -BN -e "show databases" ) )
 declare -gx GF_DBNAME
 declare -gx GF_TNAME
 
+declare -gx GF_PROC_ROOT
+
 # 
 declare -gx GF_FILE_ARG
 declare -gx GF_FILEPATH_GSF
@@ -1012,6 +1014,7 @@ show_save_files_dialog()
 
 use_table_info()
 {
+    GF_PROC_ROOT="App_${GF_TNAME}_"
     collect_column_indexes
     update_field_names_array
     $use_table_info_callback
