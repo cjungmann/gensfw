@@ -34,7 +34,9 @@ declare -gi G_PLUG_NUM=$$ ## Commence plug numbers from process id
 # These will not change once set
 declare -gi COL_NAME
 declare -gi COL_TYPE
+declare -gi COL_COLTYPE
 declare -gi COL_PRIKEY
+declare -gi COL_MAXLEN
 declare -gi COL_DEFAULT
 
 # The list of available database won't change (unless we change hosts):
@@ -212,6 +214,7 @@ SELECT COLUMN_NAME,
        NULLIF(IS_NULLABLE,'NO') AS nullable,
        NUMERIC_PRECISION,
        NUMERIC_SCALE,
+       CHARACTER_MAXIMUM_LENGTH,
        COLUMN_DEFAULT
   FROM COLUMNS"
 
@@ -299,8 +302,11 @@ collect_column_indexes()
 
     get_index "COLUMN_NAME";    COL_NAME=$ndx
     get_index "DATA_TYPE";      COL_TYPE=$ndx
+    get_index "COLUMN_TYPE";    COL_COLTYPE=$ndx
     get_index "prikey";         COL_PRIKEY=$ndx
     get_index "COLUMN_DEFAULT"; COL_DEFAULT=$ndx
+
+    get_index "CHARACTER_MAXIMUM_LENGTH"; COL_MAXLEN=$ndx
 }
 
 # Get field names from global table information
@@ -371,7 +377,7 @@ get_iact_list_data_str()
     fi
 
     # If no saved value, return a default string to start with:
-    local rowstr
+    local rowstr coltype
     local -a row
     local -i is_index
 
@@ -387,8 +393,22 @@ get_iact_list_data_str()
             continue
         fi
 
+        # Get data type from DATA_TYPE result, but modify for
+        # CHAR and INT types.
+        coltype="${row[$COL_TYPE]}"
+
+        if [ "${#coltype}" -ge 3 -a "${coltype: -3}" = "INT" ]; then
+            if [[ "${row[$COL_COLTYPE]}" =~ "unsigned" ]]; then
+                coltype="$coltype UNSIGNED"
+            fi
+        fi
+
+        if [ "${#coltype}" -ge 4 -a "${coltype: -4}" = "CHAR" ]; then
+            coltype="${coltype}(${row[$COL_MAXLEN]})"
+        fi
+        
         # Information/Identification column (name and datatype)
-        echo -n "${row[COL_NAME]}${YSEP}${row[COL_TYPE]}"
+        echo -n "${row[COL_NAME]}${YSEP}${coltype}"
 
         # The Param and Result columns a flags to include the field
         # in the respective domain.  Fields for which the Param flag
