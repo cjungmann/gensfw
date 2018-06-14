@@ -391,8 +391,7 @@
       </xsl:call-template>
     </xsl:variable>
 
-    <xsl:value-of select="concat('BEGIN',$nl,$indent_code,'DECLARE newid INT UNSIGNED;',$nl,$nl)" />
-    <xsl:value-of select="$command_start" />
+    <xsl:value-of select="concat('BEGIN',$nl,$command_start)" />
     <xsl:apply-templates select="field[1]" mode="sql_add_proc_field">
       <xsl:with-param name="indent" select="$spaces_to_paren" />
     </xsl:apply-templates>
@@ -436,8 +435,9 @@
       </xsl:call-template>
     </xsl:variable>
 
-    <xsl:value-of select="concat('BEGIN',$nl,$indent_code,'DECLARE newid INT UNSIGNED;',$nl,$nl)" />
-    <xsl:value-of select="concat($command_start,@name,' ',$prefix)" />
+    <xsl:value-of select="concat('BEGIN',$nl,$indent_code,'DECLARE newid INT UNSIGNED;',$nl)" />
+    <xsl:value-of select="concat($command_start,@name,' ',$prefix,$nl)" />
+    <xsl:value-of select="concat('BEGIN',$nl,$command_start,@name,' ',$prefix)" />
 
     <xsl:apply-templates select="field[1]" mode="sql_update_set_field">
       <xsl:with-param name="indent" select="$spaces_to_indent" />

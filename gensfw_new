@@ -1,12 +1,25 @@
 #!/bin/bash
 
 # These need to match the separators used in parsql
-RSEP=$'\a'   # Record SEParator  ( \a == \007 )
-FSEP=$'\006' # Field SEParator
-VSEP=$':'    # Valuew SEParator
+SSEP=$'\005' # Section SEParator AKA Enquiry           Marks sections of file
+RSEP=$'\a'   # Record SEParator  AKA Bell, AKA $'\007' Records within a section
+FSEP=$'\006' # Field SEParator   AKA Acknowledgement   Fields within a record
+VSEP=$':'    # Value SEParator                         Separate between name:value pairs
 
 # Generic array separator for adhoc use
 ASEP=$'\a'   # Array SEParator, common array separator for returning and restoring arrays
+
+# These global names will be used to access the properties of a result row
+declare -a META_COLUMN_NAMES
+declare -a META_COLUMNS
+
+declare -A RECORD_COLUMN_NAMES
+declare -a RECORD_COLUNN_NAMES_ORDERED
+declare -A RESULT_ROW_NAMES_MAP
+declare -a RESULT_ROW_NAMES_ORDERED
+
+# This global name provides access to rows of a query
+declare -a RECORD_ROWS
 
 comargs=(
     --height=400
@@ -20,6 +33,85 @@ interaction_types=( List Add Read Update Delete Import )
 view_flags=( use readonly hidden )
 view_prompts=( label )
 
+
+SSEP=')'
+RSEP='!'
+FSEP='#'
+
+
+SEPSTR="${SSEP}${RSEP}${FSEP}${VSEP}"
+
+make_metasection_str()
+{
+    local IFS="${FSEP}"
+    local meta=(
+        "itypes${VSEP}${interaction_types[*]}"
+        "view_flags${VSEP}${view_flags[*]}"
+        "view_prompts${VSEP}${view_prompts[*]}"
+    )
+
+    IFS="${RSEP}"
+    echo "${meta[*]}"
+}
+
+iterate_fields()
+{
+    declare user="$1"
+
+    declare row val valname fieldname
+    declare -i index=0
+    declare -a vals
+    local IFS
+
+
+    declare -A CURROW
+    declare -i ndx
+    
+    for row in "${RECORD_ROWS[@]}"; do
+        fieldname="${RESULT_ROW_NAMES_ORDERED[$index]}"
+        IFS="${FSEP}"
+        vals=( $( echo "${row[@]}" ) )
+
+        ndx=0
+        IFS="${VSEP}"
+        for val in "${vals[@]}"; do
+            valname="${RECORD_COLUMN_NAMES_ORDERED[$ndx]}"
+            if [ "$val" == "NULL" ]; then
+                val=
+            fi
+            CURROW[$valname]="${val}"
+            (( ndx++ ))
+        done
+
+        echo "About to call $user"
+
+        $user
+    done
+}
+
+use_currow()
+{
+    echo "There are ${#vals[@]} elements in row $fieldname" >&2
+    declare -p CURROW
+}
+
+export -f use_currow
+
+make_table_array()
+{
+    iterate_fields "use_currow"
+
+
+    # local table_array=(
+    #     "${SEPSTR}"
+    #     make_metasection_str
+        
+    # )
+    
+    
+}
+
+
 pagetypes=(
     --list
     --column "Interaction Type":TXT
@@ -31,16 +123,6 @@ IFS=$'\a'
 COMARGS="${comargs[@]}"
 IFS=$OIFS
 
-# These global names will be used to access the properties of a result row
-declare -a META_COLUMN_NAMES
-declare -a META_COLUMNS
-
-declare -A RECORD_COLUMN_NAMES
-declare -A RESULT_ROW_NAMES_MAP
-declare -a RESULT_ROW_NAMES_ORDERED
-
-# This global name provides access to rows of a query
-declare -a RECORD_ROWS
 
 validate_mysql_name()
 {
@@ -190,11 +272,20 @@ save_column_info_into_META_COLUMNS_and_META_COLUMN_NAMES()
 {
     local query="$1"
 
+    local sepstr="${RSEP}${FSEP}${VSEP}"
+
     # Use external command to collect info for associative array of column info
-    local colinfo=$( ./parsql information_schema "${query}" )
+    local colinfo
+    colinfo=$( ./parsql information_schema "${query}" "${sepstr}" )
+    if [ $? -ne 0 ]; then
+        echo "parsql failed with sepstr=${sepstr}"
+        echo
+        echo "${colinfo}"
+        exit 1
+    fi
 
     local IFS="${RSEP}"
-    local columns=( $colinfo )
+    local -a columns=( $colinfo )
 
     # Maintain separate index of names to preserve column order established by the query:
     IFS=$'\n'; declare -axg META_COLUMN_NAMES=( $( get_column_names "${columns[0]}" ) )
@@ -217,6 +308,8 @@ save_column_info_into_META_COLUMNS_and_META_COLUMN_NAMES()
 make_RECORD_COLUMN_NAMES_from_META_COLUMNS()
 {
     RECORD_COLUMN_NAMES=()
+    RECORD_COLUMN_NAMES_ORDERED=()
+
     local -i index=0
     local -i ndxName="${RESULT_ROW_NAMES_MAP['Name']}"
     local -a props
@@ -226,6 +319,7 @@ make_RECORD_COLUMN_NAMES_from_META_COLUMNS()
         props=( $meta_column )
         name="${props[$ndxName]}"
         RECORD_COLUMN_NAMES[$name]=$index
+        RECORD_COLUMN_NAMES_ORDERED[$index]="${name}"
         (( index++ ))
     done
 }
@@ -297,9 +391,9 @@ SELECT COLUMN_NAME,
        UPPER(DATA_TYPE) AS DATA_TYPE,
        CHARACTER_MAXIMUM_LENGTH,
        COLUMN_TYPE,
-       NULLIF('0',INSTR(EXTRA,'auto_increment')) AS autoinc,
-       NULLIF('0',INSTR(COLUMN_KEY,'PRI')) AS prikey,
-       NULLIF(IS_NULLABLE,'YES') AS nullable,
+       CASE WHEN INSTR(EXTRA,'auto_increment') THEN 'YES' ELSE NULL END AS autoinc,
+       CASE WHEN INSTR(COLUMN_KEY,'PRI') THEN 'YES' ELSE NULL END AS prikey,
+       NULLIF(IS_NULLABLE,'NO') AS nullable,
        NUMERIC_PRECISION,
        NUMERIC_SCALE,
        COLUMN_DEFAULT
@@ -314,10 +408,23 @@ SELECT COLUMN_NAME,
     fi
 
     save_column_info_into_META_COLUMNS_and_META_COLUMN_NAMES "${query}"
-    make_RECORD_COLUMN_NAMES_from_META_COLUMNS
-    save_table_rows_into_RECORD_ROWS "${result}"
-    make_RESULT_ROW_NAMES_ORDERED_from_RECORD_ROWS
-    make_RESULT_ROW_NAMES_MAP_from_RECORD_ROWS
+    if [ $? -eq 0 ]; then
+        make_RECORD_COLUMN_NAMES_from_META_COLUMNS
+    fi
+    if [ $? -eq 0 ]; then
+        save_table_rows_into_RECORD_ROWS "${result}"
+    fi
+    if [ $? -eq 0 ]; then
+        make_RESULT_ROW_NAMES_ORDERED_from_RECORD_ROWS
+    fi
+    if [ $? -eq 0 ]; then
+        make_RESULT_ROW_NAMES_MAP_from_RECORD_ROWS
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo "FAILED!"
+        return $?
+    fi
 
     # echo "META_COLUMNS:"
     # printf "%s\n" "${META_COLUMNS[@]}"
@@ -468,8 +575,6 @@ process_table()
 
     vals=$( make_interaction_arrays )
 
-    tabarr=$( make_table_array "$dbname" "$tname" )
-
     local text="\
 Create default MySQL procedure and SRM scripts for
 
@@ -551,6 +656,7 @@ dialog_pick_table()
     exit $exval
 }
 
+
 # Start execution here, starting with confirming the parameters,
 # then launching into the database and table selections.
 arg_count=$#
@@ -597,7 +703,12 @@ while $loop_dbases; do
             loop_tables=false
         fi
 
-        collect_table_information "$dbname" "$tname"
+        collect_table_information "$dbname" "$tname" "${RSEP}${FSEP}${VSEP}"
+
+        make_table_array
+        exit
+
+
 
         if [ $? -eq 0 ]; then
             process_table "$dbname" "$tname"
