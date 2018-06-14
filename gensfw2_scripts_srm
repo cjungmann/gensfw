@@ -1,0 +1,341 @@
+#!/bin/bash
+
+# tabulate_array()
+# param 1: indent level
+# params 2 to end: values of an array of strings
+#
+# After slicing off the leading integer value, the function
+# scans alternate elements to get the longest left-side value.
+# Then it prints out the values in tabluar form, with at least
+# one level of indentation, but additional levels according to
+# the indent level parameter.
+tabulate_array()
+{
+    local -i indent_count=$1
+    local -i ndx curlen maxlen=0
+
+    # slice-off the leading indent-level integer parameter:
+    local -a vals=( "${@:2}" )
+
+    # Start printf format with indicated indentations:
+    local el formatstr="${gsf_script_indent}"
+    for (( ndx=0; ndx<indent_count; ndx++ )); do
+        formatstr="${formatstr}${gsf_script_indent}"
+    done
+
+    # Get length of longest term:
+    ndx=0
+    for el in "${vals[@]}"; do
+        if [ $(( $(( ndx++ )) % 2 )) -eq 0 ]; then
+            curlen="${#el}"
+            if [ $curlen -gt $maxlen ]; then
+                maxlen=$curlen
+            fi
+        fi
+    done
+
+    # Finish format string with formatting:
+    formatstr="${formatstr}%-${maxlen}s"
+
+    # write out tabulated array values
+    ndx=0
+    for el in "${vals[@]}"; do
+        if [ $(( $(( ndx++ )) % 2 )) -eq 0 ]; then
+            printf "$formatstr" "$el"
+        else
+            echo " : $el"
+        fi
+    done
+
+    # Add newline if loop terminates while looking for a right-hand value:
+    if [ $(( ndx % 2 )) -eq 1 ]; then
+        echo
+    fi
+}
+
+gsf_get_delete_confirm_string()
+{
+    lambda()
+    {
+        if ! CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
+            local fname="${CALLBACK_ROW[0]}"
+            echo -n "{@${fname}} "
+        fi
+    }
+
+    echo -n "Delete "
+    gsf_callback_prefs_rows "lambda"
+    echo "from table '${GF_TNAME}'?"
+}
+
+gsf_write_schema_field()
+{
+    local -a props
+    local -i level=$1
+    local callback=$2
+    local label name
+
+    name=$( CB_ROW_NAME )
+    if [ $? -eq 0 ]; then
+        echo "In gsf_write_schema_field with name='${name}'" >&2
+    else
+        echo "function CB_ROW_NAME failed." >&2
+    fi
+
+    label=$( CB_ROW_LABEL )
+    if [ $? -eq 0 ]; then
+        props=( "${props[@]}" label "${label}" )
+    fi
+
+    if CB_ROW_IS_READONLY; then
+        props=( "${props[@]}" readOnly true )
+    fi
+
+    if CB_ROW_IS_HIDDEN; then
+        props=( "${props[@]}" hidden true )
+    fi
+
+    if [ "${#props[@]}" -gt 0 ]; then
+        $callback
+        tabulate_array $level "field : ${name}"
+        tabulate_array $(( ++level )) "${props[@]}"
+    fi
+}
+
+# Prints a schema if there are any items to 
+gsf_write_schema()
+{
+    local -i level=${1:-0}
+
+    local -i sprinted=1 # Using 1==false, the BASH convention
+    start_schema()
+    {
+        if [ $sprinted -eq 1 ]; then
+            sprinted=0
+            tabulate_array $level "schema"
+            (( level++ ))
+        fi
+    }
+
+    lambda()
+    {
+        if CB_ROW_IS_RESULT; then
+            gsf_write_schema_field $level "start_schema"
+        fi
+    }
+
+
+    gsf_callback_prefs_rows "lambda"
+}
+
+# Entry point for printing one of the interaction types:
+gsf_write_script_srm()
+{
+    if [ "${IACT_NAME}" = "Import" ]; then
+        gsf_write_script_srm_import
+    else
+        # gsf_script_intro_srm
+
+        gsf_srm_mode_${IACT_NAME}
+    fi
+}
+
+gsf_srm_mode_List()
+{
+    local -a cmds=(
+        type table
+        procedure "${PROC_ROOT}List"
+        on_line_click ?edit
+    )
+
+    local -a a_button=(
+        type add
+        label "Create ${GF_TNAME}"
+        task ?add
+    )
+
+    echo "list"
+    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 0 "button"
+    tabulate_array 1 "${a_button[@]}"
+    gsf_write_schema
+}
+
+# This is a two part action, so there are two modes,
+# one to present the form, the second to save it.
+gsf_srm_mode_Add()
+{
+    local proc_name="${PROC_ROOT}Add"
+
+    local -a add_cmds=(
+        type form-new
+        schema-proc "${proc_name}"
+        form-action "?add_submit"
+    )
+
+    submit_cmds=(
+        type form-submit
+        procedure "${proc_name}"
+    )
+
+    # Form response mode:
+    echo "add"
+    tabulate_array 0 "${add_cmds[@]}"
+    echo
+
+    # Save form response mode:
+    echo "add_submit"
+    tabulate_array 0 "${submit_cmds[@]}"
+    tabulate_array 0 "result"
+    tabulate_array 1 type update
+}
+
+gsf_srm_mode_Read()
+{
+    local -a cmds=(
+        type form-view
+        procedure "${PROC_ROOT}Read"
+        )
+
+    echo "read"
+    tabulate_array 0 "${cmds[@]}"
+}
+
+gsf_srm_mode_Update()
+{
+    local confirm_str=$( gsf_get_delete_confirm_string )
+
+    local -a cmds=(
+        type form-edit
+        schema-proc "${PROC_ROOT}Update"
+        procedure "${PROC_ROOT}Read"
+        form-action ?edit_submit
+    )
+
+    local -a bu_delete=(
+        "type" "delete"
+        "label" "Delete"
+        "confirm" "${confirm_str}"
+        )
+
+    echo "update"
+    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 1 "button"
+    tabulate_array 2 "${bu_delete[@]}"
+    gsf_write_schema 1
+}
+
+gsf_srm_mode_Delete()
+{
+    local -a cmds=(
+        type delete
+        procedure "${PROC_ROOT}Delete"
+    )
+    echo "delete"
+    tabulate_array 0 "${cmds[@]}"
+}
+
+
+gsf_write_script_srm_import()
+{
+    # Environment values for all import functions:
+    local QT_NAME="QT_${GF_TNAME}"
+    local ID_FIELD_NAME="id_session"
+    local -i MAX_NAME_LEN="${#ID_FIELD_NAME}"
+    lambda_max_name_len()
+    {
+        local -i len
+        if CB_ROW_IS_PARAM; then
+            len="${#CALLBACK_ROW[0]}"
+            if [ $len -gt $MAX_NAME_LEN ]; then
+                MAX_NAME_LEN=$len
+            fi
+        fi
+    }
+    # Scan for longest field name length:
+    gsf_callback_prefs_rows "lambda_max_name_len"
+
+    gsf_srm_mode_import_form
+    echo
+    gsf_srm_mode_import
+    echo
+    gsf_srm_mode_review
+    echo
+    gsf_srm_mode_accept
+    echo
+    gsf_srm_mode_abandon
+    echo
+}
+
+gsf_srm_mode_import_form()
+{
+    local -a cmds=(
+        type form-import
+        form-action ?import
+    )
+
+    echo "import_${GF_TNAME}"
+    tabulate_array 0 "${cmds[@]}"
+}
+
+gsf_srm_mode_import()
+{
+    local -a cmds=(
+        type import
+        target "${QT_NAME}"
+        jump ?review
+    )
+
+    echo "import"
+    tabulate_array 0 "${cmds[@]}"
+}
+
+gsf_srm_mode_review()
+{
+    local -a cmds=(
+        type table
+        procedure "${PROC_ROOT}Import_Review"
+        intro "Please review the following data, matching columns with the data they contain."
+    )
+
+    local -a b_accept=(
+        type jump
+        label Accept
+        url ?accept
+        )
+
+    local -a b_abandon=(
+        type jump
+        label Abandon
+        url ?abandon
+        )
+
+    echo "review"
+    tabulate_array 0 "${cmds[@]}"
+    echo "${gsf_script_indent}button"
+    tabulate_array 1 "${b_accept[@]}"
+    echo "${gsf_script_indent}button"
+    tabulate_array 1 "${b_abandon[@]}"
+}
+
+gsf_srm_mode_accept()
+{
+    local -a cmds=(
+        type import-verdict
+        procedure "${PROC_ROOT}Import_Accept"
+        jump ?list
+    )
+    echo "accept"
+    tabulate_array 0 "${cmds[@]}"
+}
+
+gsf_srm_mode_abandon()
+{
+    local -a cmds=(
+        type import-verdict
+        procedure "${PROC_ROOT}Import_Abandon"
+        jump ?list
+    )
+    echo "abandon"
+    tabulate_array 0 "${cmds[@]}"
+}
