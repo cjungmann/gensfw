@@ -106,7 +106,15 @@ gsf_write_schema_field()
 gsf_write_schema()
 {
     local -i level=${1:-0}
+    local ltest
 
+    if [ "${IACT_NAME}" = "Edit" -o "${IACT_NAME}" = "Add" ]; then
+        ltest=CB_ROW_IS_PARAM
+    else
+        ltest=CB_ROW_IS_RESULT
+    fi
+
+    # Set flag in order to print the schema head only once.
     local -i sprinted=1 # Using 1==false, the BASH convention
     start_schema()
     {
@@ -119,7 +127,7 @@ gsf_write_schema()
 
     lambda()
     {
-        if CB_ROW_IS_RESULT; then
+        if ${ltest}; then
             gsf_write_schema_field $level "start_schema"
         fi
     }
@@ -181,6 +189,7 @@ gsf_srm_mode_Add()
     # Form response mode:
     echo "add"
     tabulate_array 0 "${add_cmds[@]}"
+    gsf_write_schema
     echo
 
     # Save form response mode:
