@@ -19,9 +19,6 @@ save_settings_to_file()
     local -a settings
     local settings_str=$( get_saved_settings_string )
 
-    echo "${settings_str}" >&2
-
-
     settings=( $( get_saved_settings_string ) )
 
     IFS="${FSEP}"
