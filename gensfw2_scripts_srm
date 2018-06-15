@@ -73,9 +73,11 @@ gsf_write_schema_field()
     local -a props
     local -i level=$1
     local callback=$2
-    local label name
+    local name=$( CB_ROW_NAME)
+    local ctype=$( CB_ROW_TYPE )
 
-    name=$( CB_ROW_NAME )
+    # label in two steps to detect exit status:
+    local label
     label=$( CB_ROW_LABEL )
     if [ $? -eq 0 ]; then
         props=( "${props[@]}" label "${label}" )
@@ -87,6 +89,10 @@ gsf_write_schema_field()
 
     if CB_ROW_IS_HIDDEN; then
         props=( "${props[@]}" hidden true )
+    fi
+
+    if [[ " ENUM SET " =~ " $ctype " ]]; then
+        props=( "${props[@]}" "${ctype,,?}" "${GF_TNAME}:${name}" )
     fi
 
     if [ "${#props[@]}" -gt 0 ]; then
