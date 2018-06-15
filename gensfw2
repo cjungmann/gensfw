@@ -220,6 +220,25 @@ SELECT COLUMN_NAME,
        COLUMN_DEFAULT
   FROM COLUMNS"
 
+# gsf_callback_iact_records()
+# Scans and expands interaction records into arrays, to
+# Prepare the environment to look like it would look if
+# it were in the interaction dialog (#4), for writing
+# a file.
+#
+# Access the data in the record by calling
+# gsf_callback_prefs_rows()
+gsf_callback_iact_records()
+{
+    local IACT_NAME callback="$1"
+    local IFS="${FSEP}"
+    local -a IACT_COL_PREFS
+    for IACT_NAME in "${IACT_NAMES[@]}"; do
+        IACT_COL_PREFS=( $( echo "${IACT_DATA[$IACT_NAME]}" ) )
+        $callback
+    done
+}
+
 
 # gsf_callback_prefs_rows()
 # Scans and expands preferences data into arrays, which are made 
@@ -623,9 +642,6 @@ split_yad_arrs()
         done
     done
 }
-
-
-
 
 # Uses first parameter as subject value, then puts the rest
 # of the parameters into a list element.
