@@ -115,11 +115,11 @@ declare  GSF_WHERE_LINE="${gsf_script_indent} WHERE "
 declare    GSF_AND_LINE="${gsf_script_indent}   AND "
 
 
-declare GSF_UPDATE_FIELDS_LINE="${gsf_script_indent}       ("
-declare GSF_UPDATE_VALUES_LINE="${gsf_script_indent}VALUES ("
+declare GSF_INSERT_FIELDS_LINE="${gsf_script_indent}       ("
+declare GSF_INSERT_VALUES_LINE="${gsf_script_indent}VALUES ("
 
 declare GSF_SELECT_SPACES="${GSF_SELECT_LINE//?/ }"
-declare GSF_UPDATE_SPACES_LINE="${GSF_UPDATE_VALUES_LINE//?/ }"
+declare GSF_INSERT_SPACES_LINE="${GSF_INSERT_VALUES_LINE//?/ }"
 
 gsf_sql_proc_body_List()
 {
@@ -164,7 +164,7 @@ gsf_sql_proc_body_Add()
             local fname="${CALLBACK_ROW[0]}"
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
-                echo -n "${GSF_UPDATE_SPACES_LINE}"
+                echo -n "${GSF_INSERT_SPACES_LINE}"
             fi
             echo -n "${fname}"
         fi
@@ -174,11 +174,11 @@ gsf_sql_proc_body_Add()
     echo
     echo "${gsf_script_indent}INSERT INTO ${GF_TNAME}"
     lambda_count=0
-    echo -n "${GSF_UPDATE_FIELDS_LINE}"
+    echo -n "${GSF_INSERT_FIELDS_LINE}"
     gsf_callback_prefs_rows "lambda_values"
     echo ")"
     lambda_count=0
-    echo -n "${GSF_UPDATE_VALUES_LINE}"
+    echo -n "${GSF_INSERT_VALUES_LINE}"
     gsf_callback_prefs_rows "lambda_values"
     echo ");"
     echo
@@ -380,8 +380,8 @@ gsf_sql_import_proc_accept()
     echo "${gsf_script_indent}INSERT INTO ${GF_TNAME}"
 
     lambda_count=0
-    echo -n "${GSF_UPDATE_FIELDS_LINE}"
-    ispaces="${GSF_UPDATE_SPACES_LINE}"
+    echo -n "${GSF_INSERT_FIELDS_LINE}"
+    ispaces="${GSF_INSERT_SPACES_LINE}"
     gsf_callback_prefs_rows "lambda_values"
     echo ")"
 
