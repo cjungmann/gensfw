@@ -1,5 +1,24 @@
 #!/bin/bash
 
+save_sql_to_file()
+{
+    local filepath="$1"
+
+    sqto()
+    {
+        gsf_write_script_sql >> $filepath
+        echo >> $filepath
+    }
+
+    # Truncate and begin SQL script from scratch
+    echo "USE ${GF_DBNAME};" > "$filepath"
+    echo "DELIMITER \$\$" >> "$filepath"
+    # Write the procedures:
+    gsf_callback_iact_records "sqto"
+    # Finish
+    echo "DELIMITER ;" >> "$filepath"
+}
+
 gsf_write_script_sql()
 {
     if [ "${IACT_NAME}" = "Import" ]; then
@@ -35,7 +54,15 @@ gsf_write_script_sql_import()
     gsf_callback_prefs_rows "lambda_max_name_len"
 
 
+    echo
+    echo "-- -----------------------------------------------"
+    echo "-- Temporarily restore default delimiter to create"
+    echo "-- the table and grant privileges."
+    echo "DELIMITER ;"
+    echo
     gsf_sql_import_table
+    echo
+    echo "DELIMITER \$\$"
     echo
     gsf_sql_import_proc_review
     echo
@@ -79,7 +106,6 @@ gsf_fix_field_type()
     lambda()
     {
         if [ "${CURROW[$COL_NAME]}" = "$name" ]; then
-            echo "Found the matching row for $name" >&2
             type="${CURROW[$COL_COLTYPE]}"
             type="${type/enum\(/ENUM\(}"
             return 1
@@ -87,7 +113,6 @@ gsf_fix_field_type()
         return 0
     }
     if [[ " ENUM SET " =~ " $type " ]]; then
-        echo "Fixin' an ENUM or SET type ($type) for field '$name'" >&2
         iterate_rows_raw "lambda"
     fi
     echo "$type"
@@ -147,11 +172,22 @@ gsf_add_selects_sql()
     done
 }
 
+# This writes my particular pre-procedure comment string
+# that makes it easier to locate procdures
+gsf_script_proc_top_comment()
+{
+    str="${1:3}"
+    echo "-- ${str//?/-}"
+}
+
 gsf_script_intro_sql()
 {
-    echo "DROP PROCEDURE IF EXISTS ${GF_PROC_ROOT}${IACT_NAME} \$\$"
+    local dropstr="DROP PROCEDURE IF EXISTS ${GF_PROC_ROOT}${IACT_NAME} \$\$"
     local str_create_proc="CREATE PROCEDURE ${GF_PROC_ROOT}${IACT_NAME}("
 
+    echo
+    gsf_script_proc_top_comment "${dropstr}"
+    echo "${dropstr}"
     echo -n "${str_create_proc}"
 
     # parameter expansion to replace all characters with a space for
@@ -387,7 +423,9 @@ gsf_sql_import_proc_review()
         fi
     }
 
-    echo "DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    local dropstr="DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    gsf_script_proc_top_comment "${dropstr}"
+    echo "$dropstr"
     echo "CREATE PROCEDURE ${proc_name}()"
     echo "BEGIN"
     echo -n "${GSF_SELECT_LINE}"
@@ -401,7 +439,9 @@ gsf_sql_import_proc_review()
 gsf_sql_import_proc_abandon()
 {
     local proc_name="${IMPORT_PROC_ROOT}Abandon"
-    echo "DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    local dropstr="DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    gsf_script_proc_top_comment "${dropstr}"
+    echo "$dropstr"
     echo "CREATE PROCEDURE ${proc_name}()"
     echo "BEGIN"
     echo "${gsf_script_indent}DELETE"
@@ -429,7 +469,9 @@ gsf_sql_import_proc_accept()
 
     local proc_name="${IMPORT_PROC_ROOT}Accept"
 
-    echo "DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    local dropstr="DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    gsf_script_proc_top_comment "${dropstr}"
+    echo "$dropstr"
     echo "CREATE PROCEDURE ${proc_name}()"
     echo "BEGIN"
     echo "${gsf_script_indent}INSERT INTO ${GF_TNAME}"
