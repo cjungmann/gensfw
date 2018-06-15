@@ -399,14 +399,12 @@ get_iact_list_data_str()
         # CHAR and INT types.
         coltype="${row[$COL_TYPE]}"
 
-        if [ "${#coltype}" -ge 3 -a "${coltype: -3}" = "INT" ]; then
+        if [ "${#coltype}" -ge 4 -a "${coltype: -4}" = "CHAR" ]; then
+            coltype="${coltype}(${row[$COL_MAXLEN]})"
+        elif [ "${#coltype}" -ge 3 -a "${coltype: -3}" = "INT" ]; then
             if [[ "${row[$COL_COLTYPE]}" =~ "unsigned" ]]; then
                 coltype="$coltype UNSIGNED"
             fi
-        fi
-
-        if [ "${#coltype}" -ge 4 -a "${coltype: -4}" = "CHAR" ]; then
-            coltype="${coltype}(${row[$COL_MAXLEN]})"
         fi
         
         # Information/Identification column (name and datatype)
