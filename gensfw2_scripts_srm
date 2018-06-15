@@ -76,12 +76,6 @@ gsf_write_schema_field()
     local label name
 
     name=$( CB_ROW_NAME )
-    if [ $? -eq 0 ]; then
-        echo "In gsf_write_schema_field with name='${name}'" >&2
-    else
-        echo "function CB_ROW_NAME failed." >&2
-    fi
-
     label=$( CB_ROW_LABEL )
     if [ $? -eq 0 ]; then
         props=( "${props[@]}" label "${label}" )

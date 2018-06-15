@@ -184,7 +184,7 @@ gsf_sql_proc_body_Add()
     echo
     echo "${gsf_script_indent}IF ROW_COUNT() > 0 THEN"
     echo "${gsf_script_indent}   SET newid = LAST_INSERT_ID();"
-    echo "${gsf_script_indent}   CALL List(newid);"
+    echo "${gsf_script_indent}   CALL ${GF_PROC_ROOT}List(newid);"
     echo "${gsf_script_indent}END IF;"
 }
 
@@ -261,7 +261,7 @@ gsf_sql_proc_body_Update()
     if [ $? -eq 0 ]; then
         echo
         echo "${gsf_script_indent}IF ROW_COUNT() > 0 THEN"
-        echo "${gsf_script_indent}   CALL List(${prikey_name});"
+        echo "${gsf_script_indent}   CALL ${GF_PROC_ROOT}List(${prikey_name});"
         echo "${gsf_script_indent}END IF;"
     fi
 }
