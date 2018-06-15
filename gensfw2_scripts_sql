@@ -17,14 +17,15 @@ gsf_write_script_sql_import()
 {
     # Environment values for all import functions:
     local QT_NAME="QT_${GF_TNAME}"
-    local IMPORT_PROC_ROOT="{GF_PROC_ROOT}Import_"
+    local IMPORT_PROC_ROOT="${GF_PROC_ROOT}Import_"
     local ID_FIELD_NAME="id_session"
     local -i MAX_NAME_LEN="${#ID_FIELD_NAME}"
     lambda_max_name_len()
     {
         local -i len
         if CB_ROW_IS_PARAM; then
-            len="${#CALLBACK_ROW[0]}"
+            local name=$( CB_ROW_NAME )
+            len="${#name}"
             if [ $len -gt $MAX_NAME_LEN ]; then
                 MAX_NAME_LEN=$len
             fi
@@ -43,6 +44,55 @@ gsf_write_script_sql_import()
     gsf_sql_import_proc_accept
 }
 
+# For procedure parameters, convert ENUM and SET types
+# to an appropriate length VARCHAR type.
+gsf_fix_param_type()
+{
+    local name="$1"
+    local type="$2"
+    local -i maxlen=0
+
+    lambda()
+    {
+        if [ "${CURROW[$COL_NAME]}" = "$name" ]; then
+            maxlen="${CURROW[$COL_MAXLEN]}";
+            return 1
+        fi
+        return 0
+    }
+    
+    if [[ " ENUM SET " =~ " $type " ]]; then
+        iterate_rows_raw "lambda"
+        echo "VARCHAR(${maxlen})"
+        return 0
+    fi
+    echo "$type"
+}
+
+# For an import table, use the column type for
+# ENUM and SET types
+gsf_fix_field_type()
+{
+    local name=$( CB_ROW_NAME )
+    local type=$( CB_ROW_TYPE )
+
+    lambda()
+    {
+        if [ "${CURROW[$COL_NAME]}" = "$name" ]; then
+            echo "Found the matching row for $name" >&2
+            type="${CURROW[$COL_COLTYPE]}"
+            type="${type/enum\(/ENUM\(}"
+            return 1
+        fi
+        return 0
+    }
+    if [[ " ENUM SET " =~ " $type " ]]; then
+        echo "Fixin' an ENUM or SET type ($type) for field '$name'" >&2
+        iterate_rows_raw "lambda"
+    fi
+    echo "$type"
+}
+
 # gsf_add_params_sql()
 # Adds an indented list of stored procedure parameters
 # for field prefs that have the Param flag set.
@@ -52,7 +102,7 @@ gsf_add_params_sql()
     local IFS
     local -t row
     local -i commas=0
-    local rowstr
+    local rowstr name type
     for rowstr in "${IACT_COL_PREFS[@]}"; do
         IFS="${YSEP}"
         row=( $( echo "${rowstr}" ) )
@@ -61,7 +111,9 @@ gsf_add_params_sql()
                 echo ","
                 echo -n "${indent_chars}"
             fi
-            echo -n "${row[0]} ${row[1]}" 
+            name="${row[0]}"
+            type=$( gsf_fix_param_type "${name}" "${row[1]}" )
+            echo -n "${name}" "${type}"
         fi
     done
 }
@@ -135,7 +187,7 @@ gsf_sql_proc_body_List()
                 echo -n "${GSF_AND_LINE}"
             fi
 
-            local fname="${CALLBACK_ROW[0]}"
+            local fname=$( CB_ROW_NAME )
             if table_field_is_index "${fname}"; then
                 echo -n "(${fname} IS NULL OR ${prefix}.${fname}=${fname})"
             else
@@ -161,7 +213,7 @@ gsf_sql_proc_body_Add()
     lambda_values()
     {
         if CB_ROW_IS_PARAM; then
-            local fname="${CALLBACK_ROW[0]}"
+            local fname=$( CB_ROW_NAME )
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
                 echo -n "${GSF_INSERT_SPACES_LINE}"
@@ -202,7 +254,7 @@ gsf_sql_proc_body_Read()
                 echo -n "${GSF_AND_LINE}"
             fi
 
-            local fname="${CALLBACK_ROW[0]}"
+            local fname=$( CB_ROW_NAME )
             echo -n "${prefix}.${fname}=${fname}"
         fi
     }
@@ -225,7 +277,7 @@ gsf_sql_proc_body_Update()
     lambda_set()
     {
         if ! CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
-            local fname="${CALLBACK_ROW[0]}"
+            local fname=$( CB_ROW_NAME )
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${GSF_SELECT_SPACES}"
@@ -237,7 +289,7 @@ gsf_sql_proc_body_Update()
     lambda_where()
     {
         if CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
-            local fname="${CALLBACK_ROW[0]}"
+            local fname=$( CB_ROW_NAME )
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
                 echo -n "${GSF_AND_LINE}"
@@ -274,7 +326,7 @@ gsf_sql_proc_body_Delete()
     lambda_where()
     {
         if CB_ROW_IS_PARAM; then
-            local fname="${CALLBACK_ROW[0]}"
+            local fname=$( CB_ROW_NAME )
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
                 echo -n "${GSF_AND_LINE}"
@@ -301,7 +353,9 @@ gsf_sql_import_table()
     lambda_fields()
     {
         if CB_ROW_IS_PARAM; then
-            printf ${param_format} "${CALLBACK_ROW[0]}" "${CALLBACK_ROW[1]}"
+            local name=$( CB_ROW_NAME )
+            local type=$( gsf_fix_field_type )
+            printf ${param_format} "$name" "${type}"
         fi
     }
 
@@ -328,7 +382,8 @@ gsf_sql_import_proc_review()
                 echo ","
                 echo  -n "${GSF_SELECT_SPACES}"
             fi
-            echo -n "${CALLBACK_ROW[0]}"
+            local name=$( CB_ROW_NAME )
+            echo -n "$name"
         fi
     }
 
@@ -363,7 +418,7 @@ gsf_sql_import_proc_accept()
     lambda_values()
     {
         if CB_ROW_IS_PARAM; then
-            local fname="${CALLBACK_ROW[0]}"
+            local fname=$( CB_ROW_NAME )
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
                 echo -n "${ispaces}"
