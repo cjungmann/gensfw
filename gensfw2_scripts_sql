@@ -85,7 +85,7 @@ gsf_fix_param_type()
         if [ "${CURROW[$COL_NAME]}" = "$name" ]; then
             maxlen="${CURROW[$COL_MAXLEN]}"
             nprec="${CURROW[$COL_PRECISION]}"
-            nscale="${CURROW[$COL_SCALE]: -0}"
+            nscale="${CURROW[$COL_SCALE]}"
             return 1
         fi
         return 0
