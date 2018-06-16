@@ -78,19 +78,26 @@ gsf_fix_param_type()
     local name="$1"
     local type="$2"
     local -i maxlen=0
+    local -i nprec nscale
 
-    lambda()
+    lambda_get_numbers()
     {
         if [ "${CURROW[$COL_NAME]}" = "$name" ]; then
-            maxlen="${CURROW[$COL_MAXLEN]}";
+            maxlen="${CURROW[$COL_MAXLEN]}"
+            nprec="${CURROW[$COL_PRECISION]}"
+            nscale="${CURROW[$COL_SCALE]: -0}"
             return 1
         fi
         return 0
     }
     
     if [[ " ENUM SET " =~ " $type " ]]; then
-        iterate_rows_raw "lambda"
+        iterate_rows_raw "lambda_get_numbers"
         echo "VARCHAR(${maxlen})"
+        return 0
+    elif [[ " DECIMAL NUMERIC " =~ " $type " ]]; then
+        iterate_rows_raw "lambda_get_numbers"
+        echo "NUMERIC(${nprec},${nscale})"
         return 0
     fi
     echo "$type"

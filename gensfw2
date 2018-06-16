@@ -36,6 +36,8 @@ declare -gi COL_NAME
 declare -gi COL_TYPE
 declare -gi COL_COLTYPE
 declare -gi COL_PRIKEY
+declare -gi COL_PRECISION
+declare -gi COL_SCALE
 declare -gi COL_MAXLEN
 declare -gi COL_DEFAULT
 
@@ -326,7 +328,9 @@ collect_column_indexes()
     get_index "DATA_TYPE";      COL_TYPE=$ndx
     get_index "COLUMN_TYPE";    COL_COLTYPE=$ndx
     get_index "prikey";         COL_PRIKEY=$ndx
-    get_index "COLUMN_DEFAULT"; COL_DEFAULT=$ndx
+    get_index "COLUMN_DEFAULT";    COL_DEFAULT=$ndx
+    get_index "NUMERIC_PRECISION"; COL_PRECISION=$ndx
+    get_index "NUMERIC_SCALE";     COL_SCALE=$ndx
 
     get_index "CHARACTER_MAXIMUM_LENGTH"; COL_MAXLEN=$ndx
 }
