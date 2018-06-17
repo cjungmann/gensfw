@@ -1,5 +1,25 @@
 #!/bin/bash
 
+save_srm_to_file()
+{
+    local filepath="$1"
+
+    srto()
+    {
+        echo >> $filepath
+        gsf_write_script_srm >> $filepath
+    }
+
+    local -a cmds=(
+        "\$database" "${GF_DBNAME}"
+        "\$xml-stylesheet" "default.xsl"
+        "\$default-mode" "list"
+    )
+
+    tabulate_array 0 "${cmds[@]}"  > $filepath
+    gsf_callback_iact_records "srto"
+}
+
 # tabulate_array()
 # param 1: indent level
 # params 2 to end: values of an array of strings
@@ -18,7 +38,7 @@ tabulate_array()
     local -a vals=( "${@:2}" )
 
     # Start printf format with indicated indentations:
-    local el formatstr="${gsf_script_indent}"
+    local el formatstr=""
     for (( ndx=0; ndx<indent_count; ndx++ )); do
         formatstr="${formatstr}${gsf_script_indent}"
     done
@@ -53,25 +73,38 @@ tabulate_array()
     fi
 }
 
-gsf_get_delete_confirm_string()
+gsf_get_delete_strings_for_edit()
 {
-    lambda()
+    local DELETE_INCLUDED=FALSE
+    local DELETE_TASK_STR="?delete"
+    local DELETE_CONFIRM_STR="Delete"
+    local ggdsfe_callback="$1"
+    local pname
+    
+    ggdts_lambda()
     {
-        if ! CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
-            local fname="${CALLBACK_ROW[0]}"
-            echo -n "{@${fname}} "
+        local -i acount="${#CALLBACK_ROW[@]}"
+        if [ $acount -eq 1 ]; then
+            DELETE_INCLUDED="${CALLBACK_ROW[0]}"
+        elif CB_ROW_IS_PARAM; then
+            pname=$( CB_ROW_NAME )
+            DELETE_TASK_STR="${DELETE_TASK_STR}&${pname}{@${pname}}"
+
+            if ! CB_ROW_IS_INDEX; then
+                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR} {@${pname}}"
+            fi
         fi
     }
 
-    echo -n "Delete "
-    gsf_callback_prefs_rows "lambda"
-    echo "from table '${GF_TNAME}'?"
+    gsf_callback_iact_info "Delete" "ggdts_lambda"
+    DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR} from table ${GF_TNAME}?"
+    $ggdsfe_callback
 }
 
 gsf_write_schema_field()
 {
     local -a props
-    local -i level=$1
+    local -i gwsf_level=$1
     local callback=$2
     local name=$( CB_ROW_NAME)
     local ctype=$( CB_ROW_TYPE )
@@ -97,15 +130,15 @@ gsf_write_schema_field()
 
     if [ "${#props[@]}" -gt 0 ]; then
         $callback
-        tabulate_array $level "field : ${name}"
-        tabulate_array $(( ++level )) "${props[@]}"
+        tabulate_array $gwsf_level "field : ${name}"
+        tabulate_array $(( ++gwsf_level )) "${props[@]}"
     fi
 }
 
 # Prints a schema if there are any items to 
 gsf_write_schema()
 {
-    local -i level=${1:-0}
+    local -i level=${1: -1}
     local ltest
 
     if [ "${IACT_NAME}" = "Edit" -o "${IACT_NAME}" = "Add" ]; then
@@ -116,19 +149,16 @@ gsf_write_schema()
 
     # Set flag in order to print the schema head only once.
     local -i sprinted=1 # Using 1==false, the BASH convention
-    start_schema()
+    lambda()
     {
-        if [ $sprinted -eq 1 ]; then
+        if [ $sprinted -ne 0 ]; then
             sprinted=0
             tabulate_array $level "schema"
             (( level++ ))
         fi
-    }
 
-    lambda()
-    {
         if ${ltest}; then
-            gsf_write_schema_field $level "start_schema"
+            gsf_write_schema_field $level
         fi
     }
 
@@ -150,23 +180,39 @@ gsf_write_script_srm()
 
 gsf_srm_mode_List()
 {
+    # Confirm if Add interaction is included.
+    local confirm_str task_str included
+    gsmU_lambda()
+    {
+        included="${DELETE_INCLUDED}"
+        confirm_str="${DELETE_CONFIRM_STR}"
+        task_str="${DELETE_TASK_STR}"
+    }
+    gsf_get_delete_strings_for_edit "gsmU_lambda"
+
+    
     local -a cmds=(
         type table
         procedure "${GF_PROC_ROOT}List"
-        on_line_click ?edit
     )
 
-    local -a a_button=(
-        type add
-        label "Create ${GF_TNAME}"
-        task ?add
-    )
+    if gsf_IACT_included "Update"; then
+        cmds=( "${cmds[@]}" on_line_click ?edit )
+    fi
 
     echo "list"
-    tabulate_array 0 "${cmds[@]}"
-    tabulate_array 0 "button"
-    tabulate_array 1 "${a_button[@]}"
-    gsf_write_schema
+    tabulate_array 1 "${cmds[@]}"
+
+    if gsf_IACT_included "Add"; then
+        local -a a_button=(
+            type add
+            label "Create ${GF_TNAME}"
+            task ?add
+        )
+        tabulate_array 1 "button"
+        tabulate_array 2 "${a_button[@]}"
+    fi
+    gsf_write_schema 1
 }
 
 # This is a two part action, so there are two modes,
@@ -188,15 +234,15 @@ gsf_srm_mode_Add()
 
     # Form response mode:
     echo "add"
-    tabulate_array 0 "${add_cmds[@]}"
-    gsf_write_schema
+    tabulate_array 1 "${add_cmds[@]}"
+    gsf_write_schema 1
     echo
 
     # Save form response mode:
     echo "add_submit"
-    tabulate_array 0 "${submit_cmds[@]}"
-    tabulate_array 0 "result"
-    tabulate_array 1 type update
+    tabulate_array 1 "${submit_cmds[@]}"
+    tabulate_array 1 "result"
+    tabulate_array 2 type update
 }
 
 gsf_srm_mode_Read()
@@ -207,12 +253,22 @@ gsf_srm_mode_Read()
         )
 
     echo "read"
-    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 1 "${cmds[@]}"
 }
 
 gsf_srm_mode_Update()
 {
-    local confirm_str=$( gsf_get_delete_confirm_string )
+    # Get delete information, including whether
+    # or not a delete interaction is provided.
+    local confirm_str task_str included
+    gsmU_lambda()
+    {
+        included="${DELETE_INCLUDED}"
+        confirm_str="${DELETE_CONFIRM_STR}"
+        task_str="${DELETE_TASK_STR}"
+    }
+    gsf_get_delete_strings_for_edit "gsmU_lambda"
+
 
     local -a cmds=(
         type form-edit
@@ -221,16 +277,22 @@ gsf_srm_mode_Update()
         form-action ?edit_submit
     )
 
-    local -a bu_delete=(
-        "type" "delete"
-        "label" "Delete"
-        "confirm" "${confirm_str}"
-        )
-
     echo "update"
-    tabulate_array 0 "${cmds[@]}"
-    tabulate_array 1 "button"
-    tabulate_array 2 "${bu_delete[@]}"
+    tabulate_array 1 "${cmds[@]}"
+    tabulate_array 2 "button"
+
+    # Only add the delete button if a delete
+    # interaction is provided
+    if [ "${DELETE_INCLUDED}" = "TRUE" ]; then
+        local -a bu_delete=(
+            "type" "delete"
+            "label" "Delete"
+            "confirm" "${confirm_str}"
+            "task" "${task_str}"
+        )
+        tabulate_array 3 "${bu_delete[@]}"
+    fi
+
     gsf_write_schema 1
 }
 
@@ -241,7 +303,7 @@ gsf_srm_mode_Delete()
         procedure "${GF_PROC_ROOT}Delete"
     )
     echo "delete"
-    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 1 "${cmds[@]}"
 }
 
 
@@ -284,7 +346,7 @@ gsf_srm_mode_import_form()
     )
 
     echo "import_${GF_TNAME}"
-    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 1 "${cmds[@]}"
 }
 
 gsf_srm_mode_import()
@@ -296,7 +358,7 @@ gsf_srm_mode_import()
     )
 
     echo "import"
-    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 1 "${cmds[@]}"
 }
 
 gsf_srm_mode_review()
@@ -320,11 +382,11 @@ gsf_srm_mode_review()
         )
 
     echo "review"
-    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 1 "${cmds[@]}"
     echo "${gsf_script_indent}button"
-    tabulate_array 1 "${b_accept[@]}"
+    tabulate_array 2 "${b_accept[@]}"
     echo "${gsf_script_indent}button"
-    tabulate_array 1 "${b_abandon[@]}"
+    tabulate_array 2 "${b_abandon[@]}"
 }
 
 gsf_srm_mode_accept()
@@ -335,7 +397,7 @@ gsf_srm_mode_accept()
         jump ?list
     )
     echo "accept"
-    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 1 "${cmds[@]}"
 }
 
 gsf_srm_mode_abandon()
@@ -346,5 +408,5 @@ gsf_srm_mode_abandon()
         jump ?list
     )
     echo "abandon"
-    tabulate_array 0 "${cmds[@]}"
+    tabulate_array 1 "${cmds[@]}"
 }
