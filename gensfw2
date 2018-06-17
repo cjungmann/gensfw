@@ -8,9 +8,23 @@
 # 5: Set Default Column Labels
 # 6: Save Files Dialog
 
-source gensfw2_bacts
-source gensfw2_scripts_sql
-source gensfw2_scripts_srm
+declare zpath
+
+get_source_path()
+{
+    # Must include both the colon AND the space to trim
+    # the spaces from the path in the array:
+    local IFS=": "
+    local -a arr=( $( whereis gensfw2 ) )
+    zpath=$( readlink "${arr[1]}" )
+    zpath="${zpath%%gensfw2}"
+}
+
+get_source_path
+
+source "${zpath}gensfw2_bacts"
+source "${zpath}gensfw2_scripts_sql"
+source "${zpath}gensfw2_scripts_srm"
 
 # One or the other of the following, either override
 # default SEPS (first line), or get the default SEPS
@@ -264,6 +278,67 @@ gsf_callback_prefs_rows()
             $callback
         fi
     done
+}
+
+# Use this function to open and parse an IACT preferences
+# record.
+# Call this function with two parameters,
+# - The interaction name
+# - The callback function name
+#
+# The callback function will be invoked for every line
+# of the IACT preferences record.  The callback function
+# can read the contents of the current line through the
+# CALLBACK_ROW array whose contents should be accessed by
+# one of the series of CB_ROW_ functions defined below.
+#
+# The first line of the IACT Prefs record contains the meta
+# information.  Currently, it contains only the "include"
+# flag.  The callback function must distinguish between
+# the line types by considering the the element count of the
+# CALLBACK_ROW array.
+# of
+# element.  The first 
+# Use this function to refer to a additional interaction type
+# while in the process of using a first interaction type.
+# For example, while processing the Edit interaction, it is
+# necessary to refer to the Delete interaction to see which
+# parameters are necessary to process the delete procedure.
+gsf_callback_iact_info()
+{
+    local rowstr IACT_NAME="$1" callback="$2"
+    local IFS="${FSEP}"
+    local -a LOCAL_COL_PREFS CALLBACK_ROW
+    local -i CB_EL_COUNT=0
+    LOCAL_COL_PREFS=( $( echo "${IACT_DATA[$IACT_NAME]}" ) )
+
+    IFS="${YSEP}"
+    for rowstr in "${LOCAL_COL_PREFS[@]}"; do
+        CALLBACK_ROW=( $( echo "${rowstr}" ) )
+        CB_EL_COUNT="${#CALLBACK_ROW[@]}"
+        $callback
+        if [ $? -ne 0 ]; then
+            break
+        fi
+    done
+}
+
+gsf_IACT_included()
+{
+    local name="$1"
+    local -i included=1
+    gIi_callback()
+    {
+        if [ "${CB_EL_COUNT}" -eq 1 ]; then
+            if [ "${CALLBACK_ROW[0]}" = "TRUE" ]; then
+                included=0
+            fi
+            return 1
+        fi
+    }
+    gsf_callback_iact_info "$name" "gIi_callback"
+
+    return $included
 }
 
 # These simple functions interpret the callback data from function
@@ -848,10 +923,13 @@ show_interaction_preferences_dialog()
             0) save_iact_choices "${result}"; break ;;
             2|4)
                 local cmd_to_call
+                local script_type
                 if [ $exval -eq 2 ]; then
                     cmd_to_call="gsf_write_script_sql"
+                    script_type=SQL
                 else
                     cmd_to_call="gsf_write_script_srm"
+                    script_type=SRM
                 fi
                 IFS="${FSEP}"
                 local PROC_ROOT="App_${GF_TNAME}_"
@@ -860,7 +938,10 @@ show_interaction_preferences_dialog()
                 IACT_COL_PREFS=( $( make_iact_choices_string "${result}" ) )
 
                 script_text=$( $cmd_to_call "${IACT_NAME}" )
-                if [ $? -eq 0 ]; then  echo "${script_text}"; fi
+                if [ $? -eq 0 ]; then
+                    # Show dialog #7:
+                    show_script_dialog "${script_text}" "${script_type}";
+                fi
 
                 # Update array for re-initialize the dialog:
                 meta_vals=( "${iact}" $( split_yad_arrs "${IACT_COL_PREFS[0]}" ) )
@@ -999,11 +1080,11 @@ show_save_files_dialog()
     cmd=(
         "${YAD_COMMON_ARGS[@]}"
         --form
-        --field "Write settings file":CHK "FALSE"
+        --field "Write settings file":CHK "TRUE"
         --field "GSF file name":SFL "${GF_FILEPATH_GSF}"
-        --field "Write SQL script":CHK "FALSE"
+        --field "Write SQL script":CHK "TRUE"
         --field "SQL file name":SFL "${GF_FILEPATH_SQL}"
-        --field "Write SRM script":CHK "FALSE"
+        --field "Write SRM script":CHK "TRUE"
         --field "SRM file name":SFL "${GF_FILEPATH_SRM}"
     )
 
@@ -1031,6 +1112,21 @@ show_save_files_dialog()
             save_srm_to_file "${rarr[$index+1]}"
         fi
     fi
+}
+
+## Dialog #7 Show an SQL or SRM script.
+show_script_dialog()
+{
+    local script="$1"
+    local stype="$2"
+    local -a cmd=(
+        "${YAD_COMMON_ARGS[@]}"
+        --text="${stype} script for table '${GF_TNAME}' of database '${GF_DBNAME}'."
+        --text-info
+        --listen
+    )
+
+    yad "${cmd[@]}" <<< "$script"
 }
 
 
