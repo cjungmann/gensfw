@@ -341,7 +341,7 @@ gsf_sql_proc_body_Update()
         fi
     }
 
-    echo "${gsf_script_indent}UPDATE ${GF_TNAME}"
+    echo "${gsf_script_indent}UPDATE ${GF_TNAME} ${prefix}"
     echo -n "${GSF_SET_LINE}"
     lambda_count=0
     gsf_callback_prefs_rows "lambda_set"
