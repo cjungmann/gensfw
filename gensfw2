@@ -255,6 +255,13 @@ gsf_callback_iact_records()
     done
 }
 
+include_current_iact_record()
+{
+    local IFS="${YSEP}"
+    local -a row=( $( echo "${IACT_COL_PREFS}" ) )
+    [ "${row[0]}" = "TRUE" ]
+}
+
 
 # gsf_callback_prefs_rows()
 # Scans and expands preferences data into arrays, which are made 
