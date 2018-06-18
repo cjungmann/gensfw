@@ -462,7 +462,7 @@ gsf_sql_import_proc_abandon()
     echo "CREATE PROCEDURE ${proc_name}()"
     echo "BEGIN"
     echo "${gsf_script_indent}DELETE"
-    echo "${gsf_script_indent}  FROM ${GT_NAME}"
+    echo "${gsf_script_indent}  FROM ${GF_TNAME}"
     echo "${GSF_WHERE_LINE}id_session = @session_confirmed_id;"
     echo "END \$\$"
 }
