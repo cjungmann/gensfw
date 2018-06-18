@@ -6,8 +6,10 @@ save_srm_to_file()
 
     srto()
     {
-        echo >> $filepath
-        gsf_write_script_srm >> $filepath
+        if include_current_iact_record; then
+            echo >> $filepath
+            gsf_write_script_srm >> $filepath
+        fi
     }
 
     local -a cmds=(
@@ -106,7 +108,7 @@ gsf_write_schema_field()
     local -a props
     local -i gwsf_level=$1
     local callback=$2
-    local name=$( CB_ROW_NAME)
+    local name=$( CB_ROW_NAME )
     local ctype=$( CB_ROW_TYPE )
 
     # label in two steps to detect exit status:
@@ -147,23 +149,27 @@ gsf_write_schema()
         ltest=CB_ROW_IS_RESULT
     fi
 
-    # Set flag in order to print the schema head only once.
+    # Set flag in order to print the schema head only once,
+    # and only after we know we must print a schema field.
     local -i sprinted=1 # Using 1==false, the BASH convention
-    lambda()
+    gws_start_schema()
     {
         if [ $sprinted -ne 0 ]; then
             sprinted=0
             tabulate_array $level "schema"
             (( level++ ))
         fi
+    }
 
+    gws_schema_field()
+    {
+        # ltest is a function name whose exit value we check:
         if ${ltest}; then
-            gsf_write_schema_field $level
+            gsf_write_schema_field $level "gws_start_schema"
         fi
     }
 
-
-    gsf_callback_prefs_rows "lambda"
+    gsf_callback_prefs_rows "gws_schema_field"
 }
 
 # Entry point for printing one of the interaction types:
@@ -279,7 +285,6 @@ gsf_srm_mode_Update()
 
     echo "update"
     tabulate_array 1 "${cmds[@]}"
-    tabulate_array 2 "button"
 
     # Only add the delete button if a delete
     # interaction is provided
@@ -290,7 +295,8 @@ gsf_srm_mode_Update()
             "confirm" "${confirm_str}"
             "task" "${task_str}"
         )
-        tabulate_array 3 "${bu_delete[@]}"
+        tabulate_array 1 "button"
+        tabulate_array 2 "${bu_delete[@]}"
     fi
 
     gsf_write_schema 1
