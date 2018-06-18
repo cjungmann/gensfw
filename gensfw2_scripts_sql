@@ -6,8 +6,10 @@ save_sql_to_file()
 
     sqto()
     {
-        gsf_write_script_sql >> $filepath
-        echo >> $filepath
+        if include_current_iact_record; then
+            gsf_write_script_sql >> $filepath
+            echo >> $filepath
+        fi
     }
 
     # Truncate and begin SQL script from scratch
