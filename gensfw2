@@ -348,6 +348,41 @@ gsf_IACT_included()
     return $included
 }
 
+markup_tablify()
+{
+    local -a arr=( "${@:1}" )
+    local -i idx=0 stop="${#arr[@]}"
+    local -i len maxlen=0
+    local val
+
+    # Determine the longest left-column value:
+    while [ $idx -lt $stop ]; do
+        if  [ $(( idx % 2 )) -eq 0 ]; then
+            len="${#arr[$idx]}"
+            if [ "${len}" -gt "$maxlen" ]; then
+                maxlen="${len}"
+            fi
+        fi
+        (( ++idx ))
+    done
+
+    local fstr="<tt><b>%${maxlen}s : </b>"
+
+    # Restart loop, printing this time:
+    idx=0
+    while [ $idx -lt $stop ]; do
+        val="${arr[$idx]}"
+        if  [ $(( idx % 2 )) -eq 0 ]; then
+            printf "${fstr}" "${val}"
+        else
+            echo "${val}</tt>"
+        fi
+        (( ++idx ))
+    done
+}
+
+
+
 # These simple functions interpret the callback data from function
 # gsf_callback_prefs_rows().
 CB_ROW_NAME()       { echo "${CALLBACK_ROW[0]}"; }
@@ -811,10 +846,10 @@ show_table_preferences_dialog()
 
     while true; do
         result=$(
-            # start_default_labels_list_dialog "${PLUG_NUM}" 1
-            start_table_preferences_meta_pane "${PLUG_NUM}" 1
-            start_table_preferences_list_pane "${PLUG_NUM}" 2
-            yad --key "${PLUG_NUM}" "${TABLE_PREFERENCES_DIALOG[@]}"
+            # start_table_preferences_meta_pane "${PLUG_NUM}" 1
+            # start_table_preferences_list_pane "${PLUG_NUM}" 2
+            # yad --key "${PLUG_NUM}" "${TABLE_PREFERENCES_DIALOG[@]}"
+            start_alternate_table_preferences_dialog
             )
         exval=$?
         case $exval in
@@ -855,12 +890,48 @@ start_table_preferences_meta_pane()
 # Dialog 3 sub-dialog (bottom pane)
 start_table_preferences_list_pane()
 {
-    local -i plug="$1"
-    local -i tnum="$2"
-    yad --tabnum "${tnum}" --plug "${plug}" \
-        "${IACT_TYPES_LIST[@]}" \
-        "${IACT_NAMES[@]}" &
+    local -a cmd=(
+        --plug "$1"
+        --tabnum "$2"
+        "${IACT_TYPES_LIST[@]}"
+        "${IACT_NAMES[@]}"
+    )
+    yad "${cmd[@]}" &
 }
+
+# Dialog 3 complete dialog
+start_alternate_table_preferences_dialog()
+{
+    local -i fcount=$( get_fields_count )
+    local -a meta=(
+        "Database" "${GF_DBNAME}"
+        "Table" "${GF_TNAME}"
+        "Field Count" "${fcount}"
+    )
+
+    if [ -n "${GF_FILE_ARG}" ]; then
+        meta=( "${meta[@]}"
+               "Settings File" "${GF_FILEPATH_GSF}"
+            )
+    fi
+
+    local txt=$( markup_tablify "${meta[@]}" )
+
+    local -a cmd=(
+            "${YAD_COMMON_ARGS[@]}"
+            --list
+            "${IACT_TYPES_LIST[@]}"
+            --text "${txt}"
+            "${IACT_NAMES[@]}"
+            --button "Set _Labels":3
+            --button "Save _Files":2
+            --button "Cancel":1
+            --button "_OK":0
+    )
+
+    yad "${cmd[@]}"
+}
+
 
 # Dialog #4: Set field usage and display flags for an interaction type
 show_interaction_preferences_dialog()
