@@ -140,10 +140,11 @@ gsf_write_schema_field()
 # Prints a schema if there are any items to 
 gsf_write_schema()
 {
-    local -i level=${1: -1}
+    local -i schema_level=${1: -1}
+    local -i field_level=$(( schema_level+1 ))
     local ltest
 
-    if [ "${IACT_NAME}" = "Edit" -o "${IACT_NAME}" = "Add" ]; then
+    if [[ " Update Add Import " =~ " ${IACT_NAME} " ]]; then
         ltest=CB_ROW_IS_PARAM
     else
         ltest=CB_ROW_IS_RESULT
@@ -156,8 +157,7 @@ gsf_write_schema()
     {
         if [ $sprinted -ne 0 ]; then
             sprinted=0
-            tabulate_array $level "schema"
-            (( level++ ))
+            tabulate_array $schema_level "schema"
         fi
     }
 
@@ -165,7 +165,7 @@ gsf_write_schema()
     {
         # ltest is a function name whose exit value we check:
         if ${ltest}; then
-            gsf_write_schema_field $level "gws_start_schema"
+            gsf_write_schema_field $field_level "gws_start_schema"
         fi
     }
 
@@ -389,6 +389,7 @@ gsf_srm_mode_review()
 
     echo "review"
     tabulate_array 1 "${cmds[@]}"
+    gsf_write_schema 1
     echo "${gsf_script_indent}button"
     tabulate_array 2 "${b_accept[@]}"
     echo "${gsf_script_indent}button"
