@@ -312,6 +312,17 @@ gsf_srm_mode_Delete()
     tabulate_array 1 "${cmds[@]}"
 }
 
+gsf_srm_mode_Export()
+{
+    local -a cmds=(
+        type export
+        procedure "${GF_PROC_ROOT}Export"
+        filename "${GF_TNAME}.ods"
+    )
+    echo "export"
+    tabulate_array 1 "${cmds[@]}"
+}
+
 
 gsf_write_script_srm_import()
 {

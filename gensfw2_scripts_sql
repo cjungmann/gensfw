@@ -388,6 +388,14 @@ gsf_sql_proc_body_Delete()
     echo ";"
 }
 
+gsf_sql_proc_body_Export()
+{
+    echo -n "${GSF_SELECT_LINE}"
+    gsf_add_selects_sql "${GSF_SELECT_SPACES}"
+    echo
+    echo "${GSF_FROM_LINE}${GF_TNAME};"
+}
+
 gsf_sql_import_table()
 {
     local prefix="t"
