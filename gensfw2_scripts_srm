@@ -81,29 +81,29 @@ tabulate_array()
 
 gsf_get_delete_strings_for_edit()
 {
-    local DELETE_INCLUDED=FALSE
     local DELETE_TASK_STR="?delete"
     local DELETE_CONFIRM_STR="Delete"
     local ggdsfe_callback="$1"
+    local joiner=" "
     local pname
     
     ggdts_lambda()
     {
-        local -i acount="${#CALLBACK_ROW[@]}"
-        if [ $acount -eq 1 ]; then
-            DELETE_INCLUDED="${CALLBACK_ROW[0]}"
-        elif CB_ROW_IS_PARAM; then
+        if CB_ROW_IS_PARAM; then
             pname=$( CB_ROW_NAME )
-            DELETE_TASK_STR="${DELETE_TASK_STR}&${pname}{@${pname}}"
+            DELETE_TASK_STR="${DELETE_TASK_STR}&${pname}={@${pname}}"
 
             if ! CB_ROW_IS_INDEX; then
-                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR} {@${pname}}"
+                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR}${joiner}'{@${pname}}'"
+                if [ "${joiner:0:1}" != "," ]; then
+                    joiner=",${joiner}"
+                fi
             fi
         fi
     }
 
     gsf_callback_iact_info "Delete" "ggdts_lambda"
-    DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR} from table ${GF_TNAME}?"
+    DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR} from table '${GF_TNAME}'?"
     $ggdsfe_callback
 }
 
@@ -141,6 +141,30 @@ gsf_write_schema_field()
     fi
 }
 
+gsf_write_schema_delete_button()
+{
+    local -i level="$1"
+    # Get delete information, including whether
+    # or not a delete interaction is provided.
+    local confirm_str task_str
+    gsmU_lambda()
+    {
+        confirm_str="${DELETE_CONFIRM_STR}"
+        task_str="${DELETE_TASK_STR}"
+    }
+    gsf_get_delete_strings_for_edit "gsmU_lambda"
+
+    local -a bu_delete=(
+        "type" "delete"
+        "label" "Delete"
+        "confirm" "${confirm_str}"
+        "task" "${task_str}"
+    )
+
+    tabulate_array "$level" "button"
+    tabulate_array $(( level+1 )) "${bu_delete[@]}"
+}
+
 # Prints a schema if there are any items to 
 gsf_write_schema()
 {
@@ -173,6 +197,15 @@ gsf_write_schema()
         fi
     }
 
+    # For Update/(Edit) type only, when a Delete interaction is
+    # defined, add a delete button to the schema.
+    if [ "${IACT_NAME}" = "Update" ]; then
+        if gsf_IACT_included "Delete"; then
+            gws_start_schema
+            gsf_write_schema_delete_button 2
+        fi
+    fi
+
     gsf_callback_prefs_rows "gws_schema_field"
 }
 
@@ -190,17 +223,6 @@ gsf_write_script_srm()
 
 gsf_srm_mode_List()
 {
-    # Confirm if Add interaction is included.
-    local confirm_str task_str included
-    gsmU_lambda()
-    {
-        included="${DELETE_INCLUDED}"
-        confirm_str="${DELETE_CONFIRM_STR}"
-        task_str="${DELETE_TASK_STR}"
-    }
-    gsf_get_delete_strings_for_edit "gsmU_lambda"
-
-    
     local -a cmds=(
         type table
         procedure "${GF_PROC_ROOT}List"
@@ -289,18 +311,6 @@ gsf_srm_mode_Read()
 
 gsf_srm_mode_Update()
 {
-    # Get delete information, including whether
-    # or not a delete interaction is provided.
-    local confirm_str task_str included
-    gsmU_lambda()
-    {
-        included="${DELETE_INCLUDED}"
-        confirm_str="${DELETE_CONFIRM_STR}"
-        task_str="${DELETE_TASK_STR}"
-    }
-    gsf_get_delete_strings_for_edit "gsmU_lambda"
-
-
     local -a cmds=(
         type form-edit
         schema-proc "${GF_PROC_ROOT}Update"
@@ -312,28 +322,15 @@ gsf_srm_mode_Update()
     echo "edit"
     tabulate_array 1 "${cmds[@]}"
 
-    # Only add the delete button if a delete
-    # interaction is provided
-    if [ "${DELETE_INCLUDED}" = "TRUE" ]; then
-        local -a bu_delete=(
-            "type" "delete"
-            "label" "Delete"
-            "confirm" "${confirm_str}"
-            "task" "${task_str}"
-        )
-        tabulate_array 1 "button"
-        tabulate_array 2 "${bu_delete[@]}"
-    fi
     gsf_write_schema 1
+    echo
 
     # Write out the response mode "edit_submit"
-
     local -a ecmds=(
         type form-submit
         procedure "${GF_PROC_ROOT}Update"
-        )
+    )
 
-    echo
     echo "edit_submit"
     tabulate_array 1 "${ecmds[@]}"
     tabulate_array 1 "result"
