@@ -25,6 +25,8 @@ gsf_write_script_sql()
 {
     if [ "${IACT_NAME}" = "Import" ]; then
         gsf_write_script_sql_import
+    elif [ "${IACT_NAME}" = "Update" ]; then
+        gsf_write_script_sql_update
     else
         gsf_script_intro_sql
 
@@ -127,58 +129,71 @@ gsf_fix_field_type()
     echo "$type"
 }
 
-# gsf_add_params_sql()
+# gsf_add_proc_params_sql()
 # Adds an indented list of stored procedure parameters
-# for field prefs that have the Param flag set.
-gsf_add_params_sql()
+# for field prefs that have the Param or Result flag set
+# according to the second param
+gsf_add_proc_params_sql()
 {
     local indent_chars="$1"
-    local IFS
-    local -t row
     local -i commas=0
-    local rowstr name type
-    for rowstr in "${IACT_COL_PREFS[@]}"; do
-        IFS="${YSEP}"
-        row=( $( echo "${rowstr}" ) )
-        if [ "${row[2]}" = "TRUE" ]; then
+    local name type
+
+    local check_func="CB_ROW_IS_PARAM"
+    if [ $# -gt 1 -a "$2" = "result" ]; then
+        check_func="CB_ROW_IS_RESULT"
+    fi
+
+    gsfpps_param()
+    {
+        if $check_func; then
             if [ $(( commas++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${indent_chars}"
             fi
-            name="${row[0]}"
-            type=$( gsf_fix_param_type "${name}" "${row[1]}" )
+            name=$( CB_ROW_NAME )
+            type=$( CB_ROW_TYPE )
+            type=$( gsf_fix_param_type "${name}" "${type}" )
             echo -n "${name}" "${type}"
         fi
-    done
+    }
+
+    gsf_callback_prefs_rows "gsfpps_param"
 }
 
-# gsf_add_selects_sql()
-# Adds field names to a select statement for fields prefs
-# that have the Result flag set.
-gsf_add_selects_sql()
+# gsf_add_query_selects_sql()
+# Adds field names to a select statement for fields prefs, using a
+# prefix if one is set in $2.  By default, the function is guided by
+# the list of result flags set, but if $3 is set to "param", it will
+# add selections based on the param flags set.
+gsf_add_query_selects_sql()
 {
     local indent_chars="$1"
-    local prefix=""
+    local name prefix=""
+    local -i lambda_count=0
 
-    if [ $# -gt 1 ]; then
+    if [ "$#" -gt "1" -a -n "$2" ]; then
         prefix="$2."
     fi
 
-    local IFS
-    local -t row
-    local -i commas=0
-    local rowstr
-    for rowstr in "${IACT_COL_PREFS[@]}"; do
-        IFS="${YSEP}"
-        row=( $( echo "${rowstr}" ) )
-        if [ "${row[3]}" = "TRUE" ]; then
-            if [ $(( commas++ )) -gt 0 ]; then
+    local check_func="CB_ROW_IS_RESULT"
+    if [ $# -gt 2 -a "$3" = "param" ]; then
+        check_func="CB_ROW_IS_PARAM"
+    fi
+
+    gaqss_select()
+    {
+        if $check_func; then
+            if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${indent_chars}"
             fi
-            echo -n "${prefix}${row[0]}" 
+            name=$( CB_ROW_NAME )
+            echo -n "${prefix}${name}"
         fi
-    done
+    }
+
+    gsf_callback_prefs_rows "gaqss_select"
 }
 
 # This writes my particular pre-procedure comment string
@@ -189,20 +204,44 @@ gsf_script_proc_top_comment()
     echo "-- ${str//?/-}"
 }
 
-gsf_script_intro_sql()
+gsf_script_sql_proc_intro()
 {
-    local dropstr="DROP PROCEDURE IF EXISTS ${GF_PROC_ROOT}${IACT_NAME} \$\$"
-    local str_create_proc="CREATE PROCEDURE ${GF_PROC_ROOT}${IACT_NAME}("
+    local procname="$1"
+    local fields_to_list="none"
+    if [ $# -gt 1 ]; then
+        fields_to_list="$2"
+    fi
+    
+    local dropstr="DROP PROCEDURE IF EXISTS ${procname} \$\$"
+    local str_create_proc="CREATE PROCEDURE ${procname}("
 
     echo
     gsf_script_proc_top_comment "${dropstr}"
     echo "${dropstr}"
     echo -n "${str_create_proc}"
 
-    # parameter expansion to replace all characters with a space for
-    # aligning all the parameters with the open paren:
-    gsf_add_params_sql "${str_create_proc//?/ }"
-    echo ")"
+    if [ $fields_to_list != "none" ]; then
+        gsf_add_proc_params_sql "${str_create_proc//?/ }" "$fields_to_list"
+        echo ")"
+    fi
+}
+
+gsf_script_intro_sql()
+{
+    gsf_script_sql_proc_intro "${GF_PROC_ROOT}${IACT_NAME}" "param"
+
+    # local dropstr="DROP PROCEDURE IF EXISTS ${GF_PROC_ROOT}${IACT_NAME} \$\$"
+    # local str_create_proc="CREATE PROCEDURE ${GF_PROC_ROOT}${IACT_NAME}("
+
+    # echo
+    # gsf_script_proc_top_comment "${dropstr}"
+    # echo "${dropstr}"
+    # echo -n "${str_create_proc}"
+
+    # # parameter expansion to replace all characters with a space for
+    # # aligning all the parameters with the open paren:
+    # gsf_add_proc_params_sql "${str_create_proc//?/ }"
+    # echo ")"
 }
 
 declare GSF_SELECT_LINE="${gsf_script_indent}SELECT "
@@ -243,7 +282,7 @@ gsf_sql_proc_body_List()
 
     # Build the query/procedure body:
     echo -n "${GSF_SELECT_LINE}"
-    gsf_add_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
+    gsf_add_query_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
     echo
     echo "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
     echo -n "${GSF_WHERE_LINE}"
@@ -306,7 +345,7 @@ gsf_sql_proc_body_Read()
 
     # Build the query/procedure body:
     echo -n "${GSF_SELECT_LINE}"
-    gsf_add_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
+    gsf_add_query_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
     echo
     echo "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
     echo -n "${GSF_WHERE_LINE}"
@@ -314,6 +353,147 @@ gsf_sql_proc_body_Read()
     echo ";"
 }
 
+gsf_sql_proc_body_Update_Read()
+{
+    local prefix="t"
+    local -i where_count=0
+
+    lambda()
+    {
+        if CB_ROW_IS_PARAM; then
+            # Line-up where parts under the first part:
+            if [ $(( where_count++ )) -gt 0 ]; then
+                echo
+                echo -n "${GSF_AND_LINE}"
+            fi
+
+            local fname=$( CB_ROW_NAME )
+            echo -n "${prefix}.${fname}=${fname}"
+        fi
+    }
+
+    # Build the query/procedure body:
+    echo -n "${GSF_SELECT_LINE}"
+    gsf_add_query_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
+    echo
+    echo "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
+    echo -n "${GSF_WHERE_LINE}"
+    gsf_callback_prefs_rows "lambda"
+    echo ";"
+}
+
+gsf_sql_update_proc_value()
+{
+    local fname prefix="t"
+    local -i lambda_count=0
+
+    gsupv_select()
+    {
+        if CB_ROW_IS_RESULT; then
+            fname=$( CB_ROW_NAME )
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo ","
+                echo -n "${GSF_SELECT_SPACES}"
+            fi
+            echo -n "${fname}"
+        fi
+    }
+
+    gsupv_where()
+    {
+        if CB_ROW_IS_PARAM; then
+            fname=$( CB_ROW_NAME )
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo
+                echo -n "${GSF_AND_LINE}"
+            fi
+            echo -n "${prefix}.${fname} = ${fname}"
+        fi
+    }
+    
+    # CREATE PROCEDURE lines
+    gsf_script_sql_proc_intro "${GF_PROC_ROOT}Value" "param"
+    echo "BEGIN"
+    echo -n "${GSF_SELECT_LINE}"
+    lambda_count=0
+    gsf_callback_prefs_rows "gsupv_select"
+    echo
+    echo "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
+    echo -n "${GSF_WHERE_LINE}"
+    lambda_count=0
+    gsf_callback_prefs_rows "gsupv_where"
+    echo ";"
+
+    echo "END \$\$"
+}
+
+gsf_sql_update_proc_update()
+{
+    local prefix="t"
+    local -i lambda_count=0
+
+    gsupu_set()
+    {
+        if ! CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
+            local fname=$( CB_ROW_NAME )
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo ","
+                echo -n "${GSF_SELECT_SPACES}"
+            fi
+            echo -n "${prefix}.${fname} = ${fname}"
+        fi
+    }
+
+    gsupu_where()
+    {
+        if CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
+            local fname=$( CB_ROW_NAME )
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo
+                echo -n "${GSF_AND_LINE}"
+            fi
+            echo -n "${prefix}.${fname} = ${fname}"
+        fi
+    }
+
+    # CREATE PROCEDURE lines
+    gsf_script_sql_proc_intro "${GF_PROC_ROOT}Update" "result"
+    echo "BEGIN"
+
+    # Query to update the record:
+    echo "${gsf_script_indent}UPDATE ${GF_TNAME} ${prefix}"
+    echo -n "${GSF_SET_LINE}"
+    lambda_count=0
+    gsf_callback_prefs_rows "gsupu_set"
+    echo
+    echo -n "${GSF_WHERE_LINE}"
+    lambda_count=0
+    gsf_callback_prefs_rows "gsupu_where"
+    echo ";"
+
+    # Upon success, write updated data in List format:
+    local prikey_name
+    prikey_name=$( table_get_primary_key )
+    if [ $? -eq 0 ]; then
+        echo
+        echo "${gsf_script_indent}IF ROW_COUNT() > 0 THEN"
+        echo "${gsf_script_indent}   CALL ${GF_PROC_ROOT}List(${prikey_name});"
+        echo "${gsf_script_indent}END IF;"
+    fi
+
+    # Terminate procedure:
+    echo "END \$\$"
+}
+
+gsf_write_script_sql_update()
+{
+    gsf_sql_update_proc_value
+    echo
+    gsf_sql_update_proc_update
+    echo
+}
+
+# No longer called (assuming success with gsf_write_script_sql_update!):
 gsf_sql_proc_body_Update()
 {
     local prefix="t"
@@ -391,7 +571,7 @@ gsf_sql_proc_body_Delete()
 gsf_sql_proc_body_Export()
 {
     echo -n "${GSF_SELECT_LINE}"
-    gsf_add_selects_sql "${GSF_SELECT_SPACES}"
+    gsf_add_query_selects_sql "${GSF_SELECT_SPACES}"
     echo
     echo "${GSF_FROM_LINE}${GF_TNAME};"
 }
@@ -462,7 +642,7 @@ gsf_sql_import_proc_abandon()
     echo "CREATE PROCEDURE ${proc_name}()"
     echo "BEGIN"
     echo "${gsf_script_indent}DELETE"
-    echo "${gsf_script_indent}  FROM ${GF_TNAME}"
+    echo "${GSF_FROM_LINE}QT_${GF_TNAME}"
     echo "${GSF_WHERE_LINE}id_session = @session_confirmed_id;"
     echo "END \$\$"
 }
