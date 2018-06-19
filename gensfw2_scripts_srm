@@ -18,6 +18,10 @@ save_srm_to_file()
         "\$default-mode" "list"
     )
 
+    if gsf_IACT_included "Import"; then
+        cmds=( "${cmds[@]}" "\$session-type" "simple" )
+    fi
+    
     tabulate_array 0 "${cmds[@]}"  > $filepath
     gsf_callback_iact_records "srto"
 }
@@ -144,7 +148,7 @@ gsf_write_schema()
     local -i field_level=$(( schema_level+1 ))
     local ltest
 
-    if [[ " Update Add Import " =~ " ${IACT_NAME} " ]]; then
+    if [[ " Add Import " =~ " ${IACT_NAME} " ]]; then
         ltest=CB_ROW_IS_PARAM
     else
         ltest=CB_ROW_IS_RESULT
@@ -218,6 +222,27 @@ gsf_srm_mode_List()
         tabulate_array 1 "button"
         tabulate_array 2 "${a_button[@]}"
     fi
+
+    if gsf_IACT_included "Import"; then
+        local -a a_button=(
+            type jump
+            label "Import"
+            url ?import_"${GF_TNAME}"
+        )
+        tabulate_array 1 "button"
+        tabulate_array 2 "${a_button[@]}"
+    fi
+
+    if gsf_IACT_included "Export"; then
+        local -a a_button=(
+            type jump
+            label "Export"
+            url ?export
+        )
+        tabulate_array 1 "button"
+        tabulate_array 2 "${a_button[@]}"
+    fi
+
     gsf_write_schema 1
 }
 
@@ -279,11 +304,12 @@ gsf_srm_mode_Update()
     local -a cmds=(
         type form-edit
         schema-proc "${GF_PROC_ROOT}Update"
-        procedure "${GF_PROC_ROOT}Read"
+        procedure "${GF_PROC_ROOT}Value"
         form-action ?edit_submit
     )
 
-    echo "update"
+    # Write out the response mode "edit"
+    echo "edit"
     tabulate_array 1 "${cmds[@]}"
 
     # Only add the delete button if a delete
@@ -298,8 +324,20 @@ gsf_srm_mode_Update()
         tabulate_array 1 "button"
         tabulate_array 2 "${bu_delete[@]}"
     fi
-
     gsf_write_schema 1
+
+    # Write out the response mode "edit_submit"
+
+    local -a ecmds=(
+        type form-submit
+        procedure "${GF_PROC_ROOT}Update"
+        )
+
+    echo
+    echo "edit_submit"
+    tabulate_array 1 "${ecmds[@]}"
+    tabulate_array 1 "result"
+    tabulate_array 2 "type" "update"
 }
 
 gsf_srm_mode_Delete()
