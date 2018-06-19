@@ -566,6 +566,9 @@ gsf_sql_proc_body_Delete()
     lambda_count=0
     gsf_callback_prefs_rows "lambda_where"
     echo ";"
+    echo
+    echo "${gsf_script_indent}SELECT ROW_COUNT() AS deleted;"
+    
 }
 
 gsf_sql_proc_body_Export()
