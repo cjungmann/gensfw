@@ -387,10 +387,10 @@ markup_tablify()
 # gsf_callback_prefs_rows().
 CB_ROW_NAME()       { echo "${CALLBACK_ROW[0]}"; }
 CB_ROW_TYPE()       { echo "${CALLBACK_ROW[1]}"; }
-CB_ROW_IS_PARAM()   { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; return $?; }
-CB_ROW_IS_RESULT()  { [ "${CALLBACK_ROW[3]}" = "TRUE" ]; return $?; }
-CB_ROW_IS_READONLY(){ [ "${CALLBACK_ROW[4]}" = "TRUE" ]; return $?; }
-CB_ROW_IS_HIDDEN()  { [ "${CALLBACK_ROW[5]}" = "TRUE" ]; return $?; }
+CB_ROW_IS_PARAM()   { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; }
+CB_ROW_IS_RESULT()  { [ "${CALLBACK_ROW[3]}" = "TRUE" ]; }
+CB_ROW_IS_READONLY(){ [ "${CALLBACK_ROW[4]}" = "TRUE" ]; }
+CB_ROW_IS_HIDDEN()  { [ "${CALLBACK_ROW[5]}" = "TRUE" ]; }
 
 GSF_DEFAULT_FIELD_LABEL()
 {
