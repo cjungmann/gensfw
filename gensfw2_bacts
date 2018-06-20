@@ -27,6 +27,7 @@ save_settings_to_file()
         "${meta_rec}"
         "${GSF_FIELD_NAMES[*]}"
         "${GSF_FIELD_LABELS[*]}"
+        "${GSF_FIELD_SLINKS[*]}"
         "${settings_str}"
         # "${settings[@]}"
     )
@@ -37,15 +38,16 @@ save_settings_to_file()
 
 
 # Copies labels from file to the default labels array (GSF_FIELD_LABELS)
-gsf_reconcile_labels()
+gsf_reconcile_field_strings()
 {
     local IFS="${FSEP}"
     local -a lnames=( $( echo "$1" ) )
     local -a labels=( $( echo "$2" ) )
+    local -a slinks=( $( echo "$3" ) )
 
     local -i exval endx ndx=0
     
-    local name label
+    local name label slink
     for name in "${GSF_FIELD_NAMES[@]}"; do
         endx=$( index_in_array "$name" "${lnames[@]}" )
         exval=$?
@@ -53,6 +55,10 @@ gsf_reconcile_labels()
             label="${labels[$endx]}"
             if [ -n "${label}" ]; then
                 GSF_FIELD_LABELS[$ndx]="$label"
+            fi
+            slink="${slinks[$endx]}"
+            if [ -n "${slink}" ]; then
+                GSF_FIELD_SLINKS[$ndx]="$slink"
             fi
         fi
         (( ndx++ ))
@@ -66,7 +72,7 @@ gsf_load_IACT_DATA()
     local IFS="${FSEP}"
     local recstr name
 
-    gsf_reconcile_labels "${GSF_RECS[@]:1:2}"
+    gsf_reconcile_field_strings "${GSF_RECS[@]:1:3}"
 
     local -a rec valarr
     for recstr in "${GSF_RECS[@]:3}"; do

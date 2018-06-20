@@ -76,6 +76,7 @@ declare -a TABLE_NAMES
 
 declare -a GSF_FIELD_NAMES  # Initialized when a table is selected
 declare -a GSF_FIELD_LABELS # From settings file or by using Dialog 5 (default labels)
+declare -a GSF_FIELD_SLINKS  # String settings to link session variables to fields
 
 declare -a IACT_FIELD_LABELS
 declare -A IACT_DATA
@@ -88,6 +89,7 @@ reset_for_new_table()
     GF_FILEPATH_SRM=
     GSF_FIELD_NAMES=()
     GSF_FIELD_LABELS=()
+    GSF_FIELD_SLINKS=()
 }
 
 set_file_path_defaults()
@@ -465,6 +467,7 @@ update_field_names_array()
         row=( $( echo "${rowstr}" ) ) 
         GSF_FIELD_NAMES[$ndx]="${row[$COL_NAME]}"
         GSF_FIELD_LABELS[$ndx]=""
+        GSF_FIELD_SLINKS[$ndx]=""
         (( ndx++ ))
     done
 }
