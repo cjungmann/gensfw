@@ -29,7 +29,7 @@ source "${zpath}gensfw2_scripts_srm"
 # One or the other of the following, either override
 # default SEPS (first line), or get the default SEPS
 # values from bashmysql:
-SEPS='@#$'
+SEPS='#$^'
 # SEPS=$( bashmysql -S )
 
 RSEP="${SEPS:0:1}"
@@ -848,10 +848,7 @@ show_table_preferences_dialog()
 
     while true; do
         result=$(
-            # start_table_preferences_meta_pane "${PLUG_NUM}" 1
-            # start_table_preferences_list_pane "${PLUG_NUM}" 2
-            # yad --key "${PLUG_NUM}" "${TABLE_PREFERENCES_DIALOG[@]}"
-            start_alternate_table_preferences_dialog
+            build_table_preferences_dialog
             )
         exval=$?
         case $exval in
@@ -859,52 +856,18 @@ show_table_preferences_dialog()
             0) show_interaction_preferences_dialog "$result" ;; # Pressed OK
             2) show_save_files_dialog ;;
             3) show_default_column_labels_dialog ;;
+            4) show_default_column_slinks_dialog ;;
         esac
     done
 }
 
-# Dialog 3 sub-dialog (top pane)
-start_table_preferences_meta_pane()
-{
-    local -i plug="$1"
-    local -i tnum="$2"
-
-    local -i fcount=$( get_fields_count )
-
-    cmd=( --plug "${plug}"
-          --tabnum "${tnum}"
-          --form
-          --separator "${YSEP}"
-          --field "Database":RO "${GF_DBNAME}"
-          --field "Table":RO "${GF_TNAME}"
-          --field "Field Count":RO "${fcount}"
-        )
-
-    if [ -n "${GF_FILE_ARG}" ]; then
-        cmd=( "${cmd[@]}"
-              --field "Settings File":RO "${GF_FILEPATH_GSF}"
-            )
-    fi
-
-    yad "${cmd[@]}" &
-}
-
-# Dialog 3 sub-dialog (bottom pane)
-start_table_preferences_list_pane()
-{
-    local -a cmd=(
-        --plug "$1"
-        --tabnum "$2"
-        "${IACT_TYPES_LIST[@]}"
-        "${IACT_NAMES[@]}"
-    )
-    yad "${cmd[@]}" &
-}
-
 # Dialog 3 complete dialog
-start_alternate_table_preferences_dialog()
+build_table_preferences_dialog()
 {
     local -i fcount=$( get_fields_count )
+
+    # Collect information to put in the text section of
+    # the dialog.  This used to be the "meta" pane.
     local -a meta=(
         "Database" "${GF_DBNAME}"
         "Table" "${GF_TNAME}"
@@ -916,7 +879,7 @@ start_alternate_table_preferences_dialog()
                "Settings File" "${GF_FILEPATH_GSF}"
             )
     fi
-
+    
     local txt=$( markup_tablify "${meta[@]}" )
 
     local -a cmd=(
@@ -925,8 +888,9 @@ start_alternate_table_preferences_dialog()
             "${IACT_TYPES_LIST[@]}"
             --text "${txt}"
             "${IACT_NAMES[@]}"
-            --button "Set _Labels":3
             --button "Save _Files":2
+            --button "Set L_abels":3
+            --button "Set L_inks":4
             --button "Cancel":1
             --button "_OK":0
     )
@@ -1040,26 +1004,33 @@ show_default_column_labels_dialog()
 {
     local -i fcount=$( get_fields_count )
     if [ "$fcount" -lt 15 ]; then
-        start_default_labels_form_dialog
+        start_default_columns_array_form_dialog "labels"
     else
-        start_default_labels_list_dialog
+        start_default_columns_array_list_dialog "labels"
     fi
 }
 
-# Dialog #5 for short lists of fields (uses a form dialog)
-start_default_labels_form_dialog()
+## Dialog #6: Set default field labels for current table.
+#
+# Tables with few fields can use a form, but longer lists require
+# a scrolling list with which to set default column names.
+show_default_column_slinks_dialog()
 {
-    local -i plug=0
-    local -a cmd
-
-    if [ $# -ge 2 ]; then
-        plug="$1"
-        cmd=( --plug "$1" --tabnum "$2" )
+    local -i fcount=$( get_fields_count )
+    if [ "$fcount" -lt 15 ]; then
+        start_default_columns_array_form_dialog "slinks"
     else
-        cmd=( "${YAD_COMMON_ARGS[@]}" )
+        start_default_columns_array_list_dialog "slinks"
     fi
+}
 
-    cmd=( "${cmd[@]}"
+# Helper function for Dialogs #5 and #6 (using a form display)
+start_default_columns_array_form_dialog()
+{
+    local atype="$1"
+
+    local -a cmd
+    cmd=( "${YAD_COMMON_ARGS[@]}"
           --text "Set default field labels."
           --always-print-result
           --form
@@ -1077,20 +1048,23 @@ start_default_labels_form_dialog()
         cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}:"
     done
 
-    cmd=( "${cmd[@]}" "${GSF_FIELD_LABELS[@]}" )
-        
+    if [ ${atype} = "labels" ]; then
+        cmd=( "${cmd[@]}" "${GSF_FIELD_LABELS[@]}" )
+    elif  [ ${atype} = "slinks" ]; then
+        cmd=( "${cmd[@]}" "${GSF_FIELD_SLINKS[@]}" )
+    fi
 
-    if [ "$plug" -gt 0 ]; then
-        yad "${cmd[@]}" &
-    else
-        local -i exval
-        local result
-        result=$( yad "${cmd[@]}" )
-        exval=$?
+    local -i exval
+    local result
+    result=$( yad "${cmd[@]}" )
+    exval=$?
 
-        if [ $exval -eq 0 ]; then
-            IFS="${YSEP}"
+    if [ $exval -eq 0 ]; then
+        IFS="${YSEP}"
+        if [ ${atype} = "labels" ]; then
             GSF_FIELD_LABELS=( $( echo "$result" ) )
+        elif  [ ${atype} = "slinks" ]; then
+            GSF_FIELD_SLINKS=( $( echo "$result" ) )
         fi
     fi
 
@@ -1103,20 +1077,14 @@ start_default_labels_form_dialog()
     fi
 }
 
-# Dialog #5 for long lists of fields (uses a list dialog)
-start_default_labels_list_dialog()
+# Helper function for Dialogs #5 and #6 (using a list display)
+start_default_columns_array_list_dialog()
 {
-    local -i plug=0
+    local atype="$1"
+
     local -a cmd
 
-    if [ $# -ge 2 ]; then
-        plug="$1"
-        cmd=( --plug "$1" --tabnum "$2" )
-    else
-        cmd=( "${YAD_COMMON_ARGS[@]}" )
-    fi
-
-    cmd=( "${cmd[@]}"
+    cmd=( "${YAD_COMMON_ARGS[@]}"
           --list
           --always-print-result
           --print-all
@@ -1136,20 +1104,24 @@ start_default_labels_list_dialog()
     for rowstr in "${RESULT_ROWS[@]}"; do
         row=( $( echo "$rowstr") )
         cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}"
-        cmd[ $(( ndx++ )) ]="${GSF_FIELD_LABELS[$(( vndx++ ))]}"
+        if [ ${atype} = "labels" ]; then
+            cmd[ $(( ndx++ )) ]="${GSF_FIELD_LABELS[$(( vndx++ ))]}"
+        elif  [ ${atype} = "slinks" ]; then
+            cmd[ $(( ndx++ )) ]="${GSF_FIELD_SLINKS[$(( vndx++ ))]}"
+        fi
     done
 
-    if [ "$plug" -gt 0 ]; then
-        yad "${cmd[@]}" &
-    else
-        local result
-        local -i exval
-        result=$( yad "${cmd[@]}" )
-        exval=$?
-        if [ $exval -eq 0 ]; then
+    local result
+    local -i exval
+    result=$( yad "${cmd[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        if [ ${atype} = "labels" ]; then
             GSF_FIELD_LABELS=( $( array_str_from_list_result 1 "$result" ) )
-            declare -p GSF_FIELD_LABELS
+        elif  [ ${atype} = "slinks" ]; then
+            GSF_FIELD_SLINKS=( $( array_str_from_list_result 1 "$result" ) )
         fi
+        declare -p GSF_FIELD_LABELS
     fi
 }
 
