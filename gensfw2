@@ -36,8 +36,8 @@ RSEP="${SEPS:0:1}"
 FSEP="${SEPS:1:1}"
 VSEP="${SEPS:2:1}"
 
-YSEP="${FSEP}"
-YSEP='^'
+YSEP="${VSEP}"
+# YSEP='^'
 
 declare -a IACT_NAMES=( List Add Read Update Delete Import Export )
 declare -a IACT_COLUMNS=( Type Param Result Readonly Hide Label )
