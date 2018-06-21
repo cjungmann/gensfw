@@ -494,7 +494,9 @@ get_iact_meta_vals_str()
 
 # get_iact_list_data_str()
 # This function unpacks the data that was compiled by
-# save_iact_choices().
+# save_iact_choices().  If no previous data is available,
+# default choices will be used, according to the interaction
+# type.
 get_iact_list_data_str()
 {
     local itype="$1"
@@ -534,7 +536,7 @@ get_iact_list_data_str()
 
         is_index=$( [ -n "${row[$COL_PRIKEY]}" ]; echo $? )
 
-        # Skip index field for certain interactions:
+        # Ignore index fields for certain types of interactions
         if [[ $is_index -eq 0 && " Add Import Export " =~ "${itype}" ]]; then
             continue
         fi
@@ -561,15 +563,16 @@ get_iact_list_data_str()
         # in the results by adding the field to the  SELECT clause
         # of the query.
 
-        # Param column, FALSE for List, Read, and Delete, TRUE otherwise
-        if [[ $is_index -ne 0 && " List Read Delete Export " =~ " ${itype} " ]]; then
+        # Param column: always include the primary key, but otherwise
+        # FALSE for List, Read, Update, and Delete, TRUE otherwise
+        if [[ $is_index -ne 0 && " List Read Update Delete Export " =~ " ${itype} " ]]; then
             echo -n "${YSEP}FALSE"
         else
             echo -n "${YSEP}TRUE"
         fi
 
         # Result column, TRUE for List, Read, otherwise FALSE
-        if [[ " List Read Export " =~ " ${itype} " ]]; then
+        if [[ " List Read Update Export " =~ " ${itype} " ]]; then
             echo -n "${YSEP}TRUE"
         else
             echo -n "${YSEP}FALSE"
