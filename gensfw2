@@ -396,12 +396,28 @@ CB_ROW_IS_HIDDEN()  { [ "${CALLBACK_ROW[5]}" = "TRUE" ]; }
 
 GSF_DEFAULT_FIELD_LABEL()
 {
-    local target="$1"
+    local val target="$1"
     local -i ndx
     ndx=$( index_in_array "$target" "${GSF_FIELD_NAMES[@]}" )
     if [ $? -eq 0 ]; then
-        if [ -n "${GSF_FIELD_LABELS[$ndx]}" ]; then
-            echo "${GSF_FIELD_LABELS[$ndx]}"
+        val="${GSF_FIELD_LABELS[$ndx]}"
+        if [ -n "$val" ]; then
+            echo "$val"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+GSF_SESSION_LINK_VALUE()
+{
+    local val target="$1"
+    local -i ndx
+    ndx=$( index_in_array "$target" "${GSF_FIELD_NAMES[@]}" )
+    if [ $? -eq 0 ]; then
+        val="${GSF_FIELD_SLINKS[$ndx]}"
+        if [ -n "$val" ]; then
+            echo "$val"
             return 0
         fi
     fi
@@ -1124,7 +1140,6 @@ start_default_columns_array_list_dialog()
         elif  [ ${atype} = "slinks" ]; then
             GSF_FIELD_SLINKS=( $( array_str_from_list_result 1 "$result" ) )
         fi
-        declare -p GSF_FIELD_LABELS
     fi
 }
 
