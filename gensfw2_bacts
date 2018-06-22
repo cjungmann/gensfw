@@ -25,9 +25,10 @@ save_settings_to_file()
     local -a filearr
     filearr=(
         "${meta_rec}"
-        "${GSF_FIELD_NAMES[*]}"
-        "${GSF_FIELD_LABELS[*]}"
-        "${GSF_FIELD_SLINKS[*]}"
+        "${GSF_FIELD_NAMES[*]}${FSEP}"
+        "${GSF_FIELD_LABELS[*]}${FSEP}"
+        "${GSF_FIELD_SLINKS[*]}${FSEP}"
+        "${GSF_SRM_GLOBALS[*]}${FSEP}"
         "${settings_str}"
         # "${settings[@]}"
     )
@@ -122,6 +123,9 @@ gsf_read_settings_from_file()
     local IFS="${RSEP}"
     local -i exval
     local -a GSF_RECS=( $( cat "$fname" ) )
+
+    IFS="${FSEP}"
+    GSF_SRM_GLOBALS=( $( echo "${GSF_RECS[4]}" ) )
 
     gsf_open_table_from_record "${GSF_RECS[0]}"
 }
