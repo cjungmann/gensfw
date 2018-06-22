@@ -12,18 +12,38 @@ save_srm_to_file()
         fi
     }
 
-    local -a cmds=(
+    local -a SRM_GLOBALS=(
         "\$database" "${GF_DBNAME}"
         "\$xml-stylesheet" "default.xsl"
         "\$default-mode" "list"
     )
 
+    gsf_add_custom_srm_globals
+
     if gsf_IACT_included "Import"; then
-        cmds=( "${cmds[@]}" "\$session-type" "simple" )
+        cmds=( "${SRM_GLOBALS[@]}" "\$session-type" "simple" )
     fi
     
-    tabulate_array 0 "${cmds[@]}"  > $filepath
+    tabulate_array 0 "${SRM_GLOBALS[@]}"  > $filepath
     gsf_callback_iact_records "srto"
+}
+
+gsf_add_custom_srm_globals()
+{
+    local -i count="${#GSF_SRM_GLOBALS[@]}"
+    local -i ndx=0
+    local tag val
+
+    count=$(( count/=2 ))
+
+    while [ $ndx -lt $count ]; do
+        tag="${GSF_SRM_GLOBALS[$ndx]}"
+        val="${GSF_SRM_GLOBALS[($ndx+$count)]}"
+        ((ndx++))
+        if [ -n "$tag" -a -n "$val" ]; then
+            SRM_GLOBALS=( "${SRM_GLOBALS[@]}" "$tag" "$val" )
+        fi
+    done
 }
 
 # tabulate_array()
