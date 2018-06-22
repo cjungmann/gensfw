@@ -29,7 +29,7 @@ source "${zpath}gensfw2_scripts_srm"
 # One or the other of the following, either override
 # default SEPS (first line), or get the default SEPS
 # values from bashmysql:
-SEPS='#$^'
+SEPS='%^&'
 # SEPS=$( bashmysql -S )
 
 RSEP="${SEPS:0:1}"
@@ -76,7 +76,8 @@ declare -a TABLE_NAMES
 
 declare -a GSF_FIELD_NAMES  # Initialized when a table is selected
 declare -a GSF_FIELD_LABELS # From settings file or by using Dialog 5 (default labels)
-declare -a GSF_FIELD_SLINKS  # String settings to link session variables to fields
+declare -a GSF_FIELD_SLINKS # String settings to link session variables to fields
+declare -a GSF_SRM_GLOBALS  # Value pairs to be added to the top of the SRM file
 
 declare -a IACT_FIELD_LABELS
 declare -A IACT_DATA
@@ -90,6 +91,7 @@ reset_for_new_table()
     GSF_FIELD_NAMES=()
     GSF_FIELD_LABELS=()
     GSF_FIELD_SLINKS=()
+    GSF_SRM_GLOBALS=()
 }
 
 set_file_path_defaults()
@@ -210,6 +212,26 @@ declare -a IACT_LIST_PANE=(
     --column "Hide":CHK
     --column "Label":TEXT
 )
+
+# Set SRM Globals dialog (dialog #9 for now)
+declare -a SRM_GLOBALS_DIALOG=(
+    "${YAD_COMMON_ARGS[@]}"
+    --button "Cancel":1
+    --button "Save Changes":0
+    --form
+    --columns 2
+    --field "Tag 1"
+    --field "Tag 2"
+    --field "Tag 3"
+    --field "Tag 4"
+    --field "Tag 5"
+    --field "Value 1"
+    --field "Value 2"
+    --field "Value 3"
+    --field "Value 4"
+    --field "Value 5"
+)
+
 
 # Set every interaction type values to not included."
 reset_IACT_DATA()
@@ -459,10 +481,10 @@ collect_column_indexes()
         fi
     }
 
-    get_index "COLUMN_NAME";    COL_NAME=$ndx
-    get_index "DATA_TYPE";      COL_TYPE=$ndx
-    get_index "COLUMN_TYPE";    COL_COLTYPE=$ndx
-    get_index "prikey";         COL_PRIKEY=$ndx
+    get_index "COLUMN_NAME"; COL_NAME=$ndx
+    get_index "DATA_TYPE";   COL_TYPE=$ndx
+    get_index "COLUMN_TYPE"; COL_COLTYPE=$ndx
+    get_index "prikey";      COL_PRIKEY=$ndx
     get_index "COLUMN_DEFAULT";    COL_DEFAULT=$ndx
     get_index "NUMERIC_PRECISION"; COL_PRECISION=$ndx
     get_index "NUMERIC_SCALE";     COL_SCALE=$ndx
@@ -871,11 +893,12 @@ show_table_preferences_dialog()
             )
         exval=$?
         case $exval in
-            1|252) break ;; # Pressed  Cancel (1) or ESC or window close (252)
             0) show_interaction_preferences_dialog "$result" ;; # Pressed OK
-            2) show_save_files_dialog ;;
-            3) show_default_column_labels_dialog ;;
-            4) show_default_column_slinks_dialog ;;
+            1|252) break ;; # Pressed  Cancel (1) or ESC or window close (252)
+            3) show_save_files_dialog ;;
+            5) show_default_column_slinks_dialog ;;
+            7) show_default_column_labels_dialog ;;
+            9) show_srm_globals_dialog ;;
         esac
     done
 }
@@ -907,9 +930,10 @@ build_table_preferences_dialog()
             "${IACT_TYPES_LIST[@]}"
             --text "${txt}"
             "${IACT_NAMES[@]}"
-            --button "Save _Files":2
-            --button "Set L_abels":3
-            --button "Set L_inks":4
+            --button "Set SRM _Globals":9
+            --button "Set L_abels":7
+            --button "Set L_inks":5
+            --button "Save _Files":3
             --button "Cancel":1
             --button "_OK":0
     )
@@ -1043,14 +1067,32 @@ show_default_column_slinks_dialog()
     fi
 }
 
+# String variables to be used as text options for
+# function start_default_columns_array_form_dialog()
+declare GSF_DIALOG_TEXT_DEFAULT_LABELS="\
+<b>Setting Default Field Labels</b>\n\n Use this \
+dialog to set user-friendly labels for fields that \
+will used when presenting forms and tables."
+declare GSF_DIALOG_TEXT_SESSION_LINKS="\
+<b>Setting Session Links</b>\n\nUse this dialog to \
+establish the relationship between the fields in \
+the table with session variables."
+
 # Helper function for Dialogs #5 and #6 (using a form display)
 start_default_columns_array_form_dialog()
 {
     local atype="$1"
+    local txt
+
+    if [ $atype = 'slinks' ]; then
+        txt="${GSF_DIALOG_TEXT_SESSION_LINKS}"
+    else
+        txt="${GSF_DIALOG_TEXT_DEFAULT_LABELS}"
+    fi
 
     local -a cmd
     cmd=( "${YAD_COMMON_ARGS[@]}"
-          --text "Set default field labels."
+          --text "$txt"
           --always-print-result
           --form
         )
@@ -1143,7 +1185,7 @@ start_default_columns_array_list_dialog()
     fi
 }
 
-## Dialog #6:
+## Dialog #7:
 show_save_files_dialog()
 {
     local -a cmd
@@ -1184,7 +1226,7 @@ show_save_files_dialog()
     fi
 }
 
-## Dialog #7 Show an SQL or SRM script.
+## Dialog #8 Show an SQL or SRM script.
 show_script_dialog()
 {
     local script="$1"
@@ -1197,6 +1239,26 @@ show_script_dialog()
     )
 
     yad "${cmd[@]}" <<< "$script"
+}
+
+
+## Dialog #9 
+show_srm_globals_dialog()
+{
+    local -i exval
+    local result
+    while true; do
+        result=$( yad "${SRM_GLOBALS_DIALOG[@]}" "${GSF_SRM_GLOBALS[@]}" )
+        exval=$?
+        case $exval in
+            0)
+                local IFS="${YSEP}"
+                GSF_SRM_GLOBALS=( $( echo "${result}${YSEP}" ) )
+                break ;;
+            1|252)
+                break ;; # Pressed  Cancel (1) or ESC or window close (252)
+        esac
+    done
 }
 
 
