@@ -1375,7 +1375,3 @@ if [ -z "$GF_FILE_ARG" ]; then
         loop_for_context
     fi
 fi
-
-
-
-v
