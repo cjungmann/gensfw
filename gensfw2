@@ -233,19 +233,6 @@ declare -a SRM_GLOBALS_DIALOG=(
 )
 
 
-# Set every interaction type values to not included."
-reset_IACT_DATA()
-{
-    IACT_DATA=()
-    local name
-    for name in "${IACT_NAMES[@]}"; do
-        IACT_DATA[$name]="FALSE"
-    done
-}
-# Intialize for first use:
-reset_IACT_DATA
-
-
 declare COLS_QUERY="\
 SELECT COLUMN_NAME,
        UPPER(DATA_TYPE) AS DATA_TYPE,
@@ -530,40 +517,12 @@ get_iact_meta_vals_str()
     echo "${itype}${YSEP}${savedvals[0]}"
 }
 
-# get_iact_list_data_str()
-# This function unpacks the data that was compiled by
-# save_iact_choices().  If no previous data is available,
-# default choices will be used, according to the interaction
-# type.
-get_iact_list_data_str()
+make_iact_default_data_str()
 {
     local itype="$1"
-    local IFS
-
-    # First check if the interaction type has a saved value:
-    local -i exval
-    local -a fields
-    local -a vals ovals
-    local valstr="${IACT_DATA[$itype]}"
-    exval=$?
-    if [ $exval -eq 0 ]; then
-        IFS="${FSEP}"
-        fields=( $( echo "${valstr}" ) )
-        exval=$?
-        if [ $exval -eq 0 -a "${#fields[@]}" -gt 1 ]; then
-            for fieldstr in "${fields[@]}"; do
-                IFS="${YSEP}"
-                vals=( $( echo "${fieldstr}" ) )
-                if [ ${#vals[@]} -gt 1 ]; then
-                    echo -n "${vals[*]}${YSEP}"
-                fi
-            done
-            return 0
-        fi
-    fi
 
     # If no saved value, return a default string to start with:
-    local rowstr coltype
+    local IFS rowstr coltype
     local -a row
     local -i is_index
 
@@ -628,6 +587,57 @@ get_iact_list_data_str()
         echo -n "${YSEP}"
 
     done
+}
+
+# Call this function to setup a new table.
+prepare_default_IACT_DATA()
+{
+    IACT_DATA=()
+    local name result
+
+    for name in "${IACT_NAMES[@]}"; do
+        result=$( make_iact_default_data_str "$name" )
+        IACT_DATA[$name]="TRUE${FSEP}${result}"
+    done
+}
+
+
+# get_iact_list_data_str()
+# This function unpacks the data that was compiled by
+# save_iact_choices().  If no previous data is available,
+# default choices will be used, according to the interaction
+# type.
+get_iact_list_data_str()
+{
+    local itype="$1"
+    local IFS
+
+    # First check if the interaction type has a saved value:
+    local -i exval
+    local -a fields
+    local -a vals ovals
+    local valstr="${IACT_DATA[$itype]}"
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        IFS="${FSEP}"
+        fields=( $( echo "${valstr}" ) )
+        exval=$?
+        if [ $exval -eq 0 -a "${#fields[@]}" -gt 1 ]; then
+            for fieldstr in "${fields[@]}"; do
+                IFS="${YSEP}"
+                vals=( $( echo "${fieldstr}" ) )
+                if [ ${#vals[@]} -gt 1 ]; then
+                    echo -n "${vals[*]}${YSEP}"
+                fi
+            done
+            return 0
+        fi
+    fi
+
+    # If nothing found in the file, generate default vals:
+    echo "No file source, creating a default for '${itype}'" >&2
+    make_iact_default_data_str "$itype"
+    
 }
 
 # make_iact_choices_string()
@@ -1267,6 +1277,7 @@ use_table_info()
     GF_PROC_ROOT="App_${GF_TNAME}_"
     collect_column_indexes
     update_field_names_array
+    prepare_default_IACT_DATA
     $use_table_info_callback
 }
 
@@ -1367,3 +1378,4 @@ fi
 
 
 
+v
