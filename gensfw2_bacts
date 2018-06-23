@@ -68,7 +68,7 @@ gsf_reconcile_field_strings()
 
 gsf_load_IACT_DATA()
 {
-    reset_IACT_DATA
+    prepare_default_IACT_DATA
 
     local IFS="${FSEP}"
     local recstr name
