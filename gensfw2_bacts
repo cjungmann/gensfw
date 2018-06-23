@@ -151,24 +151,3 @@ open_gsf_file()
     fi
 }
 
-save_settings()
-{
-    local result
-    local -i exval
-    local -a cmd
-
-    cmd=(
-        "${YAD_COMMON_ARGS[@]}"
-        --text "\
-Select a file name into which the settings should be saved."
-        --file
-        --filename "${GF_DBNAME}_${GF_TNAME}.gsf"
-        --save
-    )
-
-    result=$( yad "${cmd[@]}" )
-    exval=$?
-    if [ $exval -eq 0 ]; then
-        save_settings_to_file "${result}"
-    fi
-}
