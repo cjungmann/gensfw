@@ -894,7 +894,7 @@ show_table_preferences_dialog()
     local -i PLUG_NUM=$(( G_PLUG_NUM++ ))
 
     if [ -z "${GF_FILE_ARG}" ]; then
-        set_file_path_defaults "${PWD}/${GF_DBNAME}_${GF_TNAME}.gsf"
+        set_file_path_defaults "${PWD}/${GF_TNAME}.gsf"
     fi
 
     while true; do
