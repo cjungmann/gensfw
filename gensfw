@@ -1,0 +1,1377 @@
+#!/bin/bash
+
+# Primary Dialogs in this application (many dialogs have sub-dialogs):
+# 1: Select Database from List (or open GSF file)
+# 2: Select Table from List (or open GSF file)
+# 3: Edit Table Preferences Dialog, can start dialogs 4, 5, and 6
+# 4: Edit Interaction Preferences Dialog
+# 5: Set Default Column Labels
+# 6: Save Files Dialog
+
+declare zpath
+
+get_source_path()
+{
+    # Must include both the colon AND the space to trim
+    # the spaces from the path in the array:
+    local IFS=": "
+    local -a arr=( $( whereis gensfw2 ) )
+    zpath=$( readlink "${arr[1]}" )
+    zpath="${zpath%%gensfw2}"
+}
+
+get_source_path
+
+source "${zpath}gensfw_bacts"
+source "${zpath}gensfw_scripts_sql"
+source "${zpath}gensfw_scripts_srm"
+
+# One or the other of the following, either override
+# default SEPS (first line), or get the default SEPS
+# values from bashmysql:
+SEPS='%^&'
+# SEPS=$( bashmysql -S )
+
+RSEP="${SEPS:0:1}"
+FSEP="${SEPS:1:1}"
+VSEP="${SEPS:2:1}"
+
+YSEP="${VSEP}"
+# YSEP='^'
+
+declare -a IACT_NAMES=( List Add Read Update Delete Import Export )
+declare -a IACT_COLUMNS=( Type Param Result Readonly Hide Label )
+
+declare -gi G_PLUG_NUM=$$ ## Commence plug numbers from process id
+
+# COL_xxxx integers are indexes to column for result of COLS_QUERY
+# These will not change once set
+declare -gi COL_NAME
+declare -gi COL_TYPE
+declare -gi COL_COLTYPE
+declare -gi COL_PRIKEY
+declare -gi COL_PRECISION
+declare -gi COL_SCALE
+declare -gi COL_MAXLEN
+declare -gi COL_DEFAULT
+
+# The list of available database won't change (unless we change hosts):
+declare -a DBASE_NAMES=( $( mysql -BN -e "show databases" ) ) 
+
+# The next two variables can be either set from command line,
+# from dialogs 1 and 2, or by opening a settings file:
+declare -gx GF_DBNAME
+declare -gx GF_TNAME
+
+declare -gx GF_PROC_ROOT
+
+# 
+declare -gx GF_FILE_ARG
+declare -gx GF_FILEPATH_GSF
+declare -gx GF_FILEPATH_SQL
+declare -gx GF_FILEPATH_SRM
+
+# This array changes when GF_DBNAME changes (from Dialog 1):
+declare -a TABLE_NAMES
+
+declare -a GSF_FIELD_NAMES  # Initialized when a table is selected
+declare -a GSF_FIELD_LABELS # From settings file or by using Dialog 5 (default labels)
+declare -a GSF_FIELD_SLINKS # String settings to link session variables to fields
+declare -a GSF_SRM_GLOBALS  # Value pairs to be added to the top of the SRM file
+
+declare -a IACT_FIELD_LABELS
+declare -A IACT_DATA
+
+# Clear variables that might retain info from previous table:
+reset_for_new_table()
+{
+    GF_FILEPATH_GSF=
+    GF_FILEPATH_SQL=
+    GF_FILEPATH_SRM=
+    GSF_FIELD_NAMES=()
+    GSF_FIELD_LABELS=()
+    GSF_FIELD_SLINKS=()
+    GSF_SRM_GLOBALS=()
+}
+
+set_file_path_defaults()
+{
+    local IFS="/"
+    local lpath fname froot
+    local -a tarr farr=( $( echo "$1" ) )
+    local -i tlen flen="${#farr[@]}"
+    if [ $flen -eq 1 ]; then
+        fname="$1"
+        lpath=""
+    else
+        tarr=( "${farr[@]:0:$(( flen-1 ))}" )
+        lpath="${tarr[*]}"
+        fname="${farr[ $(( flen-1 )) ]}"
+    fi
+
+
+    IFS="\."
+    tarr=( $( echo "${fname}" ) )
+    tlen="${#tarr[@]}"
+    if [ $tlen -eq 0 ]; then
+        froot="${fname}"
+    else
+        froot="${tarr[*]:0:$(( tlen-1 ))}"
+    fi
+    froot="${tarr[@]:0:$(( tlen-1 ))}"
+
+    local fbase="${froot}"
+    if [ -n "${lpath}" ]; then
+        fbase="${lpath}/${froot}"
+    fi
+    GF_FILEPATH_GSF="$1"
+    GF_FILEPATH_SQL="${fbase}.sql"
+    GF_FILEPATH_SRM="${fbase}.srm"
+}
+
+# Convenient function to avoid having to know the array name:
+get_fields_count() { echo "${#GSF_FIELD_NAMES[@]}"; }
+
+# All primary yad dialogs should use this
+# (Not paned or notebook plugs):
+declare -a YAD_COMMON_ARGS=(
+    --height 500
+    --width 750
+    --center
+    --borders 10
+    --separator "${YSEP}"
+    --title "Generate Schema Framework Scripts"
+)
+
+
+### Dialog #3: Table Preferences Dialog ###
+### Usde in function: show_table_preferences_dialog()
+# Primary yad dialog, for current dbase/table
+# - Select interaction types to edit
+# - Set default column labels
+# - Save script and settings files
+declare -a TABLE_PREFERENCES_DIALOG=(
+    "${YAD_COMMON_ARGS[@]}"
+    --paned
+    --tab "Tab1"
+    --tab "Tab2"
+    --button "Set _Labels":3
+    --button "Save _Files":2
+    --button "Cancel":1
+    --button "_OK":0
+    )
+
+# Dialog #3 top pane, call start_table_preferences_meta_pane()
+
+# Dialog #3, bottom pane, before adding data:
+declare -a IACT_TYPES_LIST=(
+    --text "Click on an interaction type to set column preferences."
+    --list
+    --separator "${YSEP}"
+    --column "Interaction Type":TEXT
+)
+
+
+### Dialog #4: Interaction Settings Dialog
+### Use in function: show_interaction_preferences_dialog()
+# Primary yad dialog, set column preferences for the interaction.
+declare -a INTERACTION_PREFERENCES_DIALOG=(
+    --paned
+    --tab="Tab1"
+    --tab="Tab2"
+    --button "Show S_RM":4
+    --button "Show S_QL":2
+    --button "Cancel":1
+    --button "_Ok":0
+    )
+
+# Dialog #4 top pane, before data added:
+declare -a IACT_TOP_PANE=(
+    --tabnum=1
+    --form
+    --separator "${YSEP}"
+    --field "Interaction":RO
+    --field "Include":CHK
+    )
+
+
+# Dialog #4 bottom pane, before data added:
+declare -a IACT_LIST_PANE=(
+    --tabnum=2
+    --list
+    --always-print-result
+    --separator "${YSEP}"
+    --print-all
+    --editable
+    --editable-cols 7
+    --column "Column Name":TEXT
+    --column "Type":TEXT
+    --column "Param":CHK
+    --column "Result":CHK
+    --column "Readonly":CHK
+    --column "Hide":CHK
+    --column "Label":TEXT
+)
+
+# Set SRM Globals dialog (dialog #9 for now)
+declare -a SRM_GLOBALS_DIALOG=(
+    "${YAD_COMMON_ARGS[@]}"
+    --button "Cancel":1
+    --button "Save Changes":0
+    --form
+    --columns 2
+    --field "Tag 1"
+    --field "Tag 2"
+    --field "Tag 3"
+    --field "Tag 4"
+    --field "Tag 5"
+    --field "Value 1"
+    --field "Value 2"
+    --field "Value 3"
+    --field "Value 4"
+    --field "Value 5"
+)
+
+
+declare COLS_QUERY="\
+SELECT COLUMN_NAME,
+       UPPER(DATA_TYPE) AS DATA_TYPE,
+       CHARACTER_MAXIMUM_LENGTH,
+       COLUMN_TYPE,
+       CASE WHEN INSTR(EXTRA,'auto_increment') THEN 'YES' ELSE NULL END AS autoinc,
+       CASE WHEN INSTR(COLUMN_KEY,'PRI') THEN 'YES' ELSE NULL END AS prikey,
+       NULLIF(IS_NULLABLE,'NO') AS nullable,
+       NUMERIC_PRECISION,
+       NUMERIC_SCALE,
+       CHARACTER_MAXIMUM_LENGTH,
+       COLUMN_DEFAULT
+  FROM COLUMNS"
+
+# gsf_callback_iact_records()
+# Scans and expands interaction records into arrays, to
+# Prepare the environment to look like it would look if
+# it were in the interaction dialog (#4), for writing
+# a file.
+#
+# Access the data in the record by calling
+# gsf_callback_prefs_rows()
+gsf_callback_iact_records()
+{
+    local IACT_NAME callback="$1"
+    local IFS="${FSEP}"
+    local -a IACT_COL_PREFS
+    for IACT_NAME in "${IACT_NAMES[@]}"; do
+        IACT_COL_PREFS=( $( echo "${IACT_DATA[$IACT_NAME]}" ) )
+        $callback
+    done
+}
+
+include_current_iact_record()
+{
+    local IFS="${YSEP}"
+    local -a row=( $( echo "${IACT_COL_PREFS}" ) )
+    [ "${row[0]}" = "TRUE" ]
+}
+
+
+# gsf_callback_prefs_rows()
+# Scans and expands preferences data into arrays, which are made 
+# accessible through a callback function.
+# 
+# This function is designed to be called from the script-writing options
+# of Dialog #4, from which the IACT_COL_PREFS array is instantiated from
+# the results of a column preferences page.  That said, the same array
+# could be instantiated in other contexts, in particular, in processing
+# an entire GSF settings file by creating an IACT_COL_PREFS array from
+# each interaction record.
+gsf_callback_prefs_rows()
+{
+    local callback="$1"
+    local IFS="${YSEP}"
+    local -t CALLBACK_ROW
+    local rowstr
+    for rowstr in "${IACT_COL_PREFS[@]}"; do
+        CALLBACK_ROW=( $( echo "${rowstr}" ) )
+        if [ "${#CALLBACK_ROW[@]}" -gt 2 ]; then
+            $callback
+        fi
+    done
+}
+
+# Use this function to open and parse an IACT preferences
+# record.
+# Call this function with two parameters,
+# - The interaction name
+# - The callback function name
+#
+# The callback function will be invoked for every line
+# of the IACT preferences record.  The callback function
+# can read the contents of the current line through the
+# CALLBACK_ROW array whose contents should be accessed by
+# one of the series of CB_ROW_ functions defined below.
+#
+# The first line of the IACT Prefs record contains the meta
+# information.  Currently, it contains only the "include"
+# flag.  The callback function must distinguish between
+# the line types by considering the the element count of the
+# CALLBACK_ROW array.
+# of
+# element.  The first 
+# Use this function to refer to a additional interaction type
+# while in the process of using a first interaction type.
+# For example, while processing the Edit interaction, it is
+# necessary to refer to the Delete interaction to see which
+# parameters are necessary to process the delete procedure.
+gsf_callback_iact_info()
+{
+    local rowstr IACT_NAME="$1" callback="$2"
+    local IFS="${FSEP}"
+    local -a LOCAL_COL_PREFS CALLBACK_ROW
+    local -i CB_EL_COUNT=0
+    LOCAL_COL_PREFS=( $( echo "${IACT_DATA[$IACT_NAME]}" ) )
+
+    IFS="${YSEP}"
+    for rowstr in "${LOCAL_COL_PREFS[@]}"; do
+        CALLBACK_ROW=( $( echo "${rowstr}" ) )
+        CB_EL_COUNT="${#CALLBACK_ROW[@]}"
+        $callback
+        if [ $? -ne 0 ]; then
+            break
+        fi
+    done
+}
+
+gsf_IACT_included()
+{
+    local name="$1"
+    local -i included=1
+    gIi_callback()
+    {
+        if [ "${CB_EL_COUNT}" -eq 1 ]; then
+            if [ "${CALLBACK_ROW[0]}" = "TRUE" ]; then
+                included=0
+            fi
+            return 1
+        fi
+    }
+    gsf_callback_iact_info "$name" "gIi_callback"
+
+    return $included
+}
+
+markup_tablify()
+{
+    local -a arr=( "${@:1}" )
+    local -i idx=0 stop="${#arr[@]}"
+    local -i len maxlen=0
+    local val
+
+    # Determine the longest left-column value:
+    while [ $idx -lt $stop ]; do
+        if  [ $(( idx % 2 )) -eq 0 ]; then
+            len="${#arr[$idx]}"
+            if [ "${len}" -gt "$maxlen" ]; then
+                maxlen="${len}"
+            fi
+        fi
+        (( ++idx ))
+    done
+
+    local fstr="<tt><b>%${maxlen}s : </b>"
+
+    # Restart loop, printing this time:
+    idx=0
+    while [ $idx -lt $stop ]; do
+        val="${arr[$idx]}"
+        if  [ $(( idx % 2 )) -eq 0 ]; then
+            printf "${fstr}" "${val}"
+        else
+            echo "${val}</tt>"
+        fi
+        (( ++idx ))
+    done
+}
+
+
+
+# These simple functions interpret the callback data from function
+# gsf_callback_prefs_rows().
+CB_ROW_NAME()       { echo "${CALLBACK_ROW[0]}"; }
+CB_ROW_TYPE()       { echo "${CALLBACK_ROW[1]}"; }
+CB_ROW_IS_PARAM()   { [ "${CALLBACK_ROW[2]}" = "TRUE" ]; }
+CB_ROW_IS_RESULT()  { [ "${CALLBACK_ROW[3]}" = "TRUE" ]; }
+CB_ROW_IS_READONLY(){ [ "${CALLBACK_ROW[4]}" = "TRUE" ]; }
+CB_ROW_IS_HIDDEN()  { [ "${CALLBACK_ROW[5]}" = "TRUE" ]; }
+
+GSF_DEFAULT_FIELD_LABEL()
+{
+    local val target="$1"
+    local -i ndx
+    ndx=$( index_in_array "$target" "${GSF_FIELD_NAMES[@]}" )
+    if [ $? -eq 0 ]; then
+        val="${GSF_FIELD_LABELS[$ndx]}"
+        if [ -n "$val" ]; then
+            echo "$val"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+GSF_SESSION_LINK_VALUE()
+{
+    local val target="$1"
+    local -i ndx
+    ndx=$( index_in_array "$target" "${GSF_FIELD_NAMES[@]}" )
+    if [ $? -eq 0 ]; then
+        val="${GSF_FIELD_SLINKS[$ndx]}"
+        if [ -n "$val" ]; then
+            echo "$val"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+CB_ROW_LABEL()
+{
+    if [ "${CALLBACK_ROW[6]}" ]; then
+        echo "${CALLBACK_ROW[6]}"
+        return 0
+    else
+        GSF_DEFAULT_FIELD_LABEL "${CALLBACK_ROW[0]}"
+    fi
+}
+
+CB_ROW_IS_INDEX() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
+
+# Universal script indentation string
+declare gsf_script_indent="  "
+
+# Save column indexes to global variables for repeated access
+collect_column_indexes()
+{
+    declare -i ndx
+    declare -i exval=0
+
+    # Use nested function to reuse repeated code.
+    # First failure to find skips the rest.
+    get_index()
+    {
+        if [ $exval -eq 0 ]; then
+            ndx=$( find_column_index "$1" )
+            exval=$?
+            if [ $exval -ne 0 ]; then
+                echo "Can't find column '$1'." >&2
+                exit $exval
+            fi
+        fi
+    }
+
+    get_index "COLUMN_NAME"; COL_NAME=$ndx
+    get_index "DATA_TYPE";   COL_TYPE=$ndx
+    get_index "COLUMN_TYPE"; COL_COLTYPE=$ndx
+    get_index "prikey";      COL_PRIKEY=$ndx
+    get_index "COLUMN_DEFAULT";    COL_DEFAULT=$ndx
+    get_index "NUMERIC_PRECISION"; COL_PRECISION=$ndx
+    get_index "NUMERIC_SCALE";     COL_SCALE=$ndx
+
+    get_index "CHARACTER_MAXIMUM_LENGTH"; COL_MAXLEN=$ndx
+}
+
+# Get field names from global table information
+update_field_names_array()
+{
+    GSF_FIELD_NAMES=()
+
+    declare rowstr
+    declare -a row
+    declare -i ndx=0
+    local IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "${rowstr}" ) ) 
+        GSF_FIELD_NAMES[$ndx]="${row[$COL_NAME]}"
+        GSF_FIELD_LABELS[$ndx]=""
+        GSF_FIELD_SLINKS[$ndx]=""
+        (( ndx++ ))
+    done
+}
+
+get_iact_meta_vals_str()
+{
+    local -i exval
+    local itype="$1"
+    local metastr
+
+    metastr="${IACT_DATA[$itype]}"
+
+    exval=$?
+    if [ $exval -ne 0 ]; then
+        echo "Error retrieving data for the '${itype}' interaction." >&2
+        exit $exval
+    fi
+
+    local -a savedvals
+    local IFS="${FSEP}"
+    savedvals=( $( echo "$metastr" ) )
+    echo "${itype}${YSEP}${savedvals[0]}"
+}
+
+make_iact_default_data_str()
+{
+    local itype="$1"
+
+    # If no saved value, return a default string to start with:
+    local IFS rowstr coltype
+    local -a row
+    local -i is_index
+
+    # Reset IFS to parse fields from rowstr from bashmysql:
+    IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "$rowstr") )
+
+        is_index=$( [ -n "${row[$COL_PRIKEY]}" ]; echo $? )
+
+        # Ignore index fields for certain types of interactions
+        if [[ $is_index -eq 0 && " Add Import Export " =~ "${itype}" ]]; then
+            continue
+        fi
+
+        # Get data type from DATA_TYPE result, but modify for
+        # CHAR and INT types.
+        coltype="${row[$COL_TYPE]}"
+
+        if [ "${#coltype}" -ge 4 -a "${coltype: -4}" = "CHAR" ]; then
+            coltype="${coltype}(${row[$COL_MAXLEN]})"
+        elif [ "${#coltype}" -ge 3 -a "${coltype: -3}" = "INT" ]; then
+            if [[ "${row[$COL_COLTYPE]}" =~ "unsigned" ]]; then
+                coltype="$coltype UNSIGNED"
+            fi
+        fi
+        
+        # Information/Identification column (name and datatype)
+        echo -n "${row[COL_NAME]}${YSEP}${coltype}"
+
+        # The Param and Result columns a flags to include the field
+        # in the respective domain.  Fields for which the Param flag
+        # is set will be include the field in the parameter list.
+        # Likewise, fields for which the Result flag will be included
+        # in the results by adding the field to the  SELECT clause
+        # of the query.
+
+        # Param column: always include the primary key, but otherwise
+        # FALSE for List, Read, Update, and Delete, TRUE otherwise
+        if [[ $is_index -ne 0 && " List Read Update Delete Export " =~ " ${itype} " ]]; then
+            echo -n "${YSEP}FALSE"
+        else
+            echo -n "${YSEP}TRUE"
+        fi
+
+        # Result column, TRUE for List, Read, otherwise FALSE
+        if [[ " List Read Update Export " =~ " ${itype} " ]]; then
+            echo -n "${YSEP}TRUE"
+        else
+            echo -n "${YSEP}FALSE"
+        fi
+
+        # Readonly and Hide (For index fields)
+        if [ $is_index -eq 0 ]; then
+            echo -n "${YSEP}TRUE${YSEP}TRUE"
+        else
+            echo -n "${YSEP}FALSE${YSEP}FALSE"
+        fi
+
+        # Blank element for the label
+        echo -n "${YSEP}"
+        echo -n "${YSEP}"
+
+    done
+}
+
+# Call this function to setup a new table.
+prepare_default_IACT_DATA()
+{
+    IACT_DATA=()
+    local name result
+
+    for name in "${IACT_NAMES[@]}"; do
+        result=$( make_iact_default_data_str "$name" )
+        IACT_DATA[$name]="TRUE${FSEP}${result}"
+    done
+}
+
+
+# get_iact_list_data_str()
+# This function unpacks the data that was compiled by
+# save_iact_choices().  If no previous data is available,
+# default choices will be used, according to the interaction
+# type.
+get_iact_list_data_str()
+{
+    local itype="$1"
+    local IFS
+
+    # First check if the interaction type has a saved value:
+    local -i exval
+    local -a fields
+    local -a vals ovals
+    local valstr="${IACT_DATA[$itype]}"
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        IFS="${FSEP}"
+        fields=( $( echo "${valstr}" ) )
+        exval=$?
+        if [ $exval -eq 0 -a "${#fields[@]}" -gt 1 ]; then
+            for fieldstr in "${fields[@]}"; do
+                IFS="${YSEP}"
+                vals=( $( echo "${fieldstr}" ) )
+                if [ ${#vals[@]} -gt 1 ]; then
+                    echo -n "${vals[*]}${YSEP}"
+                fi
+            done
+            return 0
+        fi
+    fi
+
+    # If nothing found in the file, generate default vals:
+    echo "No file source, creating a default for '${itype}'" >&2
+    make_iact_default_data_str "$itype"
+    
+}
+
+# make_iact_choices_string()
+# Converts result of dialog #4 to a string with table fields
+# separated by FSEP and the field preferences separated by YSEP.
+make_iact_choices_string()
+{
+    local IFS
+    local line
+    local -a lines choices row
+
+    # These are used to set and build a record value:
+    local iact_name
+    local iact_incl
+    local -a iact_frows
+
+    # First split to rows:
+    IFS=$'\n'
+    lines=( $(echo "$1" ) )
+
+    for line in "${lines[@]}"; do
+        IFS="${YSEP}"
+        row=( $( echo "${line}" ) )
+        if [ "${#row[@]}" -lt 4 ]; then
+            iact_name="${row[0]}"
+            iact_incl="${row[1]}"
+        else
+            IFS="${YSEP}"
+
+            # Add extra YSEP in case of empty final field:
+            rowstr="${row[*]}${YSEP}"
+
+            IFS="${FSEP}"
+            iact_frows=( "${iact_frows[@]}" "${rowstr}" )
+        fi
+    done
+
+    IFS="${FSEP}"
+    echo -n "${iact_incl}${FSEP}${iact_frows[*]}"
+}
+
+# save_iact_choices():
+# Saves the result of make_iact_choices_string() to IACT_DATA
+# to reopen and to serialize to disk.
+save_iact_choices()
+{
+    local -i exval
+    local choices
+    choices_str=$( make_iact_choices_string "$1" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        IACT_DATA[$IACT_NAME]="$choices_str"
+    fi
+}
+
+# Seeks element in array that matches $1.  Returns 0 if found,
+# 1 if not found.  If found, the index is "echoed".
+index_in_array()
+{
+    local target="$1"
+    local el
+    local -i ndx=0
+    for el in "${@:2}"; do
+        if [ "$el" = "$target" ]; then
+            echo "$ndx"
+            return 0
+        fi
+        (( ndx++ ))
+    done
+    return 1
+}
+
+# Simply confirms if a string is in an array.
+# Returns 0 if found, 1 if not.
+string_in_array()
+{
+    local target="$1"
+    local el
+    for el in "${@:2}"; do
+        if [ "$el" = "$target" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+confirm_dbase_name() { string_in_array "${GF_DBNAME}" "${DBASE_NAMES[@]}"; }
+confirm_table_name() { string_in_array "${GF_TNAME}" "${TABLE_NAMES[@]}"; }
+confirm_iact_name()  { string_in_array "$1" "${IACT_NAMES[@]}"; }
+
+set_dbase_name()
+{
+    GF_TNAME=
+    TABLE_NAMES=()
+    if string_in_array "$1" "${DBASE_NAMES[@]}" ; then
+        GF_DBNAME="$1"
+        local IFS=$'\n'
+        TABLE_NAMES=( $( mysql "${GF_DBNAME}" -BN -e "show tables" ) )
+    else
+        echo "'$1' is not a database name on this server." >&2
+        exit 1
+    fi
+}
+
+set_table_name()
+{
+    if string_in_array "$1" "${TABLE_NAMES[@]}"; then
+        GF_TNAME="$1"
+    else
+        echo "'$1' is not a table name in the ${GF_DBNAME} database." >&2
+        exit 1
+    fi
+}
+
+
+# This function can terminate the script with an unknown database
+# or table name.  Thus, there is no return value for this function.
+parse_args()
+{
+    local arg
+    for arg in "$@"; do
+        if [ -f "${arg}" ]; then
+            GF_FILE_ARG="${arg}"
+            set_file_path_defaults "${arg}"
+            gsf_read_settings_from_file "${GF_FILEPATH_GSF}"
+            break
+        elif [ -z "$GF_DBNAME" ]; then
+            set_dbase_name "$arg"
+        elif [ -z "$GF_TNAME" ]; then
+            set_table_name "$arg"
+        fi
+    done
+}
+
+# Using the first character of IFS as the separator, this function creates a
+# string of values from a specified column of a list result.
+#
+# For example, local -a arr=( $( array_str_from_list_result 1 "$result" ) )
+# will make an array from the second column of the list result.
+array_str_from_list_result()
+{
+    local -a lines vals
+    local line
+    local -i col="$1"
+
+    # Save IFS character before we change IFS
+    local VSEP="${IFS:0:1}"
+
+    # List results separated by newlines:
+    local IFS=$'\n'
+    lines=( $( echo "$2" ) )
+
+    # Set IFS to split each line into values:
+    IFS="${YSEP}"
+    for line in "${lines[@]}"; do
+        vals=( $( echo "$line" ) )
+        # Echo each value, followed by the VSEP value we saved above:
+        echo -n "${vals[$col]}${VSEP}"
+    done
+}
+
+# split_yad_arrs()
+# Used in dialog #4 (show_interaction_preferences_dialog()) to split
+# an array of YAD arrays into a single array.  Use the output of to
+# create a new array for submission to YAD.
+split_yad_arrs()
+{
+    local LSEP="${IFS:0:1}"
+    local IFS="${YSEP}"
+    local str el
+    local -a row
+    for str in "$@"; do
+        row=( $( echo "$str" ) )
+        for el in "${row[@]}"; do
+            echo -n "$el${LSEP}"
+        done
+    done
+}
+
+# Uses first parameter as subject value, then puts the rest
+# of the parameters into a list element.
+pick_from_array()
+{
+    local subject="$1"
+
+    local cmd=(
+        "${YAD_COMMON_ARGS[@]}"
+        --list
+        --text "Select a ${subject} from the following list."
+        --button "_Open File":2
+        --button "Cancel":1
+        --button "OK":0
+        --no-headers
+        --column "${subject}":TEXT
+        "${@:2}"
+    )
+
+    local -i exval
+
+    result=$( yad "${cmd[@]}" )
+    exval=$?
+    case "$exval" in
+        0)
+            local IFS="${YSEP}"
+            arr=( $( echo "${result}" ) )
+            echo "${arr[0]}"
+            return 0
+            ;;
+        2)
+            open_gsf_file
+            return 1
+            ;;
+        *)
+            return $exval ;;
+    esac
+
+    return 0
+}
+
+# Dialog #1: Get database name from available databases.
+show_select_dbase_dialog()
+{
+    local -a dbnames
+    local -i exval
+    local result
+
+    result=$( pick_from_array "Database" "${DBASE_NAMES[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        set_dbase_name "${result}"
+    fi
+    return $exval
+}
+
+# Dialog 2: Get table name from list of tables in current database.
+show_select_table_dialog()
+{
+    local -i exval
+    local result
+
+    result=$( pick_from_array "Table" "${TABLE_NAMES[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        set_table_name "${result}"
+    fi
+    return $exval
+}
+
+## Dialog #3: 
+show_table_preferences_dialog()
+{
+    local result
+    local -i exval
+    local -i PLUG_NUM=$(( G_PLUG_NUM++ ))
+
+    if [ -z "${GF_FILE_ARG}" ]; then
+        set_file_path_defaults "${PWD}/${GF_TNAME}.gsf"
+    fi
+
+    while true; do
+        result=$(
+            build_table_preferences_dialog
+            )
+        exval=$?
+        case $exval in
+            0) show_interaction_preferences_dialog "$result" ;; # Pressed OK
+            1|252) break ;; # Pressed  Cancel (1) or ESC or window close (252)
+            3) show_save_files_dialog ;;
+            5) show_default_column_slinks_dialog ;;
+            7) show_default_column_labels_dialog ;;
+            9) show_srm_globals_dialog ;;
+        esac
+    done
+}
+
+# Dialog 3 complete dialog
+build_table_preferences_dialog()
+{
+    local -i fcount=$( get_fields_count )
+
+    # Collect information to put in the text section of
+    # the dialog.  This used to be the "meta" pane.
+    local -a meta=(
+        "Database" "${GF_DBNAME}"
+        "Table" "${GF_TNAME}"
+        "Field Count" "${fcount}"
+    )
+
+    if [ -n "${GF_FILE_ARG}" ]; then
+        meta=( "${meta[@]}"
+               "Settings File" "${GF_FILEPATH_GSF}"
+            )
+    fi
+    
+    local txt=$( markup_tablify "${meta[@]}" )
+
+    local -a cmd=(
+            "${YAD_COMMON_ARGS[@]}"
+            --list
+            "${IACT_TYPES_LIST[@]}"
+            --text "${txt}"
+            "${IACT_NAMES[@]}"
+            --button "Set SRM _Globals":9
+            --button "Set L_abels":7
+            --button "Set L_inks":5
+            --button "Save _Files":3
+            --button "Cancel":1
+            --button "_OK":0
+    )
+
+    yad "${cmd[@]}"
+}
+
+
+# Dialog #4: Set field usage and display flags for an interaction type
+show_interaction_preferences_dialog()
+{
+    # Break result into lines for each pane:
+    local IFS=$'\n'
+    local -a lines=( $( echo "$1" ) )
+
+    # Break each line into an array.  The array with
+    # a single element will be the chosen interaction.
+
+    # IFS for parsing YAD value from each line
+    IFS="${YSEP}"
+
+    local -a row
+    local line iact
+    for line in "${lines[@]}"; do
+        row=( $( echo "$line" ) )
+        if [ "${#row[@]}" -eq 1 ]; then
+            iact="${row[0]}"
+            break
+        fi
+    done
+    
+    local meta_vals_str=$( get_iact_meta_vals_str "${iact}" )
+    local list_vals_str=$( get_iact_list_data_str "${iact}" )
+
+    # IFS for parsing our stuff:
+    IFS="${YSEP}"
+    local -a meta_vals=( $( echo "${meta_vals_str}" ) )
+    local -a list_vals=( $( echo "${list_vals_str}" ) )
+
+    local IACT_NAME="${meta_vals[0]}"
+
+    local result
+    local -i exval
+    local -i PLUG_NUM=$(( G_PLUG_NUM++ ))
+
+    local -a top_pane=(
+        --plug "${PLUG_NUM}"
+        --text "Interaction Editor for ${GF_DBNAME}.${GF_TNAME}"
+        "${IACT_TOP_PANE[@]}"
+    )
+
+    local -a list_pane=(
+        --plug "${PLUG_NUM}"
+        "${IACT_LIST_PANE[@]}"
+    )
+
+    local -a paned_dialog=(
+        --key "${PLUG_NUM}"
+        "${YAD_COMMON_ARGS[@]}"
+        "${INTERACTION_PREFERENCES_DIALOG[@]}"
+    )
+
+    local script_text
+
+    while true; do
+        result=$(
+            yad "${top_pane[@]}" "${meta_vals[@]}" &
+            yad "${list_pane[@]}" "${list_vals[@]}" &
+            yad "${paned_dialog[@]}"
+              )
+        exval=$?
+
+        case $exval in
+            0) save_iact_choices "${result}"; break ;;
+            2|4)
+                local cmd_to_call
+                local script_type
+                if [ $exval -eq 2 ]; then
+                    cmd_to_call="gsf_write_script_sql"
+                    script_type=SQL
+                else
+                    cmd_to_call="gsf_write_script_srm"
+                    script_type=SRM
+                fi
+                IFS="${FSEP}"
+                local PROC_ROOT="App_${GF_TNAME}_"
+                local -a IACT_COL_PREFS
+
+                IACT_COL_PREFS=( $( make_iact_choices_string "${result}" ) )
+
+                script_text=$( $cmd_to_call "${IACT_NAME}" )
+                if [ $? -eq 0 ]; then
+                    # Show dialog #7:
+                    show_script_dialog "${script_text}" "${script_type}";
+                fi
+
+                # Update array for re-initialize the dialog:
+                meta_vals=( "${iact}" $( split_yad_arrs "${IACT_COL_PREFS[0]}" ) )
+                list_vals=( $( split_yad_arrs "${IACT_COL_PREFS[@]:1}" ) )
+                ;;
+            1|252) break ;;
+        esac
+    done
+}
+
+## Dialog #5: Set default field labels for current table.
+#
+# Tables with few fields can use a form, but longer lists require
+# a scrolling list with which to set default column names.
+show_default_column_labels_dialog()
+{
+    local -i fcount=$( get_fields_count )
+    if [ "$fcount" -lt 15 ]; then
+        start_default_columns_array_form_dialog "labels"
+    else
+        start_default_columns_array_list_dialog "labels"
+    fi
+}
+
+## Dialog #6: Set default field labels for current table.
+#
+# Tables with few fields can use a form, but longer lists require
+# a scrolling list with which to set default column names.
+show_default_column_slinks_dialog()
+{
+    local -i fcount=$( get_fields_count )
+    if [ "$fcount" -lt 15 ]; then
+        start_default_columns_array_form_dialog "slinks"
+    else
+        start_default_columns_array_list_dialog "slinks"
+    fi
+}
+
+# String variables to be used as text options for
+# function start_default_columns_array_form_dialog()
+declare GSF_DIALOG_TEXT_DEFAULT_LABELS="\
+<b>Setting Default Field Labels</b>\n\n Use this \
+dialog to set user-friendly labels for fields that \
+will used when presenting forms and tables."
+declare GSF_DIALOG_TEXT_SESSION_LINKS="\
+<b>Setting Session Links</b>\n\nUse this dialog to \
+establish the relationship between the fields in \
+the table with session variables."
+
+# Helper function for Dialogs #5 and #6 (using a form display)
+start_default_columns_array_form_dialog()
+{
+    local atype="$1"
+    local txt
+
+    if [ $atype = 'slinks' ]; then
+        txt="${GSF_DIALOG_TEXT_SESSION_LINKS}"
+    else
+        txt="${GSF_DIALOG_TEXT_DEFAULT_LABELS}"
+    fi
+
+    local -a cmd
+    cmd=( "${YAD_COMMON_ARGS[@]}"
+          --text "$txt"
+          --always-print-result
+          --form
+        )
+
+    local rowstr
+    local -a row arr_data
+
+    # Add list rows
+    local -i ndx="${#cmd[@]}"
+    local IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "$rowstr") )
+        cmd[ $(( ndx++ )) ]="--field"
+        cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}:"
+    done
+
+    if [ ${atype} = "labels" ]; then
+        cmd=( "${cmd[@]}" "${GSF_FIELD_LABELS[@]}" )
+    elif  [ ${atype} = "slinks" ]; then
+        cmd=( "${cmd[@]}" "${GSF_FIELD_SLINKS[@]}" )
+    fi
+
+    local -i exval
+    local result
+    result=$( yad "${cmd[@]}" )
+    exval=$?
+
+    if [ $exval -eq 0 ]; then
+        IFS="${YSEP}"
+        if [ ${atype} = "labels" ]; then
+            GSF_FIELD_LABELS=( $( echo "$result" ) )
+        elif  [ ${atype} = "slinks" ]; then
+            GSF_FIELD_SLINKS=( $( echo "$result" ) )
+        fi
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo "yad failed:" >&2
+        printf "'%s'\n" "${cmd[@]}" >&2
+        return 1
+    else
+        return 0
+    fi
+}
+
+# Helper function for Dialogs #5 and #6 (using a list display)
+start_default_columns_array_list_dialog()
+{
+    local atype="$1"
+
+    local -a cmd
+
+    cmd=( "${YAD_COMMON_ARGS[@]}"
+          --list
+          --always-print-result
+          --print-all
+          --editable
+          --editable-cols 2
+          --column "Column":TEXT
+          --column "Label":TEXT
+        )
+
+    local rowstr
+    local -a row arr_data
+
+    # Add list rows
+    local -i ndx="${#cmd[@]}"
+    local -i vndx=0
+    local IFS="${FSEP}"
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "$rowstr") )
+        cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}"
+        if [ ${atype} = "labels" ]; then
+            cmd[ $(( ndx++ )) ]="${GSF_FIELD_LABELS[$(( vndx++ ))]}"
+        elif  [ ${atype} = "slinks" ]; then
+            cmd[ $(( ndx++ )) ]="${GSF_FIELD_SLINKS[$(( vndx++ ))]}"
+        fi
+    done
+
+    local result
+    local -i exval
+    result=$( yad "${cmd[@]}" )
+    exval=$?
+    if [ $exval -eq 0 ]; then
+        if [ ${atype} = "labels" ]; then
+            GSF_FIELD_LABELS=( $( array_str_from_list_result 1 "$result" ) )
+        elif  [ ${atype} = "slinks" ]; then
+            GSF_FIELD_SLINKS=( $( array_str_from_list_result 1 "$result" ) )
+        fi
+    fi
+}
+
+## Dialog #7:
+show_save_files_dialog()
+{
+    local -a cmd
+    cmd=(
+        "${YAD_COMMON_ARGS[@]}"
+        --form
+        --field "Write settings file":CHK "TRUE"
+        --field "GSF file name":SFL "${GF_FILEPATH_GSF}"
+        --field "Write SQL script":CHK "TRUE"
+        --field "SQL file name":SFL "${GF_FILEPATH_SQL}"
+        --field "Write SRM script":CHK "TRUE"
+        --field "SRM file name":SFL "${GF_FILEPATH_SRM}"
+    )
+
+    local result=$( yad "${cmd[@]}" )
+    local -i exval=$?
+
+    if [ $exval -eq 0 ]; then
+        local IFS="${YSEP}"
+        local -i index=0
+        rarr=( $( echo "${result}" ) )
+
+        if [ "${rarr[$index]}" = "TRUE" ]; then
+            save_settings_to_file "${rarr[$index+1]}"
+        fi
+
+        (( index+=2 ))
+
+        if [ "${rarr[$index]}" = "TRUE" ]; then
+            save_sql_to_file "${rarr[$index+1]}"
+        fi
+
+        (( index+=2 ))
+
+        if [ "${rarr[$index]}" = "TRUE" ]; then
+            save_srm_to_file "${rarr[$index+1]}"
+        fi
+    fi
+}
+
+## Dialog #8 Show an SQL or SRM script.
+show_script_dialog()
+{
+    local script="$1"
+    local stype="$2"
+    local -a cmd=(
+        "${YAD_COMMON_ARGS[@]}"
+        --text="${stype} script for table '${GF_TNAME}' of database '${GF_DBNAME}'."
+        --text-info
+        --listen
+    )
+
+    yad "${cmd[@]}" <<< "$script"
+}
+
+
+## Dialog #9 
+show_srm_globals_dialog()
+{
+    local -i exval
+    local result
+    while true; do
+        result=$( yad "${SRM_GLOBALS_DIALOG[@]}" "${GSF_SRM_GLOBALS[@]}" )
+        exval=$?
+        case $exval in
+            0)
+                local IFS="${YSEP}"
+                GSF_SRM_GLOBALS=( $( echo "${result}${YSEP}" ) )
+                break ;;
+            1|252)
+                break ;; # Pressed  Cancel (1) or ESC or window close (252)
+        esac
+    done
+}
+
+
+use_table_info()
+{
+    GF_PROC_ROOT="App_${GF_TNAME}_"
+    collect_column_indexes
+    update_field_names_array
+    prepare_default_IACT_DATA
+    $use_table_info_callback
+}
+
+collect_table_info()
+{
+    local use_table_info_callback="${1:-show_table_preferences_dialog}"
+
+    if ! confirm_dbase_name || ! confirm_table_name ; then
+        echo "SQL Injection test failed.  Attempt to set" >&2
+        echo "Database name = '${GF_DBNAME}', and" >&2
+        echo "Table name = '${GF_TNAME}'" >&2
+        exit 1
+    fi
+
+    query="\
+${COLS_QUERY}
+WHERE TABLE_SCHEMA='${GF_DBNAME}'
+AND TABLE_NAME='${GF_TNAME}'"
+
+    source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
+}
+
+table_field_is_index()
+{
+    local IFS="${FSEP}"
+    local name="$1"
+    local lrowstr
+    local -a row
+
+    for lrowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "${lrowstr}" ) )
+        if [ "${row[$COL_NAME]}" = "$name" -a -n "${row[$COL_PRIKEY]}" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+table_get_primary_key()
+{
+    local rowstr
+    local -a row
+    for rowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "${rowstr}" ) )
+        if [ -n "${row[$COL_PRIKEY]}" ]; then
+            echo "${row[$COL_NAME]}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+
+loop_for_context()
+{
+    local -i do_loop=0
+    local -i do_dbase_loop=$( test -z "$GF_DBNAME"; echo $? )
+
+    local tresult dresult
+    local -i exval
+
+    while [ $do_loop -eq 0 ]; do
+        if [ $do_dbase_loop -eq 0 ]; then
+            show_select_dbase_dialog
+            exval=$?
+            if [ $exval -ne 0 ]; then
+                GF_DBNAME=
+                do_dbase_loop=1
+                do_loop=1
+            fi
+        fi
+
+        while [ -n "$GF_DBNAME" ]; do
+            reset_for_new_table
+            show_select_table_dialog
+            exval=$?
+            if [ $exval -eq 0 ]; then
+                collect_table_info "show_table_preferences_dialog"
+            elif [ $do_dbase_loop -ne 0 ]; then
+                do_loop=1
+                break
+            else
+                break
+            fi
+        done
+    done
+}
+
+
+parse_args "$@"
+if [ -z "$GF_FILE_ARG" ]; then
+    if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
+        collect_table_info "show_table_preferences_dialog"
+    else
+        loop_for_context
+    fi
+fi
