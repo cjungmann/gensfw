@@ -15,9 +15,9 @@ get_source_path()
     # Must include both the colon AND the space to trim
     # the spaces from the path in the array:
     local IFS=": "
-    local -a arr=( $( whereis gensfw2 ) )
+    local -a arr=( $( whereis gensfw ) )
     zpath=$( readlink "${arr[1]}" )
-    zpath="${zpath%%gensfw2}"
+    zpath="${zpath%%gensfw}"
 }
 
 get_source_path
