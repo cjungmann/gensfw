@@ -192,6 +192,7 @@ declare -a IACT_TOP_PANE=(
     --separator "${YSEP}"
     --field "Interaction":RO
     --field "Include":CHK
+    --field "PageMode":CHK
     )
 
 
@@ -511,10 +512,15 @@ get_iact_meta_vals_str()
         exit $exval
     fi
 
-    local -a savedvals
+    local -a savedvals metavals
+    local -i metacount
     local IFS="${FSEP}"
     savedvals=( $( echo "$metastr" ) )
-    echo "${itype}${YSEP}${savedvals[0]}"
+    metacount="${#savedvals[@]}-1"
+    metavals=( "${itype}" "${savedvals[@]:0:$metacount}" )
+
+    IFS="${YSEP}"
+    echo "${metavals[*]}"
 }
 
 make_iact_default_data_str()
@@ -594,10 +600,18 @@ prepare_default_IACT_DATA()
 {
     IACT_DATA=()
     local name result
+    local include="TRUE"
+    local pagemode="FALSE"
 
     for name in "${IACT_NAMES[@]}"; do
+        if [ $name = "List" ]; then
+            pagemode="TRUE"
+        else
+            pagemode="FALSE"
+        fi
+
         result=$( make_iact_default_data_str "$name" )
-        IACT_DATA[$name]="TRUE${FSEP}${result}"
+        IACT_DATA[$name]="${include}${FSEP}${pagemode}${FSEP}${result}"
     done
 }
 
