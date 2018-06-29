@@ -7,6 +7,10 @@ save_srm_to_file()
     srto()
     {
         if include_current_iact_record; then
+            # Simulate per-iact environment for this iact:
+            local IFS="${YSEP}"
+            local meta_vals=( $( get_iact_meta_vals_str "${IACT_NAME}" ) )
+
             echo >> $filepath
             gsf_write_script_srm >> $filepath
         fi
@@ -250,8 +254,8 @@ gsf_srm_append_metadata_to_cmds()
         echo -n "${el}${LSEP}"
     done
 
-    if [ "${meta_vals[2]}" = "TRUE" ]; then
-        echo "PageMode${LSEP}true${LSEP}"
+    if [ "${meta_vals[2]}" = "TRUE" ]; then 
+        echo "siblings${LSEP}\$autoload_page${LSEP}"
     fi
 }
  
