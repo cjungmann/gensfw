@@ -19,8 +19,6 @@ save_settings_to_file()
     local -a settings
     local settings_str=$( get_saved_settings_string )
 
-    settings=( $( get_saved_settings_string ) )
-
     IFS="${FSEP}"
     local -a filearr
     filearr=(
@@ -30,7 +28,6 @@ save_settings_to_file()
         "${GSF_FIELD_SLINKS[*]}${FSEP}"
         "${GSF_SRM_GLOBALS[*]}${FSEP}"
         "${settings_str}"
-        # "${settings[@]}"
     )
 
     IFS="${RSEP}"
