@@ -241,6 +241,20 @@ gsf_write_script_srm()
     fi
 }
 
+# Add instructions according to the interaction meta settings.
+# 0:name, 1:include, 2:pagemode
+gsf_srm_append_metadata_to_cmds()
+{
+    local LSEP="${IFS:0:1}"
+    for el in "${@}"; do
+        echo -n "${el}${LSEP}"
+    done
+
+    if [ "${meta_vals[2]}" = "TRUE" ]; then
+        echo "PageMode${LSEP}true${LSEP}"
+    fi
+}
+ 
 gsf_srm_mode_List()
 {
     local -a cmds=(
@@ -253,6 +267,7 @@ gsf_srm_mode_List()
     fi
 
     echo "list"
+    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${cmds[@]}"
 
     if gsf_IACT_included "Add"; then
@@ -307,6 +322,7 @@ gsf_srm_mode_Add()
 
     # Form response mode:
     echo "add"
+    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${add_cmds[@]}"
     gsf_write_schema 1
     echo
@@ -340,6 +356,7 @@ gsf_srm_mode_Update()
 
     # Write out the response mode "edit"
     echo "edit"
+    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${cmds[@]}"
 
     gsf_write_schema 1
@@ -364,6 +381,7 @@ gsf_srm_mode_Delete()
         procedure "${GF_PROC_ROOT}Delete"
     )
     echo "delete"
+    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${cmds[@]}"
 }
 
