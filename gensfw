@@ -168,6 +168,7 @@ declare -a IACT_TYPES_LIST=(
     --text "Click on an interaction type to set column preferences."
     --list
     --separator "${YSEP}"
+    --column "Included":IMG
     --column "Interaction Type":TEXT
 )
 
@@ -667,6 +668,7 @@ make_iact_choices_string()
     local iact_name
     local iact_incl
     local -a iact_frows
+    local meta_str
 
     # First split to rows:
     IFS=$'\n'
@@ -675,12 +677,11 @@ make_iact_choices_string()
     for line in "${lines[@]}"; do
         IFS="${YSEP}"
         row=( $( echo "${line}" ) )
-        if [ "${#row[@]}" -lt 4 ]; then
-            iact_name="${row[0]}"
-            iact_incl="${row[1]}"
+        if [ "${row[0]}" = "${IACT_NAME}" ]; then
+            IFS="${FSEP}"
+            meta_str="${row[*]:1}"
         else
             IFS="${YSEP}"
-
             # Add extra YSEP in case of empty final field:
             rowstr="${row[*]}${YSEP}"
 
@@ -690,7 +691,7 @@ make_iact_choices_string()
     done
 
     IFS="${FSEP}"
-    echo -n "${iact_incl}${FSEP}${iact_frows[*]}"
+    echo -n "${meta_str}${FSEP}${iact_frows[*]}"
 }
 
 # save_iact_choices():
@@ -906,6 +907,8 @@ show_table_preferences_dialog()
     local result
     local -i exval
     local -i PLUG_NUM=$(( G_PLUG_NUM++ ))
+    local -a row
+    local IFS="${YSEP}"
 
     if [ -z "${GF_FILE_ARG}" ]; then
         set_file_path_defaults "${PWD}/${GF_TNAME}.gsf"
@@ -916,14 +919,35 @@ show_table_preferences_dialog()
             build_table_preferences_dialog
             )
         exval=$?
+
         case $exval in
-            0) show_interaction_preferences_dialog "$result" ;; # Pressed OK
+            # Two-column lines means result will look like &List&,
+            # resulting in a two-element array with the import value
+            # at offset 1
+            0) row=( $( echo "$result" ) )
+               show_interaction_preferences_dialog "${row[1]}"
+               ;;
             1|252) break ;; # Pressed  Cancel (1) or ESC or window close (252)
             3) show_save_files_dialog ;;
             5) show_default_column_slinks_dialog ;;
             7) show_default_column_labels_dialog ;;
             9) show_srm_globals_dialog ;;
         esac
+    done
+}
+
+get_table_prefs_data_str()
+{
+    local name
+    local LSEP="${IFS:0:1}"
+    for name in "${IACT_NAMES[@]}"; do
+        if gsf_IACT_included "${name}"; then
+            echo -n "gtk-yes${LSEP}"
+        else
+            echo -n "gtk-no${LSEP}"
+        fi
+        
+        echo -n "${name}${LSEP}"
     done
 }
 
@@ -945,6 +969,9 @@ build_table_preferences_dialog()
                "Settings File" "${GF_FILEPATH_GSF}"
             )
     fi
+
+    local -a row_data
+    row_data=( $( get_table_prefs_data_str ) )
     
     local txt=$( markup_tablify "${meta[@]}" )
 
@@ -953,7 +980,8 @@ build_table_preferences_dialog()
             --list
             "${IACT_TYPES_LIST[@]}"
             --text "${txt}"
-            "${IACT_NAMES[@]}"
+            "${row_data[@]}"
+            # "${IACT_NAMES[@]}"
             --button "Set SRM _Globals":9
             --button "Set L_abels":7
             --button "Set L_inks":5
@@ -961,7 +989,6 @@ build_table_preferences_dialog()
             --button "Cancel":1
             --button "_OK":0
     )
-
     yad "${cmd[@]}"
 }
 
@@ -969,28 +996,10 @@ build_table_preferences_dialog()
 # Dialog #4: Set field usage and display flags for an interaction type
 show_interaction_preferences_dialog()
 {
-    # Break result into lines for each pane:
-    local IFS=$'\n'
-    local -a lines=( $( echo "$1" ) )
-
-    # Break each line into an array.  The array with
-    # a single element will be the chosen interaction.
-
-    # IFS for parsing YAD value from each line
-    IFS="${YSEP}"
-
-    local -a row
-    local line iact
-    for line in "${lines[@]}"; do
-        row=( $( echo "$line" ) )
-        if [ "${#row[@]}" -eq 1 ]; then
-            iact="${row[0]}"
-            break
-        fi
-    done
+    local name=$1
     
-    local meta_vals_str=$( get_iact_meta_vals_str "${iact}" )
-    local list_vals_str=$( get_iact_list_data_str "${iact}" )
+    local meta_vals_str=$( get_iact_meta_vals_str "${name}" )
+    local list_vals_str=$( get_iact_list_data_str "${name}" )
 
     # IFS for parsing our stuff:
     IFS="${YSEP}"
@@ -1055,7 +1064,7 @@ show_interaction_preferences_dialog()
                 fi
 
                 # Update array for re-initialize the dialog:
-                meta_vals=( "${iact}" $( split_yad_arrs "${IACT_COL_PREFS[0]}" ) )
+                meta_vals=( "${name}" $( split_yad_arrs "${IACT_COL_PREFS[0]}" ) )
                 list_vals=( $( split_yad_arrs "${IACT_COL_PREFS[@]:1}" ) )
                 ;;
             1|252) break ;;
