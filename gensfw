@@ -592,6 +592,7 @@ make_iact_default_data_str()
         # Blank element for the label
         echo -n "${YSEP}"
         echo -n "${YSEP}"
+        echo -n "${FSEP}"
 
     done
 }
