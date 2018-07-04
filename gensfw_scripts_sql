@@ -7,7 +7,7 @@ save_sql_to_file()
     sqto()
     {
         if include_current_iact_record; then
-            gsf_write_script_sql >> $filepath
+            gsf_write_script_sql ${IACT_NAME} >> $filepath
             echo >> $filepath
         fi
     }
@@ -23,15 +23,16 @@ save_sql_to_file()
 
 gsf_write_script_sql()
 {
-    if [ "${IACT_NAME}" = "Import" ]; then
+    local iact_name="$1"
+    if [ "${iact_name}" = "Import" ]; then
         gsf_write_script_sql_import
-    elif [ "${IACT_NAME}" = "Update" ]; then
+    elif [ "${iact_name}" = "Update" ]; then
         gsf_write_script_sql_update
     else
         gsf_script_intro_sql
 
         echo "BEGIN"
-        gsf_sql_proc_body_${IACT_NAME}
+        gsf_sql_proc_body_${iact_name}
         echo "END  \$\$"
     fi
 }

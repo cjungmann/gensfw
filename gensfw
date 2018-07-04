@@ -349,7 +349,7 @@ gsf_IACT_included()
     local -i included=1
     gIi_callback()
     {
-        if [ "${CB_EL_COUNT}" -eq 1 ]; then
+        if [ "${CB_EL_COUNT}" -lt 3 ]; then
             if [ "${CALLBACK_ROW[0]}" = "TRUE" ]; then
                 included=0
             fi
@@ -499,29 +499,78 @@ update_field_names_array()
     done
 }
 
-get_iact_meta_vals_str()
+get_iact_meta_vals_str_from_IACT_DATA()
 {
     local -i exval
     local itype="$1"
     local metastr
 
-    metastr="${IACT_DATA[$itype]}"
-
-    exval=$?
-    if [ $exval -ne 0 ]; then
-        echo "Error retrieving data for the '${itype}' interaction." >&2
-        exit $exval
-    fi
-
-    local -a savedvals metavals
-    local -i metacount
+    local -a lines
     local IFS="${FSEP}"
-    savedvals=( $( echo "$metastr" ) )
-    metacount="${#savedvals[@]}-1"
-    metavals=( "${itype}" "${savedvals[@]:0:$metacount}" )
+    lines=( $( echo "${IACT_DATA[$itype]}" ) )
+    echo "${itype}${YSEP}${lines[0]}"
+}
 
+get_iact_meta_vals_str_from_result()
+{
+    local -a arr_cur lines
+    local LSEP="${IFS:0:1}"
+    local IFS=$'\n'
+    lines=( $( echo "$1" ) )
+
+    local line
     IFS="${YSEP}"
-    echo "${metavals[*]}"
+    for line in "${lines[@]}"; do
+        arr_cur=( $( echo "$line" ) )
+        if [ "${#arr_cur[@]}" -lt 4 ]; then
+            break
+        fi
+    done
+
+    IFS="${LSEP}"
+    echo "${arr_cur[*]}"
+}
+
+get_iact_list_data_str_from_IACT_DATA()
+{
+    local -i exval
+    local itype="$1"
+    local metastr
+
+    local -a lines line
+    local IFS="${FSEP}"
+    lines=( $( echo "${IACT_DATA[$itype]}" ) )
+    for line in "${lines[@]:1}"; do
+        echo -n "$line"
+    done
+}
+
+get_iact_list_data_str_from_result()
+{
+    local name field
+    local -a arr_cur lines
+    local LSEP="${IFS:0:1}"
+    local IFS=$'\n'
+    lines=( $( echo "${1}" ) )
+
+    local line
+    IFS="${YSEP}"
+    for line in "${lines[@]}"; do
+        arr_cur=( $( echo "$line" ) )
+        if [ "${#arr_cur[@]}" -lt 4 ]; then
+            name="${arr_cur[0]}"
+            break
+        fi
+    done
+
+    for line in "${lines[@]}"; do
+        IFS="${YSEP}"
+        arr_cur=( $( echo "$line" ) )
+        if [ "${#arr_cur[@]}" -gt 3 ]; then
+            IFS="${LSEP}"
+            echo -n "${arr_cur[*]}${IFS}"
+        fi
+    done
 }
 
 make_iact_default_data_str()
@@ -613,72 +662,35 @@ prepare_default_IACT_DATA()
         fi
 
         result=$( make_iact_default_data_str "$name" )
-        IACT_DATA[$name]="${include}${FSEP}${pagemode}${FSEP}${result}"
+        IACT_DATA[$name]="${include}${YSEP}${pagemode}${YSEP}${FSEP}${result}"
     done
-}
-
-
-# get_iact_list_data_str()
-# This function unpacks the data that was compiled by
-# save_iact_choices().  If no previous data is available,
-# default choices will be used, according to the interaction
-# type.
-get_iact_list_data_str()
-{
-    local itype="$1"
-    local IFS
-
-    # First check if the interaction type has a saved value:
-    local -i exval
-    local -a fields
-    local -a vals ovals
-    local valstr="${IACT_DATA[$itype]}"
-    exval=$?
-    if [ $exval -eq 0 ]; then
-        IFS="${FSEP}"
-        fields=( $( echo "${valstr}" ) )
-        exval=$?
-        if [ $exval -eq 0 -a "${#fields[@]}" -gt 1 ]; then
-            for fieldstr in "${fields[@]}"; do
-                IFS="${YSEP}"
-                vals=( $( echo "${fieldstr}" ) )
-                if [ ${#vals[@]} -gt 1 ]; then
-                    echo -n "${vals[*]}${YSEP}"
-                fi
-            done
-            return 0
-        fi
-    fi
-
-    # If nothing found in the file, generate default vals:
-    echo "No file source, creating a default for '${itype}'" >&2
-    make_iact_default_data_str "$itype"
-    
 }
 
 # make_iact_choices_string()
 # Converts result of dialog #4 to a string with table fields
 # separated by FSEP and the field preferences separated by YSEP.
+# $1 should be the IACT_NAME
+# $2 should be a result string from Dialog #4
 make_iact_choices_string()
 {
-    local IFS
+    # Parse parameters:
+    local iact_name="$1"
+    local IFS=$'\n'
+    local -a lines
+    lines=( $(echo "$2" ) )
+
     local line
-    local -a lines choices row
+    local -a choices row iact_frows
 
     # These are used to set and build a record value:
-    local iact_name
     local iact_incl
-    local -a iact_frows
     local meta_str
 
-    # First split to rows:
-    IFS=$'\n'
-    lines=( $(echo "$1" ) )
 
     for line in "${lines[@]}"; do
         IFS="${YSEP}"
         row=( $( echo "${line}" ) )
-        if [ "${row[0]}" = "${IACT_NAME}" ]; then
+        if [ "${row[0]}" = "${iact_name}" ]; then
             IFS="${FSEP}"
             meta_str="${row[*]:1}"
         else
@@ -702,10 +714,13 @@ save_iact_choices()
 {
     local -i exval
     local choices
-    choices_str=$( make_iact_choices_string "$1" )
+    local iact_name="$1"
+    local result="$2"
+    choices_str=$( make_iact_choices_string "$iact_name" "$result" )
+
     exval=$?
     if [ $exval -eq 0 ]; then
-        IACT_DATA[$IACT_NAME]="$choices_str"
+        IACT_DATA[$iact_name]="$choices_str"
     fi
 }
 
@@ -815,24 +830,6 @@ array_str_from_list_result()
     done
 }
 
-# split_yad_arrs()
-# Used in dialog #4 (show_interaction_preferences_dialog()) to split
-# an array of YAD arrays into a single array.  Use the output of to
-# create a new array for submission to YAD.
-split_yad_arrs()
-{
-    local LSEP="${IFS:0:1}"
-    local IFS="${YSEP}"
-    local str el
-    local -a row
-    for str in "$@"; do
-        row=( $( echo "$str" ) )
-        for el in "${row[@]}"; do
-            echo -n "$el${LSEP}"
-        done
-    done
-}
-
 # Uses first parameter as subject value, then puts the rest
 # of the parameters into a list element.
 pick_from_array()
@@ -925,9 +922,11 @@ show_table_preferences_dialog()
             # Two-column lines means result will look like &List&,
             # resulting in a two-element array with the import value
             # at offset 1
-            0) row=( $( echo "$result" ) )
-               show_interaction_preferences_dialog "${row[1]}"
-               ;;
+            0)
+                IFS="${YSEP}"
+                row=( $( echo "$result" ) )
+                show_interaction_preferences_dialog "${row[1]}"
+                ;;
             1|252) break ;; # Pressed  Cancel (1) or ESC or window close (252)
             3) show_save_files_dialog ;;
             5) show_default_column_slinks_dialog ;;
@@ -937,6 +936,7 @@ show_table_preferences_dialog()
     done
 }
 
+# Dialog #3 build string for data array
 get_table_prefs_data_str()
 {
     local name
@@ -952,7 +952,7 @@ get_table_prefs_data_str()
     done
 }
 
-# Dialog 3 complete dialog
+# Dialog #3 complete dialog
 build_table_preferences_dialog()
 {
     local -i fcount=$( get_fields_count )
@@ -998,16 +998,17 @@ build_table_preferences_dialog()
 show_interaction_preferences_dialog()
 {
     local name=$1
-    
-    local meta_vals_str=$( get_iact_meta_vals_str "${name}" )
-    local list_vals_str=$( get_iact_list_data_str "${name}" )
+
+    # echo -n "meta_vals_str = " >&2
+    # get_iact_meta_vals_str_from_IACT_DATA "${name}" >&2
+    # echo -n "list_vals_str = " >&2
+    # get_iact_list_data_str_from_IACT_DATA "${name}" >&2
 
     # IFS for parsing our stuff:
     IFS="${YSEP}"
-    local -a meta_vals=( $( echo "${meta_vals_str}" ) )
-    local -a list_vals=( $( echo "${list_vals_str}" ) )
+    local -a meta_vals=( $( get_iact_meta_vals_str_from_IACT_DATA "${name}" ) )
+    local -a list_vals=( $( get_iact_list_data_str_from_IACT_DATA "${name}" ) )
 
-    local IACT_NAME="${meta_vals[0]}"
 
     local result
     local -i exval
@@ -1041,7 +1042,7 @@ show_interaction_preferences_dialog()
         exval=$?
 
         case $exval in
-            0) save_iact_choices "${result}"; break ;;
+            0) save_iact_choices "$name" "${result}"; break ;;
             2|4)
                 local cmd_to_call
                 local script_type
@@ -1052,21 +1053,23 @@ show_interaction_preferences_dialog()
                     cmd_to_call="gsf_write_script_srm"
                     script_type=SRM
                 fi
+
                 IFS="${FSEP}"
                 local PROC_ROOT="App_${GF_TNAME}_"
+
                 local -a IACT_COL_PREFS
+                IACT_COL_PREFS=( $( make_iact_choices_string "${name}" "${result}" ) )
 
-                IACT_COL_PREFS=( $( make_iact_choices_string "${result}" ) )
-
-                script_text=$( $cmd_to_call "${IACT_NAME}" )
+                script_text=$( $cmd_to_call "${name}" )
                 if [ $? -eq 0 ]; then
                     # Show dialog #7:
                     show_script_dialog "${script_text}" "${script_type}";
                 fi
 
                 # Update array for re-initialize the dialog:
-                meta_vals=( "${name}" $( split_yad_arrs "${IACT_COL_PREFS[0]}" ) )
-                list_vals=( $( split_yad_arrs "${IACT_COL_PREFS[@]:1}" ) )
+                IFS="${FSEP}"
+                meta_vals=( $( get_iact_meta_vals_str_from_result "${result}" ) )
+                list_vals=( $( get_iact_list_data_str_from_result "${result}" ) )
                 ;;
             1|252) break ;;
         esac

@@ -9,10 +9,10 @@ save_srm_to_file()
         if include_current_iact_record; then
             # Simulate per-iact environment for this iact:
             local IFS="${YSEP}"
-            local meta_vals=( $( get_iact_meta_vals_str "${IACT_NAME}" ) )
+            local meta_vals=( $( get_iact_meta_vals_str_from_IACT_DATA "${IACT_NAME}" ) )
 
             echo >> $filepath
-            gsf_write_script_srm >> $filepath
+            gsf_write_script_srm ${IACT_NAME} >> $filepath
         fi
     }
 
@@ -154,8 +154,10 @@ gsf_write_schema_field()
         props=( "${props[@]}" hidden true )
     fi
 
-    if [[ " ENUM SET " =~ " $ctype " ]]; then
-        props=( "${props[@]}" "${ctype,,?}" "${GF_TNAME}:${name}" )
+    if [[ " Add Edit " =~ " ${IACT_NAME} " ]]; then
+        if [[ " ENUM SET " =~ " $ctype " ]]; then
+            props=( "${props[@]}" "${ctype,,?}" "${GF_TNAME}:${name}" )
+        fi
     fi
 
     if [ "${#props[@]}" -gt 0 ]; then
@@ -236,12 +238,11 @@ gsf_write_schema()
 # Entry point for printing one of the interaction types:
 gsf_write_script_srm()
 {
-    if [ "${IACT_NAME}" = "Import" ]; then
+    local iact_name="$1"
+    if [ "${iact_name}" = "Import" ]; then
         gsf_write_script_srm_import
     else
-        # gsf_script_intro_srm
-
-        gsf_srm_mode_${IACT_NAME}
+        gsf_srm_mode_$iact_name
     fi
 }
 
