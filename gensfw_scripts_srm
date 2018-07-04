@@ -133,9 +133,10 @@ gsf_get_delete_strings_for_edit()
 
 gsf_write_schema_field()
 {
+    local iact_name="$1"
     local -a props
-    local -i gwsf_level=$1
-    local callback=$2
+    local -i gwsf_level=$2
+    local callback=$3
     local name=$( CB_ROW_NAME )
     local ctype=$( CB_ROW_TYPE )
 
@@ -154,7 +155,7 @@ gsf_write_schema_field()
         props=( "${props[@]}" hidden true )
     fi
 
-    if [[ " Add Edit " =~ " ${IACT_NAME} " ]]; then
+    if [[ " Add Edit " =~ " ${iact_name} " ]]; then
         if [[ " ENUM SET " =~ " $ctype " ]]; then
             props=( "${props[@]}" "${ctype,,?}" "${GF_TNAME}:${name}" )
         fi
@@ -194,11 +195,12 @@ gsf_write_schema_delete_button()
 # Prints a schema if there are any items to 
 gsf_write_schema()
 {
-    local -i schema_level=${1: -1}
+    local iact_name="$1"
+    local -i schema_level=${2: -1}
     local -i field_level=$(( schema_level+1 ))
     local ltest
 
-    if [[ " Add Import " =~ " ${IACT_NAME} " ]]; then
+    if [[ " Add Import " =~ " ${iact_name} " ]]; then
         ltest=CB_ROW_IS_PARAM
     else
         ltest=CB_ROW_IS_RESULT
@@ -219,13 +221,13 @@ gsf_write_schema()
     {
         # ltest is a function name whose exit value we check:
         if ${ltest}; then
-            gsf_write_schema_field $field_level "gws_start_schema"
+            gsf_write_schema_field $iact_name $field_level "gws_start_schema"
         fi
     }
 
     # For Update/(Edit) type only, when a Delete interaction is
     # defined, add a delete button to the schema.
-    if [ "${IACT_NAME}" = "Update" ]; then
+    if [ "${iact_name}" = "Update" ]; then
         if gsf_IACT_included "Delete"; then
             gws_start_schema
             gsf_write_schema_delete_button 2
@@ -305,7 +307,7 @@ gsf_srm_mode_List()
         tabulate_array 2 "${a_button[@]}"
     fi
 
-    gsf_write_schema 1
+    gsf_write_schema "List" 1
 }
 
 # This is a two part action, so there are two modes,
@@ -329,7 +331,7 @@ gsf_srm_mode_Add()
     echo "add"
     cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${add_cmds[@]}"
-    gsf_write_schema 1
+    gsf_write_schema "Add" 1
     echo
 
     # Save form response mode:
@@ -364,7 +366,7 @@ gsf_srm_mode_Update()
     cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${cmds[@]}"
 
-    gsf_write_schema 1
+    gsf_write_schema "Edit" 1
     echo
 
     # Write out the response mode "edit_submit"
@@ -478,7 +480,7 @@ gsf_srm_mode_review()
 
     echo "review"
     tabulate_array 1 "${cmds[@]}"
-    gsf_write_schema 1
+    gsf_write_schema "Import" 1
     echo "${gsf_script_indent}button"
     tabulate_array 2 "${b_accept[@]}"
     echo "${gsf_script_indent}button"
