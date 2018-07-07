@@ -257,8 +257,8 @@ gsf_srm_append_metadata_to_cmds()
         echo -n "${el}${LSEP}"
     done
 
-    if [ "${meta_vals[2]}" = "TRUE" ]; then 
-        echo "siblings${LSEP}\$autoload_page${LSEP}"
+    if [ -n "${meta_vals[2]}" ]; then
+        echo "autoload_tag${LSEP}${meta_vals[2]}${LSEP}"
     fi
 }
  
