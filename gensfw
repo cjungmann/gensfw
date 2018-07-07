@@ -193,7 +193,7 @@ declare -a IACT_TOP_PANE=(
     --separator "${YSEP}"
     --field "Interaction":RO
     --field "Include":CHK
-    --field "Mode Tag"
+    --field "Autoload Tag"
     )
 
 
@@ -652,20 +652,20 @@ make_iact_default_data_str()
 prepare_default_IACT_DATA()
 {
     IACT_DATA=()
-    local name result tag
+    local name result al_tag
     local include="TRUE"
 
     for name in "${IACT_NAMES[@]}"; do
         if [ $name = "List" ]; then
-            tag="Page"
+            al_tag="page"
         elif [[ " Add Read Update " =~ " ${name} " ]]; then
-            tag="Form"
+            al_tag="dialog"
         else
-            tag=""
+            al_tag=""
         fi
 
         result=$( make_iact_default_data_str "$name" )
-        IACT_DATA[$name]="${include}${YSEP}${tag}${YSEP}${FSEP}${result}"
+        IACT_DATA[$name]="${include}${YSEP}${al_tag}${YSEP}${FSEP}${result}"
     done
 }
 
