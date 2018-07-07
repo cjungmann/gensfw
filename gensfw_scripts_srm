@@ -227,7 +227,7 @@ gsf_write_schema()
 
     # For Update/(Edit) type only, when a Delete interaction is
     # defined, add a delete button to the schema.
-    if [ "${iact_name}" = "Update" ]; then
+    if [ "${iact_name}" = "Edit" ]; then
         if gsf_IACT_included "Delete"; then
             gws_start_schema
             gsf_write_schema_delete_button 2
