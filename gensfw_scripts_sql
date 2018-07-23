@@ -238,7 +238,7 @@ gsf_script_sql_proc_intro()
 
 gsf_script_intro_sql()
 {
-    gsf_script_sql_proc_intro "${GF_PROC_ROOT}${IACT_NAME}" "param"
+    gsf_script_sql_proc_intro "${GF_PROC_ROOT}${iact_name}" "param"
 
     # local dropstr="DROP PROCEDURE IF EXISTS ${GF_PROC_ROOT}${IACT_NAME} \$\$"
     # local str_create_proc="CREATE PROCEDURE ${GF_PROC_ROOT}${IACT_NAME}("
