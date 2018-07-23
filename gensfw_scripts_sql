@@ -286,10 +286,10 @@ gsf_sql_proc_body_List()
                 echo -n "${GSF_AND_LINE}"
             fi
 
-            if table_field_is_index "${fname}"; then
+            if [ $has_slink -eq 0 ]; then
+                echo -n "${prefix}.${fname}=${slink}"
+            elif table_field_is_index "${fname}"; then
                 echo -n "(${fname} IS NULL OR ${prefix}.${fname}=${fname})"
-            elif [ $has_slink -eq 0 ]; then
-                echo -n "{prefix}.${fname}=${slink}"
             else
                 echo -n "${prefix}.${fname}=${fname}"
             fi
