@@ -1,0 +1,234 @@
+\input texinfo
+@setfilename gensfw.info
+@settitle Using gensfw
+
+@dircategory Schema Framework Documents
+@direntry
+* Script Generator: (gensfw.info).    Documentation for @command{gensfw}, a utility for
+                                      generating SQL and SRM scripts for the Schema Framework.
+@end direntry
+
+@copying
+Documentation for the use of @command{gensfw} Script Generator.
+
+Copyright @copyright{} 2018 Charles P Jungmann
+@end copying
+
+@titlepage
+@title Using @command{gensfw} Script Generator
+@author Charles P. Jungmann
+@page
+@insertcopying
+@end titlepage
+
+@ifnottex
+@node Top
+@top Using gensfw
+
+This info manual describes the use of the @command{gensfw} script generator.
+
+@command{gensfw} displays dialogs through which a user can adjust settings
+that are used to generate MySQL and SRM scripts.  Each of the fundamental
+Schema interactions has a @command{gensfw} dialog for customizing that
+particular interaction.
+
+The Schema interactions that @command{gensfw} provides are:
+
+@enumerate
+@item
+@strong{List} for the collection of records in the table.
+@item
+@strong{Add} for adding a record to the table.
+@item
+@strong{Read} for viewing a record.
+@item
+@strong{Update} for changing a record.
+@item
+@strong{Delete} to delete a record.
+@item
+@strong{Import} to import items into the table.
+@item
+@strong{Export} to create a spreadsheet with the table's contents.
+@end enumerate
+
+Note that this info guide is incomplete.  I have created this file
+in order to leave documentation for ambiguous and confusing situations.
+However, developing a product with this tool and with Schema Server is
+a more pressing need than a complete set of documentation.
+
+@end ifnottex
+
+
+@contents
+@menu
+* Introduction::
+* How it Works::              Functional details to affect the utility's usage.
+* Selecting a Table::         Different ways to select a table.
+* Table Interactions Dialog:: The main working dialog from which all options
+                              are available.
+@end menu
+
+@node Introduction
+@chapter Introduction
+
+After selecting a database and table, either interactively or with command
+line parameters, @command{gensfw} queries MySQL for the tables' fields to
+create default 
+
+@node How it Works
+@chapter How it works
+
+I chose to develop this tool using BASH scripting and the @acronym{YAD, Yet Another Dialog}
+commandline dialog utility.  Part of my goal in this project is to
+experiment and learn the strengths and limitations BASH application
+programming.
+
+That said, and despite some weaknesses listed below, the @command{gensfw}
+utility can be a great labor-saving tool for generating MySQL script and
+SRM files.
+
+@itemize @bullet
+@item
+Automatically coordinate data types between procedures and the source
+table.
+@item
+Create MySQL procedure code that conforms to current best practices for
+Schema development.
+@item
+Saves settings to a @acronym{gsf, Generated Schema framework File} file
+to which a user can return to modify settings or to regenerate scripts
+after a change in the table definition.
+
+The @command{gensfw} utility is a BASH script that uses @acronym{YAD, Yet Another Dialog} 
+for the @acronym{UI, User Interface}.  Although @emph{YAD} is far more
+powerful than other commandline dialog utilities, it still is an imperfect
+tool for making a robust application.
+
+@itemize @bullet
+@item
+Some of the dialogs clunky compromises made to enable certain choices to be made.
+@item
+YAD generates several error messages in the console that may distracting.
+@item
+YAD introduces unwelcome vertical space in paned dialogs.
+@end itemize
+
+Despite the drawbacks, @command{gensfw} is useful for creating a large number
+of scripts.  
+   
+@node Selecting a Table
+@chapter Selecting a Table
+
+There are three ways to use a MySQL table to generate Schema scripts:
+
+@enumerate
+@item
+@code{gensfw} alone will first show a list to select a database, then
+another list to select a table.
+@item
+@code{gensfw [database name]} will start at the table list for the named
+database.
+@code{gensfw [database name] [table name]} will begin at the table interaction
+editor with default interaction settings.
+@code{gensfw tablename.gsf} passing the name of a @acronym{gsf, Generated Schema framework File}
+file will also begin at the table interaction, having restored all the
+settings from the previous save.
+@end enumerate
+
+@node Table Interactions Dialog
+@chapter Table Interactions Dialog
+
+The main purpose of this dialog is to prepare settings for interactions.
+The interactions are the standard @acrony{CRUD, Create@,, Read@, Update@, Delete}
+interactions (we call it @emph{Add} instead of @emph{Create}).  List, Import,
+and Export interactions are also provided.
+
+@menu
+* List Interaction::
+* Add Interaction::
+* Read Interaction::
+* Update Interaction::
+* Delete Interaction::
+* Import Interaction::
+* Export Interaction::
+@end menu
+
+The main dialog shows a header with the database and table names, along with
+the number of fields in the selected table.  Below that is a list of 
+interactions that can be selected for editing.  At the bottom is a set of
+buttons that apply to the table globally.
+
+@section Interaction List
+The list of interactions shows a checkmark that signals that the associated
+interaction will be included when the scripts are generated.  By default,
+all interactions are included.
+
+Select an interaction to modify by double-clicking the interaction line
+or by using the arrow keys to select an interaction and pressing next to
+open the highlighted interaction.
+
+There are six buttons at the bottom of the dialog.  They are
+
+@enumerate
+@item
+@code{Set SRM Globals} will set arbitrary global instructions that will
+be included in the SRM file.
+@item
+@code{Set Labels} will open a dialog where the default labels for each
+field can be set.  If set, these values will be written to the SRM file
+as a sharable mode.
+@item
+@code{Set Links} is a dialog where session variables can be associated with
+fields.  The main usage for this is to support multiple accounts, where
+the session variable will be assigned or queried from the MySQL session
+rather than from a GET/POST request.
+@item
+@code{Save Files} is a clunky dialog through which the different file types
+are given names and are selected for output.  By default, the files are
+named after the selected table, and all three files types are generated:
+@enumerate
+@item
+a @emph{gsf} file
+@item
+an @emph{srm} file
+@item
+a @emph{sql} file
+@end enumerate
+@item
+@code{Cancel} returns to the previous screen.  That will be the tables
+screen if the interaction dialog was entered through the table list, or
+simple exit if the table name or @emph{gsf} was specified on the commandline.
+@item
+@code{OK} will open the highlighted interaction.
+@end enumerate
+
+
+
+@node List Interaction
+@chapter List Interaction
+This chapter is incomplete for now.
+
+@node Add Interaction
+@chapter Add Interaction
+This chapter is incomplete for now.
+
+@node Read Interaction
+@chapter Read Interaction
+This chapter is incomplete for now.
+
+@node Update Interaction
+@chapter Update Interaction
+This chapter is incomplete for now.
+
+@node Delete Interaction
+@chapter Delete Interaction
+This chapter is incomplete for now.
+
+@node Import Interaction
+@chapter Import Interaction
+This chapter is incomplete for now.
+
+@node Export Interaction
+@chapter Export Interaction
+This chapter is incomplete for now.
+
