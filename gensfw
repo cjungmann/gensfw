@@ -54,6 +54,7 @@ declare -gi COL_PRECISION
 declare -gi COL_SCALE
 declare -gi COL_MAXLEN
 declare -gi COL_DEFAULT
+declare -gi COL_FORKEY
 
 # The list of available database won't change (unless we change hosts):
 declare -a DBASE_NAMES=( $( mysql -BN -e "show databases" ) ) 
@@ -236,18 +237,27 @@ declare -a SRM_GLOBALS_DIALOG=(
 
 
 declare COLS_QUERY="\
-SELECT COLUMN_NAME,
-       UPPER(DATA_TYPE) AS DATA_TYPE,
-       CHARACTER_MAXIMUM_LENGTH,
-       COLUMN_TYPE,
-       CASE WHEN INSTR(EXTRA,'auto_increment') THEN 'YES' ELSE NULL END AS autoinc,
-       CASE WHEN INSTR(COLUMN_KEY,'PRI') THEN 'YES' ELSE NULL END AS prikey,
-       NULLIF(IS_NULLABLE,'NO') AS nullable,
-       NUMERIC_PRECISION,
-       NUMERIC_SCALE,
-       CHARACTER_MAXIMUM_LENGTH,
-       COLUMN_DEFAULT
-  FROM COLUMNS"
+SELECT c.COLUMN_NAME,
+       UPPER(c.DATA_TYPE) AS DATA_TYPE,
+       c.CHARACTER_MAXIMUM_LENGTH,
+       c.COLUMN_TYPE,
+       CASE WHEN INSTR(c.EXTRA,'auto_increment')  THEN 'YES' ELSE NULL END AS autoinc,
+       CASE WHEN INSTR(c.COLUMN_KEY,'PRI')        THEN 'YES' ELSE NULL END AS prikey,
+       NULLIF(c.IS_NULLABLE,'NO') AS nullable,
+       c.NUMERIC_PRECISION,
+       c.NUMERIC_SCALE,
+       c.CHARACTER_MAXIMUM_LENGTH,
+       c.COLUMN_DEFAULT,
+       CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN 'YES' ELSE NULL END AS forkey
+  FROM COLUMNS c
+       LEFT JOIN KEY_COLUMN_USAGE kcu
+             ON c.TABLE_NAME=kcu.TABLE_NAME
+                AND c.TABLE_SCHEMA=kcu.REFERENCED_TABLE_SCHEMA
+                AND c.COLUMN_NAME=kcu.COLUMN_NAME
+       LEFT JOIN TABLE_CONSTRAINTS tc
+             ON kcu.CONSTRAINT_NAME=tc.CONSTRAINT_NAME
+                AND c.TABLE_SCHEMA=tc.CONSTRAINT_SCHEMA
+"
 
 # gsf_callback_iact_records()
 # Scans and expands interaction records into arrays, to
@@ -292,6 +302,7 @@ gsf_callback_prefs_rows()
     local IFS="${YSEP}"
     local -t CALLBACK_ROW
     local rowstr
+
     for rowstr in "${IACT_COL_PREFS[@]}"; do
         CALLBACK_ROW=( $( echo "${rowstr}" ) )
         if [ "${#CALLBACK_ROW[@]}" -gt 2 ]; then
@@ -474,6 +485,7 @@ collect_column_indexes()
     get_index "DATA_TYPE";   COL_TYPE=$ndx
     get_index "COLUMN_TYPE"; COL_COLTYPE=$ndx
     get_index "prikey";      COL_PRIKEY=$ndx
+    get_index "forkey";      COL_FORKEY=$ndx
     get_index "COLUMN_DEFAULT";    COL_DEFAULT=$ndx
     get_index "NUMERIC_PRECISION"; COL_PRECISION=$ndx
     get_index "NUMERIC_SCALE";     COL_SCALE=$ndx
@@ -580,9 +592,9 @@ make_iact_default_data_str()
     local itype="$1"
 
     # If no saved value, return a default string to start with:
-    local IFS rowstr coltype
+    local IFS rowstr coltype slink
     local -a row
-    local -i is_index
+    local -i is_index is_slink
 
     # Reset IFS to parse fields from rowstr from bashmysql:
     IFS="${FSEP}"
@@ -595,6 +607,9 @@ make_iact_default_data_str()
         if [[ $is_index -eq 0 && " Add Import Export " =~ "${itype}" ]]; then
             continue
         fi
+
+        slink=$( GSF_SESSION_LINK_VALUE "${row[COL_NAME]}" )
+        is_slink=$?
 
         # Get data type from DATA_TYPE result, but modify for
         # CHAR and INT types.
@@ -620,7 +635,7 @@ make_iact_default_data_str()
 
         # Param column: always include the primary key, but otherwise
         # FALSE for List, Read, Update, and Delete, TRUE otherwise
-        if [[ $is_index -ne 0 && " List Read Update Delete Export " =~ " ${itype} " ]]; then
+        if [[ ($is_slink -eq 0 || $is_index -ne 0) && " List Read Update Delete Export " =~ " ${itype} " ]]; then
             echo -n "${YSEP}FALSE"
         else
             echo -n "${YSEP}TRUE"
@@ -1327,8 +1342,8 @@ collect_table_info()
 
     query="\
 ${COLS_QUERY}
-WHERE TABLE_SCHEMA='${GF_DBNAME}'
-AND TABLE_NAME='${GF_TNAME}'"
+WHERE c.TABLE_SCHEMA='${GF_DBNAME}'
+AND c.TABLE_NAME='${GF_TNAME}'"
 
     source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
 }
