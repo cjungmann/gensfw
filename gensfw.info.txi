@@ -238,10 +238,32 @@ The interaction editor page has three sections:
 @node Interaction Editor Head
 @subsection Interaction Editor Head
 
-Each interaction page includes two panes, the top of which includes
-per interaction data elements, and the bottom pane has an editable
-table with a line for each table field (omitting some index fields
-for certain interaction types).
+This section has four items:
+
+@table @strong
+@item Identifier
+Read only.  The first line identifies the dialog type and the database and table names.
+
+@item Interaction
+Read only.  The second line shows the interaction type that is being edited.
+
+@item Include Flag
+Checkbox to indicate that this interaction should be included
+when scripts are written.  By default, all interactions are included,
+Unset the checkbox if you don't want this include this interaction,
+especially if the interaction requires customization and you don't
+want the SQL procedure to overwrite the customized procedure.
+
+@item Autoload Tag
+This tag is included with the SRM file and will prompt the
+Schema Framework to autoload a shared mode named @code{autoload_} +
+the autoload tag value.
+
+This value and autoload feature was created to support automatic
+inclusion of a navigation section on the @strong{List} interaction,
+which is usually a page-type view.  However, any tag in this field
+will prompt a search for a shared autoload mode.
+@end table
 
 @node Interaction Editor Field List
 @subsection Interaction Editor Field List
