@@ -311,16 +311,21 @@ gsf_sql_proc_body_Add()
     local -i lambda_count=0
     local fname slink
     local -i has_slink
-    
+
+    is_slink() { [ $has_slink -eq 0 ]; }
 
     lambda_fields()
     {
-        if CB_ROW_IS_PARAM; then
-            local fname=$( CB_ROW_NAME )
+        fname=$( CB_ROW_NAME )
+        slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
+        has_slink="$?"
+
+        if is_slink || CB_ROW_IS_PARAM; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
                 echo -n "${GSF_INSERT_SPACES_LINE}"
             fi
+
             echo -n "${fname}"
         fi
     }
@@ -331,13 +336,14 @@ gsf_sql_proc_body_Add()
         slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
         has_slink="$?"
 
-        if [ $has_slink -eq 0 ] || CB_ROW_IS_PARAM; then
+        if is_slink || CB_ROW_IS_PARAM; then
             local fname=$( CB_ROW_NAME )
+
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
                 echo -n "${GSF_INSERT_SPACES_LINE}"
             fi
-            if [ $has_slink -eq 0 ]; then
+            if is_slink; then
                 echo -n "${slink}"
             else
                 echo -n "${fname}"
@@ -404,35 +410,6 @@ gsf_sql_proc_body_Read()
     echo ";"
 }
 
-gsf_sql_proc_body_Update_Read()
-{
-    local prefix="t"
-    local -i where_count=0
-
-    lambda()
-    {
-        if CB_ROW_IS_PARAM; then
-            # Line-up where parts under the first part:
-            if [ $(( where_count++ )) -gt 0 ]; then
-                echo
-                echo -n "${GSF_AND_LINE}"
-            fi
-
-            local fname=$( CB_ROW_NAME )
-            echo -n "${prefix}.${fname}=${fname}"
-        fi
-    }
-
-    # Build the query/procedure body:
-    echo -n "${GSF_SELECT_LINE}"
-    gsf_add_query_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
-    echo
-    echo "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
-    echo -n "${GSF_WHERE_LINE}"
-    gsf_callback_prefs_rows "lambda"
-    echo ";"
-}
-
 gsf_sql_update_proc_value()
 {
     local slink fname prefix="t"
@@ -493,16 +470,18 @@ gsf_sql_update_proc_value()
 
 gsf_sql_update_proc_update()
 {
-    local fname prefix="t"
-    local -i lambda_count=0
+    local fname slink prefix="t"
+    local -i has_slink lambda_count=0
 
+    is_slink() { [ $has_slink -eq 0 ]; }
+    
     gsupu_set()
     {
         fname=$( CB_ROW_NAME )
         slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
-        local -i has_slink="$?"
+        has_slink="$?"
 
-        if [ $has_slink -ne 0 ] && (! CB_ROW_IS_INDEX) && (CB_ROW_IS_RESULT); then
+        if ! is_slink && ! CB_ROW_IS_INDEX && CB_ROW_IS_RESULT; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${GSF_SELECT_SPACES}"
@@ -517,12 +496,19 @@ gsf_sql_update_proc_update()
         slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
         has_slink="$?"
 
-        if CB_ROW_IS_INDEX -a CB_ROW_IS_PARAM; then
+        if is_slink || ( CB_ROW_IS_INDEX && CB_ROW_IS_PARAM ); then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
                 echo -n "${GSF_AND_LINE}"
             fi
-            echo -n "${prefix}.${fname} = ${fname}"
+
+            echo -n "${prefix}.${fname} = "
+
+            if is_slink; then
+                echo -n "${slink}"
+            else
+                echo -n "${fname}"
+            fi
         fi
     }
 
