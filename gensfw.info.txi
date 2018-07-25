@@ -222,7 +222,113 @@ and Export interactions are also provided.
 @node Interaction Basics
 @section Interaction Basics
 
-Each interaction page includes
+The interaction editor page has three sections:
+
+@menu
+* Interaction Editor Head::        The top section of the editor page contains
+                                   context info and interaction settings.
+
+* Interaction Editor Field List::  This section shows field settings for the
+                                   interaction.
+
+* Interaction Editor Buttons::     Buttons to see script fragment previews and
+                                   to leave the editor.
+@end menu
+
+@node Interaction Editor Head
+@subsection Interaction Editor Head
+
+Each interaction page includes two panes, the top of which includes
+per interaction data elements, and the bottom pane has an editable
+table with a line for each table field (omitting some index fields
+for certain interaction types).
+
+@node Interaction Editor Field List
+@subsection Interaction Editor Field List
+
+@subheading Included Fields
+This section is a list of the table fields that apply to this
+interaction, omitting fields that cannot be used.
+
+An example of an omitted field is an auto-incremented key field
+in an @command{Add} interaction, where the identity value is not
+yet assigned.  It is omitted because there is no way to set it.
+
+@subheading Field Default Settings
+Field flags will be initially set according to interaction type.
+
+For example, @command{Delete} and @command{Read} interactions
+usually only need an identity value to indicate the target record,
+so in those cases, the @strong{Param} flag will be set for the
+identify field and unset for the other fields.
+
+Likewise, the @command{Update} interaction will, by default,
+have all the @strong{Result} flags set in order to include them
+in the output for default values in the update dialog.
+
+Fields that cannot be changed from default values will not be
+included in the list, so if a flag is available, it can be
+changed.
+
+@subheading Field List Columns
+
+The left-most two columns of the field list are read-only. They
+are the column name and data-type.
+
+The remaining five colums can be changed according to need.
+
+@table @strong
+@item Param
+Fields with the column checked will be included in the parameter
+list of the SQL procedure associated with the interaction.
+
+@item Result
+Fields with this column checked will be included in the
+@command{SELECT} clause of main query in the procedure, and
+this will be found in the results of the XML document.
+
+@item Readonly
+Fields with the column checked will add a @code{readOnly} instruction
+for the field in the schema of the SRM file.
+
+@item Hide
+Fields with the column checked will add a @code{hidden} instruction
+for the field in the schema of the SRM file.
+
+@item Label
+The contents of this text column, if set, will add a @code{label}
+instruction for the field name in the schema of the SRM file.
+
+When this value is set, it overrides the global label settings
+and the field name (which is the field label of last resort).
+
+@end table
+
+@node Interaction Editor Buttons
+@subsection Interaction Editor Buttons
+
+Besides the buttons that exit the editor are two preview buttons.
+
+Each shows a fragment of the file that would be created when
+the @key{Save Files} button is pressed on the interaction selection
+dialog.
+
+The previews are made available to confirm the effects of different
+flag settings before committing the changes.  The previews may also
+be used by copying the result to the save buffer in order to copy
+the contents to a custom SQL or SRM file.
+
+@table @key
+@item Show SRM
+This button will show the one or more response modes that will
+be generated for this interaction with the current field settings.
+
+@item Show SQL
+This button will show one or more SQL procedures that will be
+generated to support the interaction according to the @strong{Param}
+and @strong{Result} settings.
+@end table
+
 
 @node List Interaction
 @section List Interaction
@@ -238,7 +344,18 @@ This chapter is incomplete for now.
 
 @node Update Interaction
 @section Update Interaction
-This chapter is incomplete for now.
+
+The @command{Update} interaction is unique in that it requires
+two MySQL procedures, one to get the current values and 
+a second to save new values.
+
+The sense of the @strong{Param} and @strong{Result} flags
+is slightly changed from other interactions.  In fact, the
+@strong{Param} flags indicate which fields will be used
+to select the existing record and the @strong{Result} flags
+are both the result columns from the procedure that returns
+the old values @strong{and} the value parameters for procedure
+that saves the changes.
 
 @node Delete Interaction
 @section Delete Interaction
@@ -246,10 +363,37 @@ This chapter is incomplete for now.
 
 @node Import Interaction
 @section Import Interaction
-This chapter is incomplete for now.
+
+This is the most involved interaction.  The generated SQL
+will create a quarantine table, granting some file privileges
+for the table to the default user.  There are also three
+procedures
+
+The @strong{Param} flags indicate which fields will be included
+in the quarantine table.
+
+@enumerate
+@item
+A review procedure for the user to look at the quarantined data
+to confirm that the columns of the uploaded data were in the
+correct order.
+
+@item
+A procedure to remove the uploaded records from the quarantine
+table.  This procedure is used if the user rejects the uploaded
+data or when the data has been accepted and incorporated.
+
+@item
+The last generated procedure inserts the contents of the
+quarantine table into the target table.
+@end enumerate
+
 
 @node Export Interaction
 @section Export Interaction
-This chapter is incomplete for now.
+
+This is a pretty simple interaction, the @strong{Result} flags
+determine which fields will be included in the exported
+spreadsheet.
 
 @bye
