@@ -49,6 +49,7 @@ declare -gi G_PLUG_NUM=$$ ## Commence plug numbers from process id
 declare -gi COL_NAME
 declare -gi COL_TYPE
 declare -gi COL_COLTYPE
+declare -gi COL_AUTOINC
 declare -gi COL_PRIKEY
 declare -gi COL_PRECISION
 declare -gi COL_SCALE
@@ -456,7 +457,8 @@ CB_ROW_LABEL()
     fi
 }
 
-CB_ROW_IS_INDEX() { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
+CB_ROW_IS_INDEX()   { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
+CB_ROW_IS_AUTOINC() { table_field_is_autoinc "${CALLBACK_ROW[0]}"; return $?; }
 
 # Universal script indentation string
 declare gsf_script_indent="  "
@@ -484,6 +486,7 @@ collect_column_indexes()
     get_index "COLUMN_NAME"; COL_NAME=$ndx
     get_index "DATA_TYPE";   COL_TYPE=$ndx
     get_index "COLUMN_TYPE"; COL_COLTYPE=$ndx
+    get_index "autoinc";     COL_AUTOINC=$ndx
     get_index "prikey";      COL_PRIKEY=$ndx
     get_index "forkey";      COL_FORKEY=$ndx
     get_index "COLUMN_DEFAULT";    COL_DEFAULT=$ndx
@@ -592,29 +595,23 @@ make_iact_default_data_str()
     local itype="$1"
 
     # If no saved value, return a default string to start with:
-    local IFS rowstr coltype slink
+    local IFS rowstr colname coltype
     local -a row
-    local -i is_index is_slink
 
     # Reset IFS to parse fields from rowstr from bashmysql:
     IFS="${FSEP}"
     for rowstr in "${RESULT_ROWS[@]}"; do
         row=( $( echo "$rowstr") )
 
-        is_index=$( [ -n "${row[$COL_PRIKEY]}" ]; echo $? )
+        colname="${row[$COL_NAME]}"
 
-        # Ignore index fields for certain types of interactions
-        if [[ $is_index -eq 0 && " Add Import Export " =~ "${itype}" ]]; then
-            continue
-        fi
+        is_autoinc() { [ -n "${row[$COL_AUTOINC]}" ]; }
+        is_prikey()  { [ -n "${row[$COL_PRIKEY]}" ]; }
+        is_forkey()  { [ -n "${row[$COL_FORKEY]}" ]; }
 
-        slink=$( GSF_SESSION_LINK_VALUE "${row[COL_NAME]}" )
-        is_slink=$?
-
-        # Get data type from DATA_TYPE result, but modify for
-        # CHAR and INT types.
+        # Get data type from DATA_TYPE result:
         coltype="${row[$COL_TYPE]}"
-
+        # CHAR and INT types also need length value:
         if [ "${#coltype}" -ge 4 -a "${coltype: -4}" = "CHAR" ]; then
             coltype="${coltype}(${row[$COL_MAXLEN]})"
         elif [ "${#coltype}" -ge 3 -a "${coltype: -3}" = "INT" ]; then
@@ -623,8 +620,8 @@ make_iact_default_data_str()
             fi
         fi
         
-        # Information/Identification column (name and datatype)
-        echo -n "${row[COL_NAME]}${YSEP}${coltype}"
+        # 'Name' and 'Type' columns:
+        echo -n "${colname}${YSEP}${coltype}"
 
         # The Param and Result columns a flags to include the field
         # in the respective domain.  Fields for which the Param flag
@@ -633,23 +630,28 @@ make_iact_default_data_str()
         # in the results by adding the field to the  SELECT clause
         # of the query.
 
-        # Param column: always include the primary key, but otherwise
-        # FALSE for List, Read, Update, and Delete, TRUE otherwise
-        if [[ ($is_slink -eq 0 || $is_index -ne 0) && " List Read Update Delete Export " =~ " ${itype} " ]]; then
+        # 'Param' column:
+        if is_prikey && is_forkey; then  # primary + foreign key should match session variable:
+            echo -n "${YSEP}FALSE"
+        elif is_prikey && [ $itype = 'Add' ]; then
+            echo -n "${YSEP}FALSE"
+        elif ! is_prikey && [[ " List Read Update Delete Export " =~ " ${itype} " ]]; then
             echo -n "${YSEP}FALSE"
         else
             echo -n "${YSEP}TRUE"
         fi
 
-        # Result column, TRUE for List, Read, otherwise FALSE
-        if [[ " List Read Update Export " =~ " ${itype} " ]]; then
+        # 'Result' column:
+        if is_prikey && is_forkey; then
+            echo -n "${YSEP}FALSE"
+        elif [[ " List Read Update Export " =~ " ${itype} " ]]; then
             echo -n "${YSEP}TRUE"
         else
             echo -n "${YSEP}FALSE"
         fi
 
-        # Readonly and Hide (For index fields)
-        if [ $is_index -eq 0 ]; then
+        # 'Readonly' and 'Hide' (For index fields)
+        if is_autoinc; then
             echo -n "${YSEP}TRUE${YSEP}TRUE"
         else
             echo -n "${YSEP}FALSE${YSEP}FALSE"
@@ -1020,11 +1022,7 @@ build_table_preferences_dialog()
 show_interaction_preferences_dialog()
 {
     local name=$1
-
-    # echo -n "meta_vals_str = " >&2
-    # get_iact_meta_vals_str_from_IACT_DATA "${name}" >&2
-    # echo -n "list_vals_str = " >&2
-    # get_iact_list_data_str_from_IACT_DATA "${name}" >&2
+    local itext="Interaction Editor for ${GF_DBNAME}.${GF_TNAME}"
 
     # IFS for parsing our stuff:
     IFS="${YSEP}"
@@ -1037,9 +1035,10 @@ show_interaction_preferences_dialog()
 
     local -a top_pane=(
         --plug "${PLUG_NUM}"
-        --text "Interaction Editor for ${GF_DBNAME}.${GF_TNAME}"
+        --text "${itext}"
         "${IACT_TOP_PANE[@]}"
     )
+
 
     local -a list_pane=(
         --plug "${PLUG_NUM}"
@@ -1346,6 +1345,22 @@ WHERE c.TABLE_SCHEMA='${GF_DBNAME}'
 AND c.TABLE_NAME='${GF_TNAME}'"
 
     source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
+}
+
+table_field_is_autoinc()
+{
+    local IFS="${FSEP}"
+    local name="$1"
+    local lrowstr
+    local -a row
+
+    for lrowstr in "${RESULT_ROWS[@]}"; do
+        row=( $( echo "${lrowstr}" ) )
+        if [ "${row[$COL_NAME]}" = "$name" -a -n "${row[$COL_AUTOINC]}" ]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 table_field_is_index()
