@@ -1,0 +1,53 @@
+.TH gensfw 1 "25 July 2018"
+.SH NAME
+gensfw \- Generate Schema Framework Files
+.SH SYNOPSIS
+\fBgensfw\fR [ \fIdatabase name\fR | \fIgsf file name\fR ] [ \fItable name\fR ]
+.SH DESCRIPTION
+\fBgensfw\fR is an aid for writing SQL and SRM scripts in support of
+web applications delivered using the Schema Framework.  In particular, the
+generated SQL scripts will create procedures with parameters and results
+whose data types and names match the fields in the target table.
+
+The resulting scripts can be used directly under many circumstances, but may
+also serve as an illustration of what are currently considered best practices.
+
+Changes to default settings can be preserved in a special \fBgsf\fR file
+that can be re-opened and changed as needed before generating new scripts.
+
+The documentation for using \fBgensfw\fR is found in the \fIinfo gensfw\fR
+pages.
+.SH OPTIONS
+There are no options, per se, only optional ways to begin the program, which
+are listed in the EXAMPLES section
+.SH EXAMPLES
+There are four different options for opening \fBgensfw\fR:
+.RS
+.TP
+\fBgensfw\fR
+.br
+Open with the list of databases in localhost.
+.br
+.TP
+\fBgensfw\fR \fIdatabase\fR
+.br
+Open with the list of tables in database \fIdatabase\fR.
+.br
+.TP
+\fBgensfw\fR \fIdatabase table\fR
+.br
+Open with the interaction editor for table \fItable\fR in database \fIdatabase\fR.
+.br
+.TP
+\fBgensfw\fR \fItable.gsf\fR
+.br
+Open with the interaction editor for the database and table that were used
+to create \fItable.gsf\fR.  The settings in place when the file was saved are
+restored.
+.br
+.RE
+
+.SH AUTHOR
+Charles P. Jungmann
+.SH SEE ALSO
+info gensfw

@@ -4,8 +4,7 @@
 
 @dircategory Schema Framework Documents
 @direntry
-* Script Generator: (gensfw.info).    Documentation for @command{gensfw}, a utility for
-                                      generating SQL and SRM scripts for the Schema Framework.
+* Script Generator: (gensfw.info).    Documentation for @command{gensfw}, a utility for generating SQL and SRM scripts for the Schema Framework.
 @end direntry
 
 @copying
@@ -34,22 +33,22 @@ particular interaction.
 
 The Schema interactions that @command{gensfw} provides are:
 
-@enumerate
-@item
-@strong{List} for the collection of records in the table.
-@item
-@strong{Add} for adding a record to the table.
-@item
-@strong{Read} for viewing a record.
-@item
-@strong{Update} for changing a record.
-@item
-@strong{Delete} to delete a record.
-@item
-@strong{Import} to import items into the table.
-@item
-@strong{Export} to create a spreadsheet with the table's contents.
-@end enumerate
+@table @strong
+@item List
+for the collection of records in the table.
+@item Add
+for adding a record to the table.
+@item Read
+for viewing a record.
+@item Update
+for changing a record.
+@item Delete
+to delete a record.
+@item Import
+to import items into the table.
+@item Export
+to create a spreadsheet with the table's contents.
+@end table
 
 Note that this info guide is incomplete.  I have created this file
 in order to leave documentation for ambiguous and confusing situations.
@@ -62,10 +61,10 @@ a more pressing need than a complete set of documentation.
 @contents
 @menu
 * Introduction::
-* How it Works::              Functional details to affect the utility's usage.
-* Selecting a Table::         Different ways to select a table.
-* Table Interactions Dialog:: The main working dialog from which all options
-                              are available.
+* How it Works::                 Functional details to affect the utility's usage
+* Selecting a Table::            Different ways to select a table
+* Table Interactions Dialog::    The main working dialog from which all options are available
+* Supported Interactions::       Learn about the supported interactions
 @end menu
 
 @node Introduction
@@ -98,6 +97,7 @@ Schema development.
 Saves settings to a @acronym{gsf, Generated Schema framework File} file
 to which a user can return to modify settings or to regenerate scripts
 after a change in the table definition.
+@end itemize
 
 The @command{gensfw} utility is a BASH script that uses @acronym{YAD, Yet Another Dialog} 
 for the @acronym{UI, User Interface}.  Although @emph{YAD} is far more
@@ -128,8 +128,10 @@ another list to select a table.
 @item
 @code{gensfw [database name]} will start at the table list for the named
 database.
+@item
 @code{gensfw [database name] [table name]} will begin at the table interaction
 editor with default interaction settings.
+@item
 @code{gensfw tablename.gsf} passing the name of a @acronym{gsf, Generated Schema framework File}
 file will also begin at the table interaction, having restored all the
 settings from the previous save.
@@ -138,27 +140,11 @@ settings from the previous save.
 @node Table Interactions Dialog
 @chapter Table Interactions Dialog
 
-The main purpose of this dialog is to prepare settings for interactions.
-The interactions are the standard @acrony{CRUD, Create@,, Read@, Update@, Delete}
-interactions (we call it @emph{Add} instead of @emph{Create}).  List, Import,
-and Export interactions are also provided.
-
-@menu
-* List Interaction::
-* Add Interaction::
-* Read Interaction::
-* Update Interaction::
-* Delete Interaction::
-* Import Interaction::
-* Export Interaction::
-@end menu
-
 The main dialog shows a header with the database and table names, along with
 the number of fields in the selected table.  Below that is a list of 
 interactions that can be selected for editing.  At the bottom is a set of
 buttons that apply to the table globally.
 
-@section Interaction List
 The list of interactions shows a checkmark that signals that the associated
 interaction will be included when the scripts are generated.  By default,
 all interactions are included.
@@ -170,65 +156,100 @@ open the highlighted interaction.
 There are six buttons at the bottom of the dialog.  They are
 
 @enumerate
+
 @item
 @code{Set SRM Globals} will set arbitrary global instructions that will
 be included in the SRM file.
+
 @item
 @code{Set Labels} will open a dialog where the default labels for each
 field can be set.  If set, these values will be written to the SRM file
 as a sharable mode.
+
 @item
 @code{Set Links} is a dialog where session variables can be associated with
 fields.  The main usage for this is to support multiple accounts, where
 the session variable will be assigned or queried from the MySQL session
 rather than from a GET/POST request.
+
 @item
 @code{Save Files} is a clunky dialog through which the different file types
 are given names and are selected for output.  By default, the files are
 named after the selected table, and all three files types are generated:
+
 @enumerate
+
 @item
 a @emph{gsf} file
+
 @item
 an @emph{srm} file
+
 @item
-a @emph{sql} file
+an @emph{sql} file
+
 @end enumerate
+   
 @item
 @code{Cancel} returns to the previous screen.  That will be the tables
 screen if the interaction dialog was entered through the table list, or
 simple exit if the table name or @emph{gsf} was specified on the commandline.
+
 @item
 @code{OK} will open the highlighted interaction.
+
 @end enumerate
 
+@node Supported Interactions
+@chapter Supported Interactions
 
+The main purpose of this dialog is to prepare settings for interactions.
+The interactions are the standard @acronym{CRUD, Create@comma{} Read@comma{} Update@comma{} Delete}
+interactions (we call it @emph{Add} instead of @emph{Create}).  List, Import,
+and Export interactions are also provided.
+
+@menu
+* Interaction Basics::
+* List Interaction::
+* Add Interaction::
+* Read Interaction::
+* Update Interaction::
+* Delete Interaction::
+* Import Interaction::
+* Export Interaction::
+@end menu
+
+@node Interaction Basics
+@section Interaction Basics
+
+Each interaction page includes
 
 @node List Interaction
-@chapter List Interaction
+@section List Interaction
 This chapter is incomplete for now.
 
 @node Add Interaction
-@chapter Add Interaction
+@section Add Interaction
 This chapter is incomplete for now.
 
 @node Read Interaction
-@chapter Read Interaction
+@section Read Interaction
 This chapter is incomplete for now.
 
 @node Update Interaction
-@chapter Update Interaction
+@section Update Interaction
 This chapter is incomplete for now.
 
 @node Delete Interaction
-@chapter Delete Interaction
+@section Delete Interaction
 This chapter is incomplete for now.
 
 @node Import Interaction
-@chapter Import Interaction
+@section Import Interaction
 This chapter is incomplete for now.
 
 @node Export Interaction
-@chapter Export Interaction
+@section Export Interaction
 This chapter is incomplete for now.
 
+@bye
