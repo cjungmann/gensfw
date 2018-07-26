@@ -483,9 +483,6 @@ CB_ROW_LABEL()
     fi
 }
 
-CB_ROW_IS_INDEX()   { table_field_is_index "${CALLBACK_ROW[0]}"; return $?; }
-CB_ROW_IS_AUTOINC() { table_field_is_autoinc "${CALLBACK_ROW[0]}"; return $?; }
-
 # Universal script indentation string
 declare gsf_script_indent="  "
 
@@ -1373,55 +1370,6 @@ AND c.TABLE_NAME='${GF_TNAME}'"
     source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
 }
 
-
-# This function assumes that there is an array variable
-# named LResRow in the calling function
-get_table_field_result_row()
-{
-    local IFS="${FSEP}"
-    local lrowstr
-    for lrowstr in "${RESULT_ROWS[@]}"; do
-        LResRow=( $( echo "${lrowstr}" ) )
-        if [ "${LResRow[$COL_NAME]}" = "$1" ]; then
-            return 0
-        fi
-    done
-    LResRow=()
-    return 1
-}
-
-get_table_field_flag()
-{
-    local -i prop_index="$2"
-    local -a LResRow
-    if [ get_table_field_result_row "$1" ]; then
-        if [ -n "$LResRow[$proc_index]}" ]; then
-            return 0
-        fi
-    fi
-    return 1
-}
-
-table_field_is_autoinc() { get_table_field_flag "$1" "$COL_AUTOINC"; }
-table_field_is_prikey()  { get_table_field_flag "$1" "$COL_PRIKEY"; }
-table_field_is_forkey()  { get_table_field_flag "$1" "$COL_FORKEY"; }
-
-table_field_is_index()
-{
-    local IFS="${FSEP}"
-    local name="$1"
-    local lrowstr
-    local -a row
-
-    for lrowstr in "${RESULT_ROWS[@]}"; do
-        row=( $( echo "${lrowstr}" ) )
-        if [ "${row[$COL_NAME]}" = "$name" -a -n "${row[$COL_PRIKEY]}" ]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
 table_get_index_key()
 {
     local index_key
@@ -1438,30 +1386,11 @@ table_get_index_key()
     if [ $matched -eq 1 ]; then
         echo "$index_key"
         return 0
-    else
-        if [ $matched -eq 0 ]; then
-            echo "Failed to find a index key" >&2
-        else
-            echo "Found too many non-foreign primary keys." >&2
-        fi
-        return 1
     fi
-}
 
-table_get_primary_key()
-{
-    local rowstr
-    local -a row
-    for rowstr in "${RESULT_ROWS[@]}"; do
-        row=( $( echo "${rowstr}" ) )
-        if [ -n "${row[$COL_PRIKEY]}" ]; then
-            echo "${row[$COL_NAME]}"
-            return 0
-        fi
-    done
+    echo "Found $matched keys, should have been 1." >&2
     return 1
 }
-
 
 loop_for_context()
 {
