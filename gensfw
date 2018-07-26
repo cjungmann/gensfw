@@ -242,13 +242,13 @@ SELECT c.COLUMN_NAME,
        UPPER(c.DATA_TYPE) AS DATA_TYPE,
        c.CHARACTER_MAXIMUM_LENGTH,
        c.COLUMN_TYPE,
-       CASE WHEN INSTR(c.EXTRA,'auto_increment')  THEN 'YES' ELSE NULL END AS autoinc,
-       CASE WHEN INSTR(c.COLUMN_KEY,'PRI')        THEN 'YES' ELSE NULL END AS prikey,
        NULLIF(c.IS_NULLABLE,'NO') AS nullable,
        c.NUMERIC_PRECISION,
        c.NUMERIC_SCALE,
        c.CHARACTER_MAXIMUM_LENGTH,
        c.COLUMN_DEFAULT,
+       CASE WHEN INSTR(c.EXTRA,'auto_increment')  THEN 'YES' ELSE NULL END AS autoinc,
+       CASE WHEN INSTR(c.COLUMN_KEY,'PRI')        THEN 'YES' ELSE NULL END AS prikey,
        CASE WHEN tc.CONSTRAINT_TYPE='FOREIGN KEY' THEN 'YES' ELSE NULL END AS forkey
   FROM COLUMNS c
        LEFT JOIN KEY_COLUMN_USAGE kcu
@@ -301,13 +301,39 @@ gsf_callback_prefs_rows()
 {
     local callback="$1"
     local IFS="${YSEP}"
+    local FIELD_NAME
     local -t CALLBACK_ROW
-    local rowstr
+    local -t FIELD_ROW
+    local rowstr fieldstr
+    local -i flag_slink flag_autoinc flag_prikey flag_forkey
+
+    is_slink()   { [ $flag_slink   -eq 0 ]; }
+    is_autoinc() { [ $flag_autoinc -eq 0 ]; }
+    is_prikey()  { [ $flag_prikey  -eq 0 ]; }
+    is_forkey()  { [ $flag_forkey  -eq 0 ]; }
 
     for rowstr in "${IACT_COL_PREFS[@]}"; do
+        IFS="${YSEP}"
         CALLBACK_ROW=( $( echo "${rowstr}" ) )
         if [ "${#CALLBACK_ROW[@]}" -gt 2 ]; then
-            $callback
+            flag_slink=1; flag_autoinc=1; flag_prikey=1; flag_forkey=1
+            for fieldstr in "${RESULT_ROWS[@]}"; do
+                FIELD_NAME=$( CB_ROW_NAME )
+
+                SLINK=$( GSF_SESSION_LINK_VALUE "$FIELD_NAME" )
+                flag_slink=$?
+
+                IFS="${FSEP}"
+                FIELD_ROW=( $( echo "${fieldstr}" ) )
+                if [ "${FIELD_ROW[$COL_NAME]}" = $FIELD_NAME ]; then
+                    if [ -n "${FIELD_ROW[$COL_AUTOINC]}" ]; then flag_autoinc=0; fi
+                    if [ -n "${FIELD_ROW[$COL_PRIKEY]}"  ]; then flag_prikey=0; fi
+                    if [ -n "${FIELD_ROW[$COL_FORKEY]}"  ]; then flag_forkey=0; fi
+
+                    $callback
+                fi
+            done
+            # $callback
         fi
     done
 }
@@ -1347,21 +1373,38 @@ AND c.TABLE_NAME='${GF_TNAME}'"
     source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
 }
 
-table_field_is_autoinc()
+
+# This function assumes that there is an array variable
+# named LResRow in the calling function
+get_table_field_result_row()
 {
     local IFS="${FSEP}"
-    local name="$1"
     local lrowstr
-    local -a row
-
     for lrowstr in "${RESULT_ROWS[@]}"; do
-        row=( $( echo "${lrowstr}" ) )
-        if [ "${row[$COL_NAME]}" = "$name" -a -n "${row[$COL_AUTOINC]}" ]; then
+        LResRow=( $( echo "${lrowstr}" ) )
+        if [ "${LResRow[$COL_NAME]}" = "$1" ]; then
             return 0
         fi
     done
+    LResRow=()
     return 1
 }
+
+get_table_field_flag()
+{
+    local -i prop_index="$2"
+    local -a LResRow
+    if [ get_table_field_result_row "$1" ]; then
+        if [ -n "$LResRow[$proc_index]}" ]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+table_field_is_autoinc() { get_table_field_flag "$1" "$COL_AUTOINC"; }
+table_field_is_prikey()  { get_table_field_flag "$1" "$COL_PRIKEY"; }
+table_field_is_forkey()  { get_table_field_flag "$1" "$COL_FORKEY"; }
 
 table_field_is_index()
 {
@@ -1377,6 +1420,32 @@ table_field_is_index()
         fi
     done
     return 1
+}
+
+table_get_index_key()
+{
+    local index_key
+    local -i matched=0
+    tgik_survey()
+    {
+        if is_prikey && ! is_forkey; then
+            (( matched++ ))
+            index_key="$FIELD_NAME"
+        fi
+    }
+    gsf_callback_prefs_rows "tgik_survey"
+
+    if [ $matched -eq 1 ]; then
+        echo "$index_key"
+        return 0
+    else
+        if [ $matched -eq 0 ]; then
+            echo "Failed to find a index key" >&2
+        else
+            echo "Found too many non-foreign primary keys." >&2
+        fi
+        return 1
+    fi
 }
 
 table_get_primary_key()
