@@ -117,7 +117,7 @@ gsf_get_delete_strings_for_edit()
             pname=$( CB_ROW_NAME )
             DELETE_TASK_STR="${DELETE_TASK_STR}&${pname}={@${pname}}"
 
-            if ! CB_ROW_IS_INDEX; then
+            if ! is_prikey; then
                 DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR}${joiner}'{@${pname}}'"
                 if [ "${joiner:0:1}" != "," ]; then
                     joiner=",${joiner}"

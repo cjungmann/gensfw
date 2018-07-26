@@ -452,7 +452,7 @@ gsf_sql_update_proc_update()
         slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
         has_slink="$?"
 
-        if ! is_slink && ! CB_ROW_IS_INDEX && CB_ROW_IS_RESULT; then
+        if ! is_slink && ! is_prikey && CB_ROW_IS_RESULT; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${GSF_SELECT_SPACES}"
@@ -467,7 +467,7 @@ gsf_sql_update_proc_update()
         slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
         has_slink="$?"
 
-        if is_slink || ( CB_ROW_IS_INDEX && CB_ROW_IS_PARAM ); then
+        if is_slink || ( is_prikey && CB_ROW_IS_PARAM ); then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
                 echo -n "${GSF_AND_LINE}"
@@ -644,7 +644,7 @@ gsf_sql_import_proc_review()
         slink=$( GSF_SESSION_LINK_VALUE "${fname}" )
         has_slink=$?
 
-        if ( ! CB_ROW_IS_INDEX ) && [ $has_slink -ne 0 ] && CB_ROW_IS_PARAM; then
+        if ( ! is_prikey ) && [ $has_slink -ne 0 ] && CB_ROW_IS_PARAM; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
                 echo  -n "${GSF_SELECT_SPACES}"
