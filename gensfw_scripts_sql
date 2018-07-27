@@ -516,7 +516,7 @@ gsf_sql_update_proc_update()
     echo "BEGIN"
 
     # Query to update the record:
-    echo "${gsf_script_indent}UPDATE ${GF_TNAME} ${prefix}"
+    intent_line "UPDATE ${GF_TNAME} ${prefix}"
     echo -n "${GSF_SET_LINE}"
     lambda_count=0
     gsf_callback_prefs_rows "gsupu_set"
@@ -531,9 +531,9 @@ gsf_sql_update_proc_update()
     index_key_name=$( table_get_index_key )
     if [ $? -eq 0 ]; then
         echo
-        echo "${gsf_script_indent}IF ROW_COUNT() > 0 THEN"
-        echo "${gsf_script_indent}   CALL ${GF_PROC_ROOT}List(${index_key_name});"
-        echo "${gsf_script_indent}END IF;"
+        indent_line "IF ROW_COUNT() > 0 THEN"
+        indent_line "   CALL ${GF_PROC_ROOT}List(${index_key_name});"
+        indent_line "END IF;"
     fi
 
     # Terminate procedure:
@@ -552,37 +552,31 @@ gsf_sql_proc_body_Delete()
 {
     local prefix="t"
     local -i lambda_count=0
-    local -i has_slink
-    local fname slink
 
     lambda_where()
     {
-        fname=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${fname}" )
-        has_slink=$?
-
-        if [ $has_slink -eq 0 ] || CB_ROW_IS_PARAM; then
+        if is_slink || CB_ROW_IS_PARAM; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
                 echo -n "${GSF_AND_LINE}"
             fi
-            echo -n "${prefix}.${fname} = "
+            echo -n "${prefix}.${FIELD_NAME} = "
             if [ $has_slink -eq 0 ]; then
-                echo -n "$slink"
+                echo -n "$SLINK"
             else
-                echo -n "$fname"
+                echo -n "$FIELD_NAME"
             fi
         fi
     }
 
-    echo "${gsf_script_indent}DELETE"
-    echo "${gsf_script_indent}  FROM ${prefix} USING ${GF_TNAME} AS ${prefix}"
+    indent_line "DELETE"
+    indent_line "  FROM ${prefix} USING ${GF_TNAME} AS ${prefix}"
     echo -n "${GSF_WHERE_LINE}"
     lambda_count=0
     gsf_callback_prefs_rows "lambda_where"
     echo ";"
     echo
-    echo "${gsf_script_indent}SELECT ROW_COUNT() AS deleted;"
+    indent_line "SELECT ROW_COUNT() AS deleted;"
     
 }
 
