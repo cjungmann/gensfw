@@ -138,8 +138,7 @@ gsf_add_proc_params_sql()
 {
     local indent_chars="$1"
     local -i commas=0
-    local -i is_slink
-    local name slink type
+    local type
 
     local check_func="CB_ROW_IS_PARAM"
     if [ $# -gt 1 -a "$2" = "result" ]; then
@@ -148,18 +147,14 @@ gsf_add_proc_params_sql()
 
     gsfpps_param()
     {
-        name=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${name}" )
-        is_link="$?"
-        
-        if [ $is_link -ne 0 ] && $check_func; then
+        if ! is_slink && $check_func; then
             if [ $(( commas++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${indent_chars}"
             fi
             type=$( CB_ROW_TYPE )
-            type=$( gsf_fix_param_type "${name}" "${type}" )
-            echo -n "${name}" "${type}"
+            type=$( gsf_fix_param_type "$FIELD_NAME" "${type}" )
+            echo -n "$FIELD_NAME" "${type}"
         fi
     }
 
@@ -174,7 +169,7 @@ gsf_add_proc_params_sql()
 gsf_add_query_selects_sql()
 {
     local indent_chars="$1"
-    local name prefix=""
+    local prefix=""
     local -i lambda_count=0
 
     if [ "$#" -gt "1" -a -n "$2" ]; then
@@ -188,18 +183,13 @@ gsf_add_query_selects_sql()
 
     gaqss_select()
     {
-        fname=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
-        has_slink="$?"
-
         # Never select a session-variable linked field:
-        if [ $has_slink -ne 0 ] && $check_func; then
+        if ! is_slink && $check_func; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${indent_chars}"
             fi
-            name=$( CB_ROW_NAME )
-            echo -n "${prefix}${name}"
+            echo -n "${prefix}${FIELD_NAME}"
         fi
     }
 
@@ -283,7 +273,7 @@ gsf_sql_proc_body_List()
 
             if is_slink; then
                 echo -n "${prefix}.${FIELD_NAME} = $SLINK"
-            elif table_field_is_index "$FIELD_NAME"; then
+            elif is_prikey && ! is_forkey; then
                 echo -n "($FIELD_NAME IS NULL OR ${prefix}.${FIELD_NAME} = $FIELD_NAME)"
             else
                 echo -n "${prefix}.${FIELD_NAME} = $FIELD_NAME"
@@ -305,49 +295,97 @@ gsf_sql_proc_body_Add()
 {
     local -i lambda_count=0
 
-    lambda_fields()
+    local foreign_key foreign_slink
+    local autoinc_key
+
+    # Avoid copying this code in four places:
+    maybe_add_comma_line()
     {
         if is_slink || CB_ROW_IS_PARAM; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
                 echo -n "${GSF_INSERT_SPACES_LINE}"
             fi
+        fi
+    }
 
+    gspbA_find_key()
+    {
+        if is_prikey && ! is_autoinc; then
+            if is_slink && is_forkey && [ -z $foreign_key ]; then
+                foreign_key="$FIELD_NAME"
+                foreign_slink="$SLINK"
+            elif ! is_forkey && [ -z $autoinc_key ]; then
+                autoinc_key="$FIELD_NAME"
+            fi
+        fi
+    }
+
+    gspbA_fields()
+    {
+        if is_slink || CB_ROW_IS_PARAM; then
+            maybe_add_comma_line
+            echo -n "$FIELD_NAME"
+        elif [ "$autoinc_key" = "$FIELD_NAME" ]; then
+            maybe_add_comma_line
             echo -n "$FIELD_NAME"
         fi
     }
 
-    lambda_values()
+    gspbA_values()
     {
         if is_slink || CB_ROW_IS_PARAM; then
-            if [ $(( lambda_count++ )) -gt 0 ]; then
-                echo ", "
-                echo -n "${GSF_INSERT_SPACES_LINE}"
-            fi
+            maybe_add_comma_line
             if is_slink; then
                 echo -n "${SLINK}"
             else
                 echo -n "$FIELD_NAME"
             fi
+        elif [ "$autoinc_key" = "$FIELD_NAME" ]; then
+            maybe_add_comma_line
+            echo -n "newid"
         fi
     }
 
-    echo "${gsf_script_indent}DECLARE newid INT UNSIGNED;"
+    gsf_callback_prefs_rows "gspbA_find_key"
+
+    indent_line "DECLARE newid INT UNSIGNED;"
     echo
-    echo "${gsf_script_indent}INSERT INTO ${GF_TNAME}"
+
+    if [ -n $autoinc_key -a -n $foreign_key ]; then
+        indent_line "-- DIY autoinc section"
+        indent_line "TABLE LOCK ${GF_TNAME} WRITE;"
+        indent_line "SELECT MAX(${autoinc_key})+1 INTO newid"
+        indent_line "  FROM ${GF_TNAME}"
+        indent_line " WHERE ${foreign_key} = ${foreign_slink};"
+        indent_line "-- DIY autoinc section END"
+        echo
+    fi
+
+    indent_line "INSERT INTO ${GF_TNAME}"
     lambda_count=0
     echo -n "${GSF_INSERT_FIELDS_LINE}"
-    gsf_callback_prefs_rows "lambda_fields"
+    gsf_callback_prefs_rows "gspbA_fields"
     echo ")"
     lambda_count=0
     echo -n "${GSF_INSERT_VALUES_LINE}"
-    gsf_callback_prefs_rows "lambda_values"
+    gsf_callback_prefs_rows "gspbA_values"
     echo ");"
     echo
-    echo "${gsf_script_indent}IF ROW_COUNT() > 0 THEN"
-    echo "${gsf_script_indent}   SET newid = LAST_INSERT_ID();"
-    echo "${gsf_script_indent}   CALL ${GF_PROC_ROOT}List(newid);"
-    echo "${gsf_script_indent}END IF;"
+    if [ -n $autoinc_key ]; then
+        indent_line "-- DIY autoinc"
+        indent_line "UNLOCK_TABLES;"
+    fi
+    echo
+    indent_line "IF ROW_COUNT() > 0 THEN"
+
+    # We don't need LAST_INSERT_KEY() if we assigned newid with record lock
+    if [ -z $autoinc_key ]; then
+        indent_line "   SET newid = LAST_INSERT_ID();"
+    fi
+
+    indent_line "   CALL ${GF_PROC_ROOT}List(newid);"
+    indent_line "END IF;"
 }
 
 gsf_sql_proc_body_Read()
@@ -366,11 +404,11 @@ gsf_sql_proc_body_Read()
 
             if is_slink; then
                 echo -n "${prefix}.${FIELD_NAME} = $SLINK"
-            elif table_field_is_index "$FIELD_NAME"; then
+            elif is_prikey && ! is_forkey; then
                 echo -n "($FIELD_NAME IS NULL OR ${prefix}.${FIELD_NAME} = $FIELD_NAME)"
             else
                 echo -n "${prefix}.${FIELD_NAME} = "
-                if [ $has_slink -eq 0 ]; then
+                if is_slink; then
                     echo -n "$SLINK"
                 else
                     echo -n "$FIELD_NAME"
@@ -441,44 +479,34 @@ gsf_sql_update_proc_value()
 
 gsf_sql_update_proc_update()
 {
-    local fname slink prefix="t"
-    local -i has_slink lambda_count=0
+    local prefix="t"
+    local -i lambda_count=0
 
-    is_slink() { [ $has_slink -eq 0 ]; }
-    
     gsupu_set()
     {
-        fname=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
-        has_slink="$?"
-
         if ! is_slink && ! is_prikey && CB_ROW_IS_RESULT; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
                 echo -n "${GSF_SELECT_SPACES}"
             fi
-            echo -n "${prefix}.${fname} = ${fname}"
+            echo -n "${prefix}.${FIELD_NAME} = $FIELD_NAME"
         fi
     }
 
     gsupu_where()
     {
-        fname=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
-        has_slink="$?"
-
         if is_slink || ( is_prikey && CB_ROW_IS_PARAM ); then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo
                 echo -n "${GSF_AND_LINE}"
             fi
 
-            echo -n "${prefix}.${fname} = "
+            echo -n "${prefix}.${FIELD_NAME} = "
 
             if is_slink; then
-                echo -n "${slink}"
+                echo -n "$SLINK"
             else
-                echo -n "${fname}"
+                echo -n "$FIELD_NAME"
             fi
         fi
     }
