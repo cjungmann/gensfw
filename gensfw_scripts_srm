@@ -109,16 +109,14 @@ gsf_get_delete_strings_for_edit()
     local DELETE_CONFIRM_STR="Delete"
     local ggdsfe_callback="$1"
     local joiner=" "
-    local pname
     
     ggdts_lambda()
     {
         if CB_ROW_IS_PARAM; then
-            pname=$( CB_ROW_NAME )
-            DELETE_TASK_STR="${DELETE_TASK_STR}&${pname}={@${pname}}"
+            DELETE_TASK_STR="${DELETE_TASK_STR}&${FIELD_NAME}={@${FIELD_NAME}}"
 
             if ! is_prikey; then
-                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR}${joiner}'{@${pname}}'"
+                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR}${joiner}'{@${FIELD_NAME}}'"
                 if [ "${joiner:0:1}" != "," ]; then
                     joiner=",${joiner}"
                 fi
@@ -126,8 +124,8 @@ gsf_get_delete_strings_for_edit()
         fi
     }
 
-    gsf_callback_iact_info "Delete" "ggdts_lambda"
-    DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR} from table '${GF_TNAME}'?"
+    gsf_iact_callback_prefs_rows "Delete" "ggdts_lambda"
+    delete_CONFIRM_STR="${DELETE_CONFIRM_STR} from table '${GF_TNAME}'?"
     $ggdsfe_callback
 }
 
