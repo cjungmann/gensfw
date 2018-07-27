@@ -8,7 +8,9 @@
 # 5: Set Default Column Labels
 # 6: Save Files Dialog
 
-declare zpath
+# Universal script indentation string, must precede 'source' calls that use it:
+declare gsf_script_indent="  "
+indent_line() { echo "${gsf_script_indent}${1}"; }
 
 get_source_path()
 {
@@ -317,6 +319,8 @@ gsf_callback_prefs_rows()
         CALLBACK_ROW=( $( echo "${rowstr}" ) )
         if [ "${#CALLBACK_ROW[@]}" -gt 2 ]; then
             flag_slink=1; flag_autoinc=1; flag_prikey=1; flag_forkey=1
+
+            # Find field's matching RESULT_ROW:
             for fieldstr in "${RESULT_ROWS[@]}"; do
                 FIELD_NAME=$( CB_ROW_NAME )
 
@@ -331,11 +335,21 @@ gsf_callback_prefs_rows()
                     if [ -n "${FIELD_ROW[$COL_FORKEY]}"  ]; then flag_forkey=0; fi
 
                     $callback
+                    break
                 fi
             done
             # $callback
         fi
     done
+}
+
+gsf_iact_callback_prefs_rows()
+{
+    local IACT_NAME="$1" callback="$2"
+    local IFS="${FSEP}"
+    local -a IACT_COL_PREFS
+    IACT_COL_PREFS=( $( echo "${IACT_DATA[$IACT_NAME]}" ) )
+    gsf_callback_prefs_rows "${callback}"
 }
 
 # Use this function to open and parse an IACT preferences
@@ -483,9 +497,6 @@ CB_ROW_LABEL()
     fi
 }
 
-# Universal script indentation string
-declare gsf_script_indent="  "
-
 # Save column indexes to global variables for repeated access
 collect_column_indexes()
 {
@@ -628,9 +639,9 @@ make_iact_default_data_str()
 
         colname="${row[$COL_NAME]}"
 
-        is_autoinc() { [ -n "${row[$COL_AUTOINC]}" ]; }
-        is_prikey()  { [ -n "${row[$COL_PRIKEY]}" ]; }
-        is_forkey()  { [ -n "${row[$COL_FORKEY]}" ]; }
+        is_auto() { [ -n "${row[$COL_AUTOINC]}" ]; }
+        is_pri()  { [ -n "${row[$COL_PRIKEY]}" ]; }
+        is_for()  { [ -n "${row[$COL_FORKEY]}" ]; }
 
         # Get data type from DATA_TYPE result:
         coltype="${row[$COL_TYPE]}"
@@ -654,18 +665,18 @@ make_iact_default_data_str()
         # of the query.
 
         # 'Param' column:
-        if is_prikey && is_forkey; then  # primary + foreign key should match session variable:
+        if is_pri && is_for; then  # primary + foreign key should match session variable:
             echo -n "${YSEP}FALSE"
-        elif is_prikey && [ $itype = 'Add' ]; then
+        elif is_pri && [ $itype = 'Add' ]; then
             echo -n "${YSEP}FALSE"
-        elif ! is_prikey && [[ " List Read Update Delete Export " =~ " ${itype} " ]]; then
+        elif ! is_pri && [[ " List Read Update Delete Export " =~ " ${itype} " ]]; then
             echo -n "${YSEP}FALSE"
         else
             echo -n "${YSEP}TRUE"
         fi
 
         # 'Result' column:
-        if is_prikey && is_forkey; then
+        if is_pri && is_for; then
             echo -n "${YSEP}FALSE"
         elif [[ " List Read Update Export " =~ " ${itype} " ]]; then
             echo -n "${YSEP}TRUE"
@@ -674,7 +685,7 @@ make_iact_default_data_str()
         fi
 
         # 'Readonly' and 'Hide' (For index fields)
-        if is_autoinc; then
+        if is_auto; then
             echo -n "${YSEP}TRUE${YSEP}TRUE"
         else
             echo -n "${YSEP}FALSE${YSEP}FALSE"
