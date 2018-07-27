@@ -379,9 +379,31 @@ are both the result columns from the procedure that returns
 the old values @strong{and} the value parameters for procedure
 that saves the changes.
 
+@subheading Delete Button in Edit
+
+The editing dialog will include a @kbd{Delete} button if
+the @emph{Delete} interaction is active.  Improve the
+delete confirmation message by setting the @strong{Param}
+checkbox for more fields.
+
+
 @node Delete Interaction
 @section Delete Interaction
-This chapter is incomplete for now.
+
+This interaction is unusual in that it is designed to be
+called by the @emph{Update} interaction and the settings of
+the @emph{Delete} interaction affects @emph{Update} as well.
+
+The checked @strong{Param} fields are used as parameters
+in the @emph{Delete} SQL procedure AND in the @emph{Update}
+interactions deletion confirmation message and call string
+
+By default, the only checked @strong{Param} fields are the
+primary key fields that are not foreign references.  It is
+recommended to select at least one other field in order
+to add security to the @emph{Delete} procedure and for a
+more helpful deletion confirmation message.  String fields
+are most useful for this purpose.
 
 @node Import Interaction
 @section Import Interaction
