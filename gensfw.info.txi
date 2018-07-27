@@ -86,6 +86,8 @@ That said, and despite some weaknesses listed below, the @command{gensfw}
 utility can be a great labor-saving tool for generating MySQL script and
 SRM files.
 
+@subheading Pros - advantages of gensfw
+
 @itemize @bullet
 @item
 Automatically coordinate data types between procedures and the source
@@ -99,6 +101,8 @@ to which a user can return to modify settings or to regenerate scripts
 after a change in the table definition.
 @end itemize
 
+@subheading Cons - limitations of gensfw
+
 The @command{gensfw} utility is a BASH script that uses @acronym{YAD, Yet Another Dialog} 
 for the @acronym{UI, User Interface}.  Although @emph{YAD} is far more
 powerful than other commandline dialog utilities, it still is an imperfect
@@ -107,6 +111,11 @@ tool for making a robust application.
 @itemize @bullet
 @item
 Some of the dialogs clunky compromises made to enable certain choices to be made.
+@item
+YAD is not very flexible.  For example, if a YAD @emph{list} defines certain
+columns as editable, they are editable for all rows, even if we might want to
+prevent editing if certain options are not available in a given situation.
+Trust the default settings and override only with specific goals.
 @item
 YAD generates several error messages in the console that may distracting.
 @item
