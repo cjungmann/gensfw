@@ -632,16 +632,18 @@ make_iact_default_data_str()
     local IFS rowstr colname coltype
     local -a row
 
+    is_auto() { [ -n "${row[$COL_AUTOINC]}" ]; }
+    is_pri()  { [ -n "${row[$COL_PRIKEY]}" ]; }
+    is_for()  { [ -n "${row[$COL_FORKEY]}" ]; }
+
+    is_auto_assign() { is_auto || ( is_pri && ! is_for ) }
+
     # Reset IFS to parse fields from rowstr from bashmysql:
     IFS="${FSEP}"
     for rowstr in "${RESULT_ROWS[@]}"; do
         row=( $( echo "$rowstr") )
 
         colname="${row[$COL_NAME]}"
-
-        is_auto() { [ -n "${row[$COL_AUTOINC]}" ]; }
-        is_pri()  { [ -n "${row[$COL_PRIKEY]}" ]; }
-        is_for()  { [ -n "${row[$COL_FORKEY]}" ]; }
 
         # Get data type from DATA_TYPE result:
         coltype="${row[$COL_TYPE]}"
@@ -665,27 +667,53 @@ make_iact_default_data_str()
         # of the query.
 
         # 'Param' column:
-        if is_pri && is_for; then  # primary + foreign key should match session variable:
-            echo -n "${YSEP}FALSE"
-        elif is_pri && [ $itype = 'Add' ]; then
-            echo -n "${YSEP}FALSE"
-        elif ! is_pri && [[ " List Read Update Delete Export " =~ " ${itype} " ]]; then
-            echo -n "${YSEP}FALSE"
-        else
+        if is_pri; then
+            if is_for; then
+                # Foreign keys don't increment, so they must be set.
+                # Eventually, hopefully, a session link will set this.
+                echo -n "${YSEP}TRUE"
+            elif [[ " List Add Export Import " =~ "$itype" ]]; then
+                # Non-foreign primary key is identity field. It should
+                # not be set the the imported file.  List interaction
+                # is included because the non-foreign primary is a
+                # special, always included case:
+                echo -n "${YSEP}FALSE"
+            else
+                # Otherwise non-foreign primary key identifies the
+                # desired record.  It should be included:
+                echo -n "${YSEP}TRUE"
+            fi
+        elif [[ " Add Update Import " =~ "$itype" ]]; then
+            # All value fields (non primary) for record writing interactions
             echo -n "${YSEP}TRUE"
+        else
+            echo -n "${YSEP}FALSE"
         fi
 
         # 'Result' column:
-        if is_pri && is_for; then
-            echo -n "${YSEP}FALSE"
-        elif [[ " List Read Update Export " =~ " ${itype} " ]]; then
+        if is_pri; then
+            if [[ " List Read Update " =~ " $itype " ]]; then
+                # All primary keys needed when a record is to be accessed again
+                echo -n "${YSEP}TRUE"
+            else
+                # Otherwise, primary key not needed
+                echo -n "${YSEP}FALSE"
+            fi
+        elif [[ " List Read Update Export " =~ "$itype" ]]; then
+            # Non-key value fields for reading interactions
             echo -n "${YSEP}TRUE"
         else
             echo -n "${YSEP}FALSE"
         fi
 
-        # 'Readonly' and 'Hide' (For index fields)
-        if is_auto; then
+        # Set 'Readonly' and 'Hide' flags
+        if [[ " Delete Import Export " =~ "$itype" ]]; then
+            # These interactions have no record output, they're always false
+            echo -n "${YSEP}FALSE${YSEP}FALSE"
+        elif is_pri && ! ( is_auto_assign && [ "$itype" = "Add" ] ); then
+            # Primary keys are always readonly and generally hidden,
+            # except when it's an auto-assign (autoinc or primary non-foreign)
+            # in an Add interaction, when it's never included in forms.
             echo -n "${YSEP}TRUE${YSEP}TRUE"
         else
             echo -n "${YSEP}FALSE${YSEP}FALSE"
