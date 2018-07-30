@@ -42,22 +42,38 @@ gsf_write_script_sql_import()
     # Environment values for all import functions:
     local QT_NAME="QT_${GF_TNAME}"
     local IMPORT_PROC_ROOT="${GF_PROC_ROOT}Import_"
+
+    local BESPOKE_ID_FIELD="BESPOKE_AUTOID"
+    local -i BESPOKE_AUTOINC=1
+    local AUTOINC_TARGET
+
     local ID_FIELD_NAME="id_session"
     local -i MAX_NAME_LEN="${#ID_FIELD_NAME}"
-    lambda_max_name_len()
+
+    is_noninc_prikey() { is_prikey && ! is_forkey && ! is_autoinc; }
+    table_needs_bespoke_autoinc() { [ $BESPOKE_AUTOINC -eq 0 ]; }
+
+    maybe_update_max()
+    {
+        local -i len="${#1}"
+        if [ $len -gt $MAX_NAME_LEN ]; then
+            MAX_NAME_LEN=$len
+        fi
+    }
+
+    gwsqi_survey()
     {
         local -i len
-        if CB_ROW_IS_PARAM; then
-            local name=$( CB_ROW_NAME )
-            len="${#name}"
-            if [ $len -gt $MAX_NAME_LEN ]; then
-                MAX_NAME_LEN=$len
-            fi
+        if is_noninc_prikey; then
+            maybe_update_max "$BESPOKE_ID_FIELD"
+            BESPOKE_AUTOINC=0
+            AUTOINC_TARGET="$FIELD_NAME"
+        elif CB_ROW_IS_PARAM && ! is_slink; then
+            maybe_update_max "$FIELD_NAME"
         fi
     }
     # Scan for longest field name length:
-    gsf_callback_prefs_rows "lambda_max_name_len"
-
+    gsf_callback_prefs_rows "gwsqi_survey"
 
     echo
     echo "-- -----------------------------------------------"
@@ -265,9 +281,11 @@ gsf_sql_proc_body_List()
     gspbl_where()
     {
         if is_slink || CB_ROW_IS_PARAM; then
+            echo
             # Line-up where parts under the first part:
-            if [ $(( where_count++ )) -gt 0 ]; then
-                echo
+            if [ $(( where_count++ )) -eq 0 ]; then
+                echo -n "${GSF_WHERE_LINE}"
+            else
                 echo -n "${GSF_AND_LINE}"
             fi
 
@@ -285,8 +303,8 @@ gsf_sql_proc_body_List()
     echo -n "${GSF_SELECT_LINE}"
     gsf_add_query_selects_sql "${GSF_SELECT_SPACES}" "${prefix}"
     echo
-    echo "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
-    echo -n "${GSF_WHERE_LINE}"
+    echo -n "${GSF_FROM_LINE}${GF_TNAME} ${prefix}"
+    
     gsf_callback_prefs_rows "gspbl_where"
     echo ";"
 }
@@ -298,24 +316,34 @@ gsf_sql_proc_body_Add()
     local foreign_key foreign_slink
     local autoinc_key
 
+        echo_field()
+        {
+            echo -n "gspbA_find_key slink='$slink' "
+            if is_prikey; then echo -n "YES PRIKEY "; else echo -n "NOT prikey "; fi
+            if is_autoinc; then echo -n "YES AUTOIN "; else echo -n "NOT autoin "; fi
+            if is_forkey; then echo -n "YES FORKEY "; else echo -n "NOT forkey "; fi
+            echo
+        }
+
     # Avoid copying this code in four places:
     maybe_add_comma_line()
     {
-        if is_slink || CB_ROW_IS_PARAM; then
-            if [ $(( lambda_count++ )) -gt 0 ]; then
-                echo ", "
-                echo -n "${GSF_INSERT_SPACES_LINE}"
-            fi
+        if [ $(( lambda_count++ )) -gt 0 ]; then
+            echo ", "
+            echo -n "${GSF_INSERT_SPACES_LINE}"
         fi
     }
 
     gspbA_find_key()
     {
+
         if is_prikey && ! is_autoinc; then
-            if is_slink && is_forkey && [ -z $foreign_key ]; then
+            if is_forkey; then
                 foreign_key="$FIELD_NAME"
-                foreign_slink="$SLINK"
-            elif ! is_forkey && [ -z $autoinc_key ]; then
+                if is_slink; then
+                    foreign_slink="$SLINK"
+                fi
+            else
                 autoinc_key="$FIELD_NAME"
             fi
         fi
@@ -352,12 +380,18 @@ gsf_sql_proc_body_Add()
     indent_line "DECLARE newid INT UNSIGNED;"
     echo
 
-    if [ -n $autoinc_key -a -n $foreign_key ]; then
+    if [ $autoinc_key ]; then
         indent_line "-- DIY autoinc section"
         indent_line "TABLE LOCK ${GF_TNAME} WRITE;"
-        indent_line "SELECT MAX(${autoinc_key})+1 INTO newid"
-        indent_line "  FROM ${GF_TNAME}"
-        indent_line " WHERE ${foreign_key} = ${foreign_slink};"
+        indent_line "SELECT MAX(ai.${autoinc_key})+1 INTO newid"
+        indent_line "  FROM ${GF_TNAME} ai"
+        if [ $foreign_key ]; then
+            if [ $foreign_slink ]; then
+                indent_line " WHERE ai.${foreign_key} = ${foreign_slink};"
+            else
+                indent_line " WHERE ai.${foreign_key} = ${foreign_key};"
+            fi
+        fi
         indent_line "-- DIY autoinc section END"
         echo
     fi
@@ -372,11 +406,12 @@ gsf_sql_proc_body_Add()
     gsf_callback_prefs_rows "gspbA_values"
     echo ");"
     echo
-    if [ -n $autoinc_key ]; then
+
+    if [ $autoinc_key -a -n $foreign_key ]; then
         indent_line "-- DIY autoinc"
         indent_line "UNLOCK_TABLES;"
+        echo
     fi
-    echo
     indent_line "IF ROW_COUNT() > 0 THEN"
 
     # We don't need LAST_INSERT_KEY() if we assigned newid with record lock
@@ -516,7 +551,7 @@ gsf_sql_update_proc_update()
     echo "BEGIN"
 
     # Query to update the record:
-    intent_line "UPDATE ${GF_TNAME} ${prefix}"
+    indent_line "UPDATE ${GF_TNAME} ${prefix}"
     echo -n "${GSF_SET_LINE}"
     lambda_count=0
     gsf_callback_prefs_rows "gsupu_set"
@@ -561,7 +596,7 @@ gsf_sql_proc_body_Delete()
                 echo -n "${GSF_AND_LINE}"
             fi
             echo -n "${prefix}.${FIELD_NAME} = "
-            if [ $has_slink -eq 0 ]; then
+            if is_slink; then
                 echo -n "$SLINK"
             else
                 echo -n "$FIELD_NAME"
@@ -582,17 +617,13 @@ gsf_sql_proc_body_Delete()
 
 gsf_sql_proc_body_Export()
 {
-    local fname slink prefix="t"
-    local -i has_slink
+    local prefix="t"
     local -i lambda_count=0
 
     gspbe_where()
     {
-        fname=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${fname}"; )
-        has_slink="$?"
 
-        if [ $has_slink -eq 0 ] || CB_ROW_IS_PARAM; then
+        if is_slink || CB_ROW_IS_PARAM; then
             
             if [ $(( lambda_count++ )) -eq 0 ]; then
                 echo -n "${GSF_WHERE_LINE}"
@@ -601,12 +632,12 @@ gsf_sql_proc_body_Export()
                 echo -n "${GSF_AND_LINE}"
             fi
 
-            echo -n "${prefix}.${fname} = "
+            echo -n "${prefix}.${FIELD_NAME} = "
 
-            if [ $has_slink -eq 0 ]; then
-                echo -n "${slink}"
+            if is_slink; then
+                echo -n "${SLINK}"
             else
-                echo -n "${fname}"
+                echo -n "${FIELD_NAME}"
             fi
         fi
     }
@@ -624,27 +655,26 @@ gsf_sql_import_table()
 {
     local prefix="t"
     local -i lambda_count=0
-    local -i has_slink
-    local fname slink
 
     local param_format="${gsf_script_indent}%-${MAX_NAME_LEN}s %s,\n"
 
     gsit_fields()
     {
-        fname=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${fname}" )
-        has_slink=$?
-
-        if [ $has_slink -ne 0 ] && CB_ROW_IS_PARAM; then
+        if CB_ROW_IS_PARAM && ! is_noninc_prikey && ! is_slink; then
             local type=$( gsf_fix_field_type )
-            printf ${param_format} "$fname" "${type}"
+            printf ${param_format} "$FIELD_NAME" "${type}"
         fi
     }
 
     echo "CREATE TABLE IF NOT EXISTS ${QT_NAME}"
     echo "("
-    printf "${gsf_script_indent}%-${max_name_len}s INT UNSIGNED,\n" "${ID_FIELD_NAME}"
+    printf "${param_format}" "$ID_FIELD_NAME" "INT UNSIGNED"
     gsf_callback_prefs_rows "gsit_fields"
+
+    if table_needs_bespoke_autoinc; then
+        printf ${param_format} "$BESPOKE_ID_FIELD" "INT UNSIGNED DEFAULT 0"
+    fi
+
     echo "${gsf_script_indent}INDEX(${ID_FIELD_NAME})"
     echo ");"
     echo
@@ -656,23 +686,15 @@ gsf_sql_import_proc_review()
 {
     local proc_name="${IMPORT_PROC_ROOT}Review"
 
-    local -i has_slink
-    local fname slink
-
     local -i lambda_count=0
     gsipr_select()
     {
-        fname=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${fname}" )
-        has_slink=$?
-
-        if ( ! is_prikey ) && [ $has_slink -ne 0 ] && CB_ROW_IS_PARAM; then
+        if ( ! is_prikey ) && ! is_slink && CB_ROW_IS_PARAM; then
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ","
                 echo  -n "${GSF_SELECT_SPACES}"
             fi
-            local name=$( CB_ROW_NAME )
-            echo -n "$name"
+            echo -n "$FIELD_NAME"
         fi
     }
 
@@ -707,39 +729,47 @@ gsf_sql_import_proc_accept()
 {
     local -i lambda_count=0
     local ispaces
-    local fname slink
-    local -i has_slink
+    local -i bespoke_autoinc=1  # 'false' until need is detected
+    local table_where
+    local target_prikey
+
+    maybe_new_line()
+    {
+        if [ $(( lambda_count++ )) -gt 0 ]; then
+            echo ", "
+            echo -n "${ispaces}"
+        fi
+    }
+
+    gsiqa_scan()
+    {
+        if is_slink; then
+            table_where=" WHERE $FIELD_NAME = $SLINK;"
+        elif is_prikey && ! is_forkey && ! is_autoinc; then
+            target_prikey="$FIELD_NAME"
+        fi
+    }
 
     gsiqa_set()
     {
-        fname=$( CB_ROW_NAME )
-
         if CB_ROW_IS_PARAM; then
-            if [ $(( lambda_count++ )) -gt 0 ]; then
-                echo ", "
-                echo -n "${ispaces}"
-            fi
-            echo -n "${fname}"
+            maybe_new_line
+            echo -n "$FIELD_NAME"
         fi
     }
 
     gsiqa_select()
     {
-        fname=$( CB_ROW_NAME )
-        slink=$( GSF_SESSION_LINK_VALUE "${fname}" )
-        has_slink=$?
-
         if CB_ROW_IS_PARAM; then
-            local fname=$( CB_ROW_NAME )
             if [ $(( lambda_count++ )) -gt 0 ]; then
                 echo ", "
                 echo -n "${ispaces}"
             fi
 
-            if [ $has_slink -eq 0 ]; then
-                echo -n "$slink"
+            if is_slink; then
+                echo -n "$SLINK"
             else
-                echo -n "${fname}"
+                echo -n "$FIELD_NAME"
             fi
         fi
     }
@@ -751,22 +781,57 @@ gsf_sql_import_proc_accept()
     echo "$dropstr"
     echo "CREATE PROCEDURE ${proc_name}()"
     echo "BEGIN"
+
+    if table_needs_bespoke_autoinc; then
+        lambda_count=0
+        gsf_callback_prefs_rows "gsiqa_scan"
+
+        indent_line "-- Before table lock, setup rows to add to current MAX value."
+        indent_line "DECLARE counter INT UNSIGNED DEFAULT 1;"
+        indent_line "DECLARE refmax INT UNSIGNED;"
+        echo
+        indent_line "UPDATE $QT_NAME"
+        indent_line "   SET $BESPOKE_ID_FIELD = (SELECT counter:=counter+1)"
+        indent_line " WHERE id_session = @session_confirmed_id;"
+        echo
+        indent_line "TABLE LOCK ${GF_TNAME} WRITE;"
+        echo
+        indent_line "SELECT MAX(${AUTOINC_TARGET}) INTO refmax"
+        indent_line "  FROM $GF_TNAME"
+        indent_line "${table_where}"
+        echo
+    fi
+
     echo "${gsf_script_indent}INSERT INTO ${GF_TNAME}"
 
     lambda_count=0
     echo -n "${GSF_INSERT_FIELDS_LINE}"
     ispaces="${GSF_INSERT_SPACES_LINE}"
     gsf_callback_prefs_rows "gsiqa_set"
-    echo ")"
+    if table_needs_bespoke_autoinc; then
+        echo ","
+        echo "${ispaces}${target_prikey}"
+    fi
+    intent_line ")"
 
     lambda_count=0
     echo -n "${GSF_SELECT_LINE}"
     ispaces="${GSF_SELECT_SPACES}"
     gsf_callback_prefs_rows "gsiqa_select"
-    echo
+    if table_needs_bespoke_autoinc; then
+        echo ","
+        echo "${ispaces}refmax+$BESPOKE_ID_FIELD"
+    fi
     echo "${GSF_FROM_LINE}${QT_NAME}"
     echo "${GSF_WHERE_LINE}id_session = @session_confirmed_id;"
     echo
+
+    if table_needs_bespoke_autoinc; then
+        indent_line "UNLOCK TABLES;"
+        echo
+    fi
+
+
     echo "${gsf_script_indent}CALL ${IMPORT_PROC_ROOT}Abandon();"
 
     echo "END \$\$"
