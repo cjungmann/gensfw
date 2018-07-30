@@ -672,11 +672,9 @@ make_iact_default_data_str()
                 # Foreign keys don't increment, so they must be set.
                 # Eventually, hopefully, a session link will set this.
                 echo -n "${YSEP}TRUE"
-            elif [[ " List Add Export Import " =~ "$itype" ]]; then
+            elif [[ " Add Export Import " =~ "$itype" ]]; then
                 # Non-foreign primary key is identity field. It should
-                # not be set the the imported file.  List interaction
-                # is included because the non-foreign primary is a
-                # special, always included case:
+                # not be set the the imported file.
                 echo -n "${YSEP}FALSE"
             else
                 # Otherwise non-foreign primary key identifies the
