@@ -272,7 +272,7 @@ gsf_srm_mode_List()
     fi
 
     echo "list"
-    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
+    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) "title" "$GF_TNAME Management" )
     tabulate_array 1 "${cmds[@]}"
 
     if gsf_IACT_included "Add"; then
