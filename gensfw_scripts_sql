@@ -46,6 +46,8 @@ gsf_write_script_sql_import()
     local BESPOKE_ID_FIELD="BESPOKE_AUTOID"
     local -i BESPOKE_AUTOINC=1
     local AUTOINC_TARGET
+    local SLINK_TARGET
+    local SLINK_VALUE
 
     local ID_FIELD_NAME="id_session"
     local -i MAX_NAME_LEN="${#ID_FIELD_NAME}"
@@ -64,12 +66,17 @@ gsf_write_script_sql_import()
     gwsqi_survey()
     {
         local -i len
-        if is_noninc_prikey; then
-            maybe_update_max "$BESPOKE_ID_FIELD"
-            BESPOKE_AUTOINC=0
-            AUTOINC_TARGET="$FIELD_NAME"
-        elif CB_ROW_IS_PARAM && ! is_slink; then
-            maybe_update_max "$FIELD_NAME"
+        if  is_prikey; then
+            if is_forkey; then
+                if is_slink; then
+                    SLINK_TARGET="$FIELD_NAME"
+                    SLINK_VALUE="$SLINK"
+                fi
+            elif  ! is_autoinc; then
+                maybe_update_max "$BESPOKE_ID_FIELD"
+                BESPOKE_AUTOINC=0
+                AUTOINC_TARGET="$FIELD_NAME"
+            fi
         fi
     }
     # Scan for longest field name length:
@@ -311,6 +318,8 @@ gsf_sql_proc_body_List()
 
 gsf_sql_proc_body_Add()
 {
+    local save_autocommit="@${GF_TNAME}_autocommit"
+    
     local -i lambda_count=0
 
     local foreign_key foreign_slink
@@ -318,7 +327,7 @@ gsf_sql_proc_body_Add()
 
         echo_field()
         {
-            echo -n "gspbA_find_key slink='$slink' "
+            echo -n "gspbA_scan_key slink='$slink' "
             if is_prikey; then echo -n "YES PRIKEY "; else echo -n "NOT prikey "; fi
             if is_autoinc; then echo -n "YES AUTOIN "; else echo -n "NOT autoin "; fi
             if is_forkey; then echo -n "YES FORKEY "; else echo -n "NOT forkey "; fi
@@ -334,16 +343,15 @@ gsf_sql_proc_body_Add()
         fi
     }
 
-    gspbA_find_key()
+    gspbA_scan_keys()
     {
-
-        if is_prikey && ! is_autoinc; then
+        if is_prikey; then
             if is_forkey; then
                 foreign_key="$FIELD_NAME"
                 if is_slink; then
                     foreign_slink="$SLINK"
                 fi
-            else
+            elif ! is_autoinc; then
                 autoinc_key="$FIELD_NAME"
             fi
         fi
@@ -375,14 +383,17 @@ gsf_sql_proc_body_Add()
         fi
     }
 
-    gsf_callback_prefs_rows "gspbA_find_key"
+    gsf_callback_prefs_rows "gspbA_scan_keys"
 
     indent_line "DECLARE newid INT UNSIGNED;"
     echo
 
     if [ $autoinc_key ]; then
         indent_line "-- DIY autoinc section"
-        indent_line "TABLE LOCK ${GF_TNAME} WRITE;"
+        indent_line "-- Start multi-statement transaction:"
+        indent_line "SET $save_autocommit = autocommit;"
+        indent_line "SET autocommit=0;"
+        echo
         indent_line "SELECT MAX(ai.${autoinc_key})+1 INTO newid"
         indent_line "  FROM ${GF_TNAME} ai"
         if [ $foreign_key ]; then
@@ -409,7 +420,9 @@ gsf_sql_proc_body_Add()
 
     if [ $autoinc_key -a -n $foreign_key ]; then
         indent_line "-- DIY autoinc"
-        indent_line "UNLOCK_TABLES;"
+        indent_line "COMMIT;"
+        indent_line "SET autocommit = $save_autocommit;"
+        indent_line "SET $save_autocommit = NULL;"
         echo
     fi
     indent_line "IF ROW_COUNT() > 0 THEN"
@@ -727,26 +740,19 @@ gsf_sql_import_proc_abandon()
 
 gsf_sql_import_proc_accept()
 {
+    local acounter="@${GF_TNAME}_acount"
+    local save_autocommit="@${GF_TNAME}_autocommit"
+    
     local -i lambda_count=0
     local ispaces
     local -i bespoke_autoinc=1  # 'false' until need is detected
     local table_where
-    local target_prikey
 
     maybe_new_line()
     {
         if [ $(( lambda_count++ )) -gt 0 ]; then
             echo ", "
             echo -n "${ispaces}"
-        fi
-    }
-
-    gsiqa_scan()
-    {
-        if is_slink; then
-            table_where=" WHERE $FIELD_NAME = $SLINK;"
-        elif is_prikey && ! is_forkey && ! is_autoinc; then
-            target_prikey="$FIELD_NAME"
         fi
     }
 
@@ -784,21 +790,38 @@ gsf_sql_import_proc_accept()
 
     if table_needs_bespoke_autoinc; then
         lambda_count=0
-        gsf_callback_prefs_rows "gsiqa_scan"
+
+        if [ $SLINK_VALUE ]; then
+            table_where=" WHERE $SLINK_TARGET = $SLINK_VALUE"
+        else
+            table_where=" WHERE 1=1"    
+        fi
 
         indent_line "-- Before table lock, setup rows to add to current MAX value."
-        indent_line "DECLARE counter INT UNSIGNED DEFAULT 1;"
-        indent_line "DECLARE refmax INT UNSIGNED;"
+        indent_line "DECLARE start_max INT UNSIGNED;"
+        indent_line "DECLARE new_max INT UNSIGNED;"
+        indent_line "SET ${acounter}=0;"
         echo
+        indent_line "-- Set starting values before setting intention locks:"
         indent_line "UPDATE $QT_NAME"
-        indent_line "   SET $BESPOKE_ID_FIELD = (SELECT counter:=counter+1)"
+        indent_line "   SET $BESPOKE_ID_FIELD = ${acounter} = ${acounter} + 1"
         indent_line " WHERE id_session = @session_confirmed_id;"
         echo
-        indent_line "TABLE LOCK ${GF_TNAME} WRITE;"
+        indent_line "-- Start multi-statement transaction:"
+        indent_line "SET $save_autocommit = autocommit;"
+        indent_line "SET autocommit=0;"
         echo
-        indent_line "SELECT MAX(${AUTOINC_TARGET}) INTO refmax"
+        indent_line "-- Need starting and ending values for new records:"
+        indent_line "SELECT MAX(${AUTOINC_TARGET}) INTO start_max"
         indent_line "  FROM $GF_TNAME"
-        indent_line "${table_where}"
+        indent_line "${table_where};"
+        echo
+        indent_line "SET new_max = start_max + ${acounter} + 1;"
+        echo
+        indent_line "-- Set the insert intention locks:"
+        indent_line "SELECT *"
+        indent_line "  FROM $GF_TNAME"
+        indent_line "${table_where} AND ${AUTOINC_TARGET}<new_max;"
         echo
     fi
 
@@ -810,9 +833,9 @@ gsf_sql_import_proc_accept()
     gsf_callback_prefs_rows "gsiqa_set"
     if table_needs_bespoke_autoinc; then
         echo ","
-        echo "${ispaces}${target_prikey}"
+        echo "${ispaces}${AUTOINC_TARGET}"
     fi
-    intent_line ")"
+    indent_line ")"
 
     lambda_count=0
     echo -n "${GSF_SELECT_LINE}"
@@ -827,7 +850,10 @@ gsf_sql_import_proc_accept()
     echo
 
     if table_needs_bespoke_autoinc; then
-        indent_line "UNLOCK TABLES;"
+        indent_line "COMMIT;"
+        indent_line "SET autocommit = $save_autocommit;"
+        indent_line "SET $save_autocommit = NULL;"
+        indent_line "SET $acounter = NULL;"
         echo
     fi
 
