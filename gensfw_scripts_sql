@@ -318,8 +318,6 @@ gsf_sql_proc_body_List()
 
 gsf_sql_proc_body_Add()
 {
-    local save_autocommit="@${GF_TNAME}_autocommit"
-    
     local -i lambda_count=0
 
     local foreign_key foreign_slink
@@ -386,15 +384,15 @@ gsf_sql_proc_body_Add()
     gsf_callback_prefs_rows "gspbA_scan_keys"
 
     indent_line "DECLARE newid INT UNSIGNED;"
+    indent_line "DECLARE rcount INT UNSIGNED;"
     echo
 
     if [ $autoinc_key ]; then
         indent_line "-- DIY autoinc section"
         indent_line "-- Start multi-statement transaction:"
-        indent_line "SET $save_autocommit = autocommit;"
-        indent_line "SET autocommit=0;"
+        indent_line "SET autocommit = 0;"
         echo
-        indent_line "SELECT MAX(ai.${autoinc_key})+1 INTO newid"
+        indent_line "SELECT COALESCE(MAX(ai.${autoinc_key}),0)+1 INTO newid"
         indent_line "  FROM ${GF_TNAME} ai"
         if [ $foreign_key ]; then
             if [ $foreign_slink ]; then
@@ -417,15 +415,16 @@ gsf_sql_proc_body_Add()
     gsf_callback_prefs_rows "gspbA_values"
     echo ");"
     echo
+    indent_line "SELECT ROW_COUNT() INTO rcount;"
 
     if [ $autoinc_key -a -n $foreign_key ]; then
         indent_line "-- DIY autoinc"
         indent_line "COMMIT;"
-        indent_line "SET autocommit = $save_autocommit;"
-        indent_line "SET $save_autocommit = NULL;"
+        indent_line "SET autocommit = 1;"
         echo
     fi
-    indent_line "IF ROW_COUNT() > 0 THEN"
+    indent_line "IF rcount > 0 THEN"
+    echo
 
     # We don't need LAST_INSERT_KEY() if we assigned newid with record lock
     if [ -z $autoinc_key ]; then
@@ -741,7 +740,6 @@ gsf_sql_import_proc_abandon()
 gsf_sql_import_proc_accept()
 {
     local acounter="@${GF_TNAME}_acount"
-    local save_autocommit="@${GF_TNAME}_autocommit"
     
     local -i lambda_count=0
     local ispaces
@@ -804,15 +802,14 @@ gsf_sql_import_proc_accept()
         echo
         indent_line "-- Set starting values before setting intention locks:"
         indent_line "UPDATE $QT_NAME"
-        indent_line "   SET $BESPOKE_ID_FIELD = ${acounter} = ${acounter} + 1"
+        indent_line "   SET $BESPOKE_ID_FIELD = (SELECT ${acounter} := ${acounter} + 1)"
         indent_line " WHERE id_session = @session_confirmed_id;"
         echo
         indent_line "-- Start multi-statement transaction:"
-        indent_line "SET $save_autocommit = autocommit;"
-        indent_line "SET autocommit=0;"
+        indent_line "SET autocommit = 0;"
         echo
         indent_line "-- Need starting and ending values for new records:"
-        indent_line "SELECT MAX(${AUTOINC_TARGET}) INTO start_max"
+        indent_line "SELECT COALESCE(MAX(${AUTOINC_TARGET}),0) INTO start_max"
         indent_line "  FROM $GF_TNAME"
         indent_line "${table_where};"
         echo
@@ -843,7 +840,7 @@ gsf_sql_import_proc_accept()
     gsf_callback_prefs_rows "gsiqa_select"
     if table_needs_bespoke_autoinc; then
         echo ","
-        echo "${ispaces}refmax+$BESPOKE_ID_FIELD"
+        echo "${ispaces}new_max+$BESPOKE_ID_FIELD"
     fi
     echo "${GSF_FROM_LINE}${QT_NAME}"
     echo "${GSF_WHERE_LINE}id_session = @session_confirmed_id;"
@@ -851,8 +848,7 @@ gsf_sql_import_proc_accept()
 
     if table_needs_bespoke_autoinc; then
         indent_line "COMMIT;"
-        indent_line "SET autocommit = $save_autocommit;"
-        indent_line "SET $save_autocommit = NULL;"
+        indent_line "SET autocommit = 1;"
         indent_line "SET $acounter = NULL;"
         echo
     fi
