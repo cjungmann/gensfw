@@ -41,6 +41,10 @@ VSEP="${SEPS:2:1}"
 YSEP="${VSEP}"
 # YSEP='^'
 
+# Global variable also serves as a flag to prevent collect_table_info()
+# from attempting to call lthe follow-on function
+declare CL_CMD
+
 declare -a IACT_NAMES=( List Add Read Update Delete Import Export )
 declare -a IACT_COLUMNS=( Type Param Result Readonly Hide Label )
 
@@ -867,24 +871,96 @@ set_table_name()
     fi
 }
 
+auto_save()
+{
+    if [ "${GF_FILEPATH_SQL}" ]; then
+        echo "Saving SQL to ${GF_FILEPATH_SQL}" >&2
+        save_sql_to_file "${GF_FILEPATH_SQL}"
+    fi
 
-# This function can terminate the script with an unknown database
-# or table name.  Thus, there is no return value for this function.
+    if [ "${GF_FILEPATH_SRM}" ]; then
+        echo "Saving SRM to ${GF_FILEPATH_SRM}" >&2
+        save_srm_to_file "${GF_FILEPATH_SRM}"
+    fi
+}
+
+attempt_gsf_open()
+{
+    local IFS='.'
+    local base path
+    local arr=( $( echo "$1" ) )
+    if [ "${#arr[@]}" -eq 1 ]; then
+        base="${arr}"
+        path="${arr}.gsf"
+    else
+        base="${arr[0]}"
+        path="${1}"
+    fi
+
+    if [ -f "${path}" ]; then
+        GF_FILE_ARG="${path}"
+        set_file_path_defaults "${path}"
+        gsf_read_settings_from_file "${path}"
+    fi
+}
+
 parse_args()
 {
-    local arg
-    for arg in "$@"; do
-        if [ -f "${arg}" ]; then
-            GF_FILE_ARG="${arg}"
-            set_file_path_defaults "${arg}"
-            gsf_read_settings_from_file "${GF_FILEPATH_GSF}"
-            break
-        elif [ -z "$GF_DBNAME" ]; then
-            set_dbase_name "$arg"
-        elif [ -z "$GF_TNAME" ]; then
-            set_table_name "$arg"
+    local arg state
+    local -i reev
+    local gsfname dbname tname
+
+    # Interpret an argument without a state as a gsfname
+    set_state()
+    {
+        arg="$1"
+        if [ "$state" ]; then
+            case "$state" in
+                g) gsfname="${arg}" ;;
+                d) dbname="${arg}" ;;
+                t) tname="${arg}" ;;
+                c) CL_CMD="${arg}" ;;
+            esac
+        else
+            gsfname="${arg}"
         fi
+    }
+
+    regx='-(c|d|g|t)'
+
+    for arg in "$@"; do
+        [[ "${arg}" =~ $regx ]]
+        reev=$?
+
+        case "$reev" in
+            0) state="${BASH_REMATCH[1]}" ;;
+
+            1) set_state "${arg}"
+               unset state
+               ;;
+
+            2) echo "Invalid regular expression." >&2 ;;
+        esac
     done
+
+    if [ $gsfname ]; then
+        attempt_gsf_open "${gsfname}"
+    elif [ $dbname ]; then
+        set_dbase_name "${dbname}"
+        if [ $tname ]; then
+            set_table_name "${tname}"
+        fi
+    fi
+
+    if [ "$CL_CMD" = "save" ]; then
+        if [ "$GF_TNAME" ]; then
+            set_file_path_defaults "${PWD}/${GF_TNAME}.gsf"
+            collect_table_info "auto_save"
+            return 1
+        fi
+    fi
+
+    return 0
 }
 
 # Using the first character of IFS as the separator, this function creates a
@@ -1390,7 +1466,10 @@ use_table_info()
 
 collect_table_info()
 {
-    local use_table_info_callback="${1:-show_table_preferences_dialog}"
+    local use_table_info_callback
+    if [ -z $CL_CMD ]; then
+        use_table_info_callback="${1:-show_table_preferences_dialog}"
+    fi
 
     if ! confirm_dbase_name || ! confirm_table_name ; then
         echo "SQL Injection test failed.  Attempt to set" >&2
@@ -1466,10 +1545,14 @@ loop_for_context()
 
 
 parse_args "$@"
-if [ -z "$GF_FILE_ARG" ]; then
-    if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
-        collect_table_info "show_table_preferences_dialog"
-    else
-        loop_for_context
+exval=$?
+
+if [ $exval -eq 0 ]; then
+    if [ -z "$GF_FILE_ARG" ]; then
+        if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
+            collect_table_info "show_table_preferences_dialog"
+        else
+            loop_for_context
+        fi
     fi
 fi
