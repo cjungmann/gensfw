@@ -2,7 +2,7 @@
 .SH NAME
 gensfw \- Generate Schema Framework Files
 .SH SYNOPSIS
-\fBgensfw\fR [ \fIdatabase name\fR | \fIgsf file name\fR ] [ \fItable name\fR ]
+\fBgensfw\fR [\fIOptions\fR] [\fIgsf file name|stem\fR]
 .SH DESCRIPTION
 \fBgensfw\fR is an aid for writing SQL and SRM scripts in support of
 web applications delivered using the Schema Framework.  In particular, the
@@ -18,34 +18,55 @@ that can be re-opened and changed as needed before generating new scripts.
 The documentation for using \fBgensfw\fR is found in the \fIinfo gensfw\fR
 pages.
 .SH OPTIONS
-There are no options, per se, only optional ways to begin the program, which
-are listed in the EXAMPLES section
-.SH EXAMPLES
-There are four different options for opening \fBgensfw\fR:
-.RS
 .TP
-\fBgensfw\fR
+.BI \-d " Database Name"
+Open the named database.
+
+.TP
+.BI \-t " Table Name"
+Open the named table.  Results in error if table not in named database.
+
+.TP
+.BI \-g " GSF file name"
+Open the named gsf file.  If the file extension is omitted, an extension
+of \fI.gsf\fR will be assumed.
+
+.TP
+.BI \-c " Command"
+This option runs \fBgensfw\fR in batch mode.
+
+For now, the only honored value for \fICommand\fR is \fBsave\fR,
+which writes SRM and SQL code to files with file extensions matching
+the content they hold.
+.SH EXAMPLES
+.TP
+.B gensfw
 .br
 Open with the list of databases in localhost.
-.br
 .TP
-\fBgensfw\fR \fIdatabase\fR
+.BI "gensfw -d" " database"
 .br
 Open with the list of tables in database \fIdatabase\fR.
 .br
 .TP
-\fBgensfw\fR \fIdatabase table\fR
+.BI "gensfw -d" " database " -t " table"
 .br
 Open with the interaction editor for table \fItable\fR in database \fIdatabase\fR.
 .br
 .TP
-\fBgensfw\fR \fItable.gsf\fR
+.BI "gensfw -g" "Person.gsf"
+.BI "gensfw" " Person.gsf"
+.BI "gensfw" " Person"
 .br
-Open with the interaction editor for the database and table that were used
-to create \fItable.gsf\fR.  The settings in place when the file was saved are
-restored.
+Assuming that \fIPerson.gsf\fR exists where \fBgensfw\fR is called, these
+three examples will all open \fIPerson.gsf\fR.  The settings in place when
+the file was saved are restored.
 .br
-.RE
+.TP
+.BI "gensfw" " Person " -c " save"
+Opens \fIPerson.gsf\fR and executes the \fIsave\fR command to write the SQL
+and SRM files.
+.br
 
 .SH AUTHOR
 Charles P. Jungmann
