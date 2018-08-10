@@ -79,6 +79,11 @@ declare -gx GF_FILEPATH_GSF
 declare -gx GF_FILEPATH_SQL
 declare -gx GF_FILEPATH_SRM
 
+# Conditional return, clear-intent functions
+is_gsf_open()   { [ -n "${GF_FILE_ARG}" ]; }
+is_dbase_open() { [ -n "${GF_DBNAME}" ]; }
+is_table_open() { [ -n "${GF_TNAME}" ]; }
+
 # This array changes when GF_DBNAME changes (from Dialog 1):
 declare -a TABLE_NAMES
 
@@ -107,34 +112,29 @@ set_file_path_defaults()
     local IFS="/"
     local lpath fname froot
     local -a tarr farr=( $( echo "$1" ) )
+    local -a narr
     local -i tlen flen="${#farr[@]}"
+
     if [ $flen -eq 1 ]; then
         fname="$1"
-        lpath=""
+    elif [ $flen -gt 1 ]; then
+        fname="${tarr[$(( flen-1 ))]}"
     else
-        tarr=( "${farr[@]:0:$(( flen-1 ))}" )
-        lpath="${tarr[*]}"
-        fname="${farr[ $(( flen-1 )) ]}"
+        echo "Failed to discern a file name from '${1}'" >&2
+        exit 1
     fi
 
-
-    IFS="\."
-    tarr=( $( echo "${fname}" ) )
-    tlen="${#tarr[@]}"
-    if [ $tlen -eq 0 ]; then
-        froot="${fname}"
+    IFS="."
+    local -a narr=( $( echo "$fname" ) )
+    if [ "${#narr[@]}" -gt 1 ]; then
+        froot="${narr[0]}"
     else
-        froot="${tarr[*]:0:$(( tlen-1 ))}"
+        froot="$fname"
     fi
-    froot="${tarr[@]:0:$(( tlen-1 ))}"
 
-    local fbase="${froot}"
-    if [ -n "${lpath}" ]; then
-        fbase="${lpath}/${froot}"
-    fi
-    GF_FILEPATH_GSF="$1"
-    GF_FILEPATH_SQL="${fbase}.sql"
-    GF_FILEPATH_SRM="${fbase}.srm"
+    GF_FILEPATH_GSF="${froot}.gsf"
+    GF_FILEPATH_SQL="${froot}.sql"
+    GF_FILEPATH_SRM="${froot}.srm"
 }
 
 # Convenient function to avoid having to know the array name:
@@ -865,6 +865,7 @@ set_table_name()
 {
     if string_in_array "$1" "${TABLE_NAMES[@]}"; then
         GF_TNAME="$1"
+        return 0
     else
         echo "'$1' is not a table name in the ${GF_DBNAME} database." >&2
         exit 1
@@ -874,12 +875,10 @@ set_table_name()
 auto_save()
 {
     if [ "${GF_FILEPATH_SQL}" ]; then
-        echo "Saving SQL to ${GF_FILEPATH_SQL}" >&2
         save_sql_to_file "${GF_FILEPATH_SQL}"
     fi
 
     if [ "${GF_FILEPATH_SRM}" ]; then
-        echo "Saving SRM to ${GF_FILEPATH_SRM}" >&2
         save_srm_to_file "${GF_FILEPATH_SRM}"
     fi
 }
@@ -901,7 +900,10 @@ attempt_gsf_open()
         GF_FILE_ARG="${path}"
         set_file_path_defaults "${path}"
         gsf_read_settings_from_file "${path}"
+        return 0
     fi
+
+    return 1
 }
 
 parse_args()
@@ -949,18 +951,9 @@ parse_args()
         set_dbase_name "${dbname}"
         if [ $tname ]; then
             set_table_name "${tname}"
+            set_file_path_defaults "${tname}"
         fi
     fi
-
-    if [ "$CL_CMD" = "save" ]; then
-        if [ "$GF_TNAME" ]; then
-            set_file_path_defaults "${PWD}/${GF_TNAME}.gsf"
-            collect_table_info "auto_save"
-            return 1
-        fi
-    fi
-
-    return 0
 }
 
 # Using the first character of IFS as the separator, this function creates a
@@ -1055,6 +1048,7 @@ show_select_table_dialog()
     exval=$?
     if [ $exval -eq 0 ]; then
         set_table_name "${result}"
+        set_file_path_defaults "${result}"
     fi
     return $exval
 }
@@ -1067,10 +1061,6 @@ show_table_preferences_dialog()
     local -i PLUG_NUM=$(( G_PLUG_NUM++ ))
     local -a row
     local IFS="${YSEP}"
-
-    if [ -z "${GF_FILE_ARG}" ]; then
-        set_file_path_defaults "${PWD}/${GF_TNAME}.gsf"
-    fi
 
     while true; do
         result=$(
@@ -1239,6 +1229,7 @@ show_interaction_preferences_dialog()
 show_default_column_labels_dialog()
 {
     local -i fcount=$( get_fields_count )
+
     if [ "$fcount" -lt 15 ]; then
         start_default_columns_array_form_dialog "labels"
     else
@@ -1296,15 +1287,15 @@ start_default_columns_array_form_dialog()
     # Add list rows
     local -i ndx="${#cmd[@]}"
     local IFS="${FSEP}"
-    for rowstr in "${RESULT_ROWS[@]}"; do
-        row=( $( echo "$rowstr") )
+
+    for name in "${GSF_FIELD_NAMES[@]}"; do
         cmd[ $(( ndx++ )) ]="--field"
-        cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}:"
+        cmd[ $(( ndx++ )) ]="$name"
     done
 
-    if [ ${atype} = "labels" ]; then
+    if [ "$atype" = "labels" ]; then
         cmd=( "${cmd[@]}" "${GSF_FIELD_LABELS[@]}" )
-    elif  [ ${atype} = "slinks" ]; then
+    elif  [ "$atype" = "slinks" ]; then
         cmd=( "${cmd[@]}" "${GSF_FIELD_SLINKS[@]}" )
     fi
 
@@ -1355,12 +1346,12 @@ start_default_columns_array_list_dialog()
     local -i ndx="${#cmd[@]}"
     local -i vndx=0
     local IFS="${FSEP}"
-    for rowstr in "${RESULT_ROWS[@]}"; do
-        row=( $( echo "$rowstr") )
-        cmd[ $(( ndx++ )) ]="${row[$COL_NAME]}"
-        if [ ${atype} = "labels" ]; then
+
+    for name in "${GSF_FIELD_NAMES[@]}"; do
+        cmd[ $(( ndx++ )) ]="$name"
+        if [ "$atype" = "labels" ]; then
             cmd[ $(( ndx++ )) ]="${GSF_FIELD_LABELS[$(( vndx++ ))]}"
-        elif  [ ${atype} = "slinks" ]; then
+        elif  [ "$atype" = "slinks" ]; then
             cmd[ $(( ndx++ )) ]="${GSF_FIELD_SLINKS[$(( vndx++ ))]}"
         fi
     done
@@ -1466,9 +1457,10 @@ use_table_info()
 
 collect_table_info()
 {
-    local use_table_info_callback
-    if [ -z $CL_CMD ]; then
-        use_table_info_callback="${1:-show_table_preferences_dialog}"
+    local use_table_info_callback="${1}"
+    if [ -z "${use_table_info_callback}" ]; then
+        echo "Missing callback function name." >&2
+        exit 1
     fi
 
     if ! confirm_dbase_name || ! confirm_table_name ; then
@@ -1483,7 +1475,8 @@ ${COLS_QUERY}
 WHERE c.TABLE_SCHEMA='${GF_DBNAME}'
 AND c.TABLE_NAME='${GF_TNAME}'"
 
-    source bashmysql -s "${SEPS}" "information_schema" "${query}" -c use_table_info
+    # Set callback to use_table_info(), which calls $use_table_info_callback:
+    source bashmysql -s "${SEPS}" "information_schema" "${query}" -c "use_table_info"
 }
 
 table_get_index_key()
@@ -1504,37 +1497,40 @@ table_get_index_key()
         return 0
     fi
 
-    echo "Found $matched keys, should have been 1." >&2
     return 1
 }
 
 loop_for_context()
 {
-    local -i do_loop=0
-    local -i do_dbase_loop=$( test -z "$GF_DBNAME"; echo $? )
+    local -i loop_flag=0
+    local -i dbase_flag=$( is_dbase_open; echo $? )
+    do_loop()        { [ $loop_flag -eq 0 ]; }
+    show_dbase_dlg() { [ $dbase_flag -ne 0 ]; }
+    stop_looping()   { loop_flag=1; }
 
     local tresult dresult
     local -i exval
 
-    while [ $do_loop -eq 0 ]; do
-        if [ $do_dbase_loop -eq 0 ]; then
+    while do_loop; do
+        if show_dbase_dlg; then
             show_select_dbase_dialog
             exval=$?
             if [ $exval -ne 0 ]; then
                 GF_DBNAME=
-                do_dbase_loop=1
-                do_loop=1
+                stop_looping
             fi
         fi
 
-        while [ -n "$GF_DBNAME" ]; do
+        while is_dbase_open; do
             reset_for_new_table
             show_select_table_dialog
             exval=$?
             if [ $exval -eq 0 ]; then
-                collect_table_info "show_table_preferences_dialog"
-            elif [ $do_dbase_loop -ne 0 ]; then
-                do_loop=1
+                set_file_path_defaults "${GF_TNAME}"
+                collect_table_info "gsf_load_IACT_DATA"
+                show_table_preferences_dialog
+            elif ! show_dbase_dlg; then
+                stop_looping
                 break
             else
                 break
@@ -1543,16 +1539,20 @@ loop_for_context()
     done
 }
 
-
 parse_args "$@"
-exval=$?
 
-if [ $exval -eq 0 ]; then
-    if [ -z "$GF_FILE_ARG" ]; then
-        if [ -n "$GF_TNAME" -a -n "$GF_DBNAME" ]; then
-            collect_table_info "show_table_preferences_dialog"
+if is_table_open && is_dbase_open; then
+    if is_gsf_open; then
+        # collect_table_info was already called in gsf_read_settings_from_file():
+        if [ "$CL_CMD" = "save" ]; then
+            auto_save
         else
-            loop_for_context
+            show_table_preferences_dialog
         fi
+    else
+        collect_table_info "gsf_load_IACT_DATA"
+        show_table_preferences_dialog
     fi
+else
+    loop_for_context
 fi
