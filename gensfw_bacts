@@ -82,8 +82,6 @@ gsf_load_IACT_DATA()
             IACT_DATA["${name}"]="${valarr[*]}"
         fi
     done
-
-    show_table_preferences_dialog
 }
 
 gsf_open_table_from_record()
@@ -100,12 +98,9 @@ gsf_open_table_from_record()
         exval=$?
         if [ $exval -eq 0 ]; then
             set_table_name "${names[1]}"
-            exval=$?
-            if [ $exval -eq 0 ]; then
-                collect_table_info "gsf_load_IACT_DATA"
-            fi
         fi
     fi
+
     return $exval
 }
 
@@ -125,6 +120,7 @@ gsf_read_settings_from_file()
     GSF_SRM_GLOBALS=( $( echo "${GSF_RECS[4]}" ) )
 
     gsf_open_table_from_record "${GSF_RECS[0]}"
+    collect_table_info "gsf_load_IACT_DATA"
 }
 
 open_gsf_file()
