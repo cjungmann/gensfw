@@ -417,7 +417,7 @@ gsf_sql_proc_body_Add()
     echo
     indent_line "SELECT ROW_COUNT() INTO rcount;"
 
-    if [ $autoinc_key -a -n $foreign_key ]; then
+    if [ "$autoinc_key" -a -n "$foreign_key" ]; then
         indent_line "-- DIY autoinc"
         indent_line "COMMIT;"
         indent_line "SET autocommit = 1;"
