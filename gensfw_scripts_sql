@@ -37,6 +37,36 @@ gsf_write_script_sql()
     fi
 }
 
+
+# If a variables procedure is defined when called, this
+# function will add a call to the procedure.  If the
+# function is called with a parameter, the parameter
+# will be used as the condition for an IF statment.
+# The conditional condition was added to support the
+# LIST interaction that doesn't need to variables
+# information when returning an updated or added
+# record.
+gsf_sql_add_varsproc()
+{
+    local condition varsproc
+    varsproc=$( gsf_get_vars_proc )
+    if [ $? -eq 0 ]; then
+        local indent="   "
+        echo
+
+        if [ $# -gt 0 ]; then
+            echo "${indent}IF $1 THEN"
+            echo -n "${indent}"
+        fi
+        echo "${indent}CALL ${varsproc}();"
+        if [ $# -gt 0 ]; then
+            echo "${indent}END IF;"
+        fi
+
+        echo
+    fi
+}
+
 gsf_write_script_sql_import()
 {
     # Environment values for all import functions:
@@ -282,8 +312,18 @@ declare GSF_INSERT_SPACES_LINE="${GSF_INSERT_VALUES_LINE//?/ }"
 
 gsf_sql_proc_body_List()
 {
-    local -i where_count=0
+    local -i where_count=0 if_count=0
     local prefix="t"
+
+    gspbl_if()
+    {
+        if CB_ROW_IS_PARAM && ! is_forkey; then
+            if [ $(( if_count++ )) -gt 0 ]; then
+                echo -n " AND "
+            fi
+            echo -n "$FIELD_NAME IS NULL"
+        fi
+    }
 
     gspbl_where()
     {
@@ -314,6 +354,11 @@ gsf_sql_proc_body_List()
     
     gsf_callback_prefs_rows "gspbl_where"
     echo ";"
+
+    local varproc_condition=$( gsf_callback_prefs_rows "gspbl_if" )
+
+    gsf_sql_add_varsproc "${varproc_condition}"
+
 }
 
 gsf_sql_proc_body_Add()
@@ -323,14 +368,14 @@ gsf_sql_proc_body_Add()
     local foreign_key foreign_slink
     local autoinc_key
 
-        echo_field()
-        {
-            echo -n "gspbA_scan_key slink='$slink' "
-            if is_prikey; then echo -n "YES PRIKEY "; else echo -n "NOT prikey "; fi
-            if is_autoinc; then echo -n "YES AUTOIN "; else echo -n "NOT autoin "; fi
-            if is_forkey; then echo -n "YES FORKEY "; else echo -n "NOT forkey "; fi
-            echo
-        }
+    echo_field()
+    {
+        echo -n "gspbA_scan_key slink='$slink' "
+        if is_prikey; then echo -n "YES PRIKEY "; else echo -n "NOT prikey "; fi
+        if is_autoinc; then echo -n "YES AUTOIN "; else echo -n "NOT autoin "; fi
+        if is_forkey; then echo -n "YES FORKEY "; else echo -n "NOT forkey "; fi
+        echo
+    }
 
     # Avoid copying this code in four places:
     maybe_add_comma_line()
@@ -424,7 +469,6 @@ gsf_sql_proc_body_Add()
         echo
     fi
     indent_line "IF rcount > 0 THEN"
-    echo
 
     # We don't need LAST_INSERT_KEY() if we assigned newid with record lock
     if [ -z $autoinc_key ]; then
@@ -472,6 +516,8 @@ gsf_sql_proc_body_Read()
     echo -n "${GSF_WHERE_LINE}"
     gsf_callback_prefs_rows "gspbr_where"
     echo ";"
+
+    gsf_sql_add_varsproc
 }
 
 gsf_sql_update_proc_value()
@@ -521,6 +567,14 @@ gsf_sql_update_proc_value()
     gsf_callback_prefs_rows "gsupv_where"
     echo ";"
 
+    local varsproc
+    varsproc=$( gsf_get_vars_proc )
+    if [ $? -eq 0 ]; then
+        echo
+        echo "CALL ${varsproc}();"
+        echo
+    fi
+    
     echo "END \$\$"
 }
 

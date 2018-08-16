@@ -305,7 +305,14 @@ gsf_srm_mode_List()
         tabulate_array 2 "${a_button[@]}"
     fi
 
-    gsf_write_schema "List" 1
+    tabulate_array 1 "result" "1"
+    gsf_write_schema "List" 2
+
+    local varsproc=$( gsf_get_vars_proc )
+    if [ $? -eq 0 ]; then
+        tabulate_array 1 "result" "2"
+        tabulate_array 2 "type" "variables"
+    fi
 }
 
 # This is a two part action, so there are two modes,
@@ -366,7 +373,16 @@ gsf_srm_mode_Update()
     cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${cmds[@]}"
 
-    gsf_write_schema "Edit" 1
+    local varsproc
+    varsproc=$( gsf_get_vars_proc )
+    if [ $? -eq 0 ]; then
+        indent_line "result : 1"
+        gsf_write_schema "Edit" 2
+        indent_line "result : 2"
+        tabulate_array 2 "type" "variables"
+    else
+        gsf_write_schema "Edit" 1
+    fi
     echo
 
     # Write out the response mode "edit_submit"

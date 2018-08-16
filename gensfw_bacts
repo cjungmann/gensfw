@@ -1,5 +1,7 @@
 #!/bin/bash
 
+declare -a GSF_RECS=()
+
 get_saved_settings_string()
 {
     local IFS
@@ -39,9 +41,9 @@ save_settings_to_file()
 gsf_reconcile_field_strings()
 {
     local IFS="${FSEP}"
-    local -a lnames=( $( echo "$1" ) )
-    local -a labels=( $( echo "$2" ) )
-    local -a slinks=( $( echo "$3" ) )
+    local -a lnames=( $1 )
+    local -a labels=( $2 )
+    local -a slinks=( $3 )
 
     local -i exval endx ndx=0
     
@@ -74,7 +76,7 @@ gsf_load_IACT_DATA()
 
     local -a rec valarr
     for recstr in "${GSF_RECS[@]:3}"; do
-        rec=( $( echo "${recstr}" ) )
+        rec=( $recstr )
         name="${rec[0]}"
         if confirm_iact_name "${name}"; then
             # Use sliced array to reconstruct values using asterisk expansion
@@ -91,7 +93,7 @@ gsf_open_table_from_record()
 
     # Split the first record into the database and table names:
     local -a names
-    names=( $( echo "$1" ) )
+    names=( $1 )
 
     if [ $? -eq 0 -a "${#names[@]}" -eq 2 ]; then
         set_dbase_name "${names[0]}"
@@ -105,22 +107,25 @@ gsf_open_table_from_record()
 }
 
 # Read the contents of the filename into array-of-records GSF_RECS.
-# The first record is directly passed to gsf_open_table_from_record, but
-# the subsequent records are accessed, via callback gsf_load_IACT_DATA,
-# from the GSF_RECS array that remains in the environment.
+# The first record is directly passed to gsf_open_table_from_record.
+# I've moved array variable GSF_RECS to be global so it doesn't
+# need to be accessed through callback.
 gsf_read_settings_from_file()
 {
     # existence of file already confirmed
     local fname="$1"
     local IFS="${RSEP}"
-    local -i exval
-    local -a GSF_RECS=( $( cat "$fname" ) )
+
+    GSF_RECS=( $( cat "$fname" ) )
+    if [ $? -ne 0 ]; then
+        echo "Error reading file '$fname'" >&2
+        exit 1
+    fi
 
     IFS="${FSEP}"
-    GSF_SRM_GLOBALS=( $( echo "${GSF_RECS[4]}" ) )
+    GSF_SRM_GLOBALS=( ${GSF_RECS[4]} )
 
     gsf_open_table_from_record "${GSF_RECS[0]}"
-    collect_table_info "gsf_load_IACT_DATA"
 }
 
 open_gsf_file()
