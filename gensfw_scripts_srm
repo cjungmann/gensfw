@@ -223,12 +223,13 @@ gsf_write_schema()
         fi
     }
 
+    gws_start_schema
+
     # For Update/(Edit) type only, when a Delete interaction is
     # defined, add a delete button to the schema.
     if [ "${iact_name}" = "Edit" ]; then
         if gsf_IACT_included "Delete"; then
-            gws_start_schema
-            gsf_write_schema_delete_button 2
+            gsf_write_schema_delete_button 3
         fi
     fi
 
@@ -320,6 +321,7 @@ gsf_srm_mode_List()
 gsf_srm_mode_Add()
 {
     local proc_name="${GF_PROC_ROOT}Add"
+    local varsproc=$( gsf_get_vars_proc )
 
     local -a add_cmds=(
         type form-new
@@ -337,18 +339,26 @@ gsf_srm_mode_Add()
     echo "add"
     cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${add_cmds[@]}"
-    gsf_write_schema "Add" 1
+    tabulate_array 1 "result" "1"
+    gsf_write_schema "Add" 2
+    
     echo
 
     # Save form response mode:
     echo "add_submit"
     tabulate_array 1 "${submit_cmds[@]}"
-    tabulate_array 1 "result"
+    tabulate_array 1 "result" "1"
     tabulate_array 2 type update
+    if [ "$varsproc" ]; then
+        tabulate_array 1 "result" "2"
+        tabulate_array 2 "type" "variables"
+    fi
 }
 
 gsf_srm_mode_Read()
 {
+    local varsproc=$( gsf_get_vars_proc )
+
     local -a cmds=(
         type form-view
         procedure "${GF_PROC_ROOT}Read"
@@ -356,10 +366,19 @@ gsf_srm_mode_Read()
 
     echo "read"
     tabulate_array 1 "${cmds[@]}"
+
+    tabulate_array 1 "result" "1"
+    gsf_write_schema "Read" 2
+    if [ "$varsproc" ]; then
+        tabulate_array 1 "result" "2"
+        tabulate_array 2 "type" "variables"
+    fi
 }
 
 gsf_srm_mode_Update()
 {
+    local varsproc=$( gsf_get_vars_proc )
+
     local -a cmds=(
         type form-edit
         schema-proc "${GF_PROC_ROOT}Update"
@@ -373,9 +392,7 @@ gsf_srm_mode_Update()
     cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${cmds[@]}"
 
-    local varsproc
-    varsproc=$( gsf_get_vars_proc )
-    if [ $? -eq 0 ]; then
+    if [ "${varsproc}" ]; then
         indent_line "result : 1"
         gsf_write_schema "Edit" 2
         indent_line "result : 2"
@@ -496,11 +513,11 @@ gsf_srm_mode_review()
 
     echo "review"
     tabulate_array 1 "${cmds[@]}"
-    gsf_write_schema "Import" 1
-    echo "${gsf_script_indent}button"
+    tabulate_array 1 "button"
     tabulate_array 2 "${b_accept[@]}"
-    echo "${gsf_script_indent}button"
+    tabulate_array 1 "button"
     tabulate_array 2 "${b_abandon[@]}"
+    gsf_write_schema "Import" 1
 }
 
 gsf_srm_mode_accept()
