@@ -356,9 +356,7 @@ gsf_sql_proc_body_List()
     echo ";"
 
     local varproc_condition=$( gsf_callback_prefs_rows "gspbl_if" )
-
     gsf_sql_add_varsproc "${varproc_condition}"
-
 }
 
 gsf_sql_proc_body_Add()
@@ -367,6 +365,8 @@ gsf_sql_proc_body_Add()
 
     local foreign_key foreign_slink
     local autoinc_key
+
+    local varsproc=$( gsf_get_vars_proc )
 
     echo_field()
     {
@@ -476,6 +476,9 @@ gsf_sql_proc_body_Add()
     fi
 
     indent_line "   CALL ${GF_PROC_ROOT}List(newid);"
+    if [ $varsproc ]; then
+        indent_line "   CALL ${varsproc}();"
+    fi
     indent_line "END IF;"
 }
 
@@ -567,13 +570,7 @@ gsf_sql_update_proc_value()
     gsf_callback_prefs_rows "gsupv_where"
     echo ";"
 
-    local varsproc
-    varsproc=$( gsf_get_vars_proc )
-    if [ $? -eq 0 ]; then
-        echo
-        echo "CALL ${varsproc}();"
-        echo
-    fi
+    gsf_sql_add_varsproc
     
     echo "END \$\$"
 }
