@@ -435,7 +435,7 @@ gsf_sql_proc_body_Add()
     if [ $autoinc_key ]; then
         indent_line "-- DIY autoinc section"
         indent_line "-- Start multi-statement transaction:"
-        indent_line "SET autocommit = 0;"
+        indent_line "START TRANSACTION;"
         echo
         indent_line "SELECT COALESCE(MAX(ai.${autoinc_key}),0)+1 INTO newid"
         indent_line "  FROM ${GF_TNAME} ai"
@@ -462,14 +462,12 @@ gsf_sql_proc_body_Add()
     echo
     indent_line "SELECT ROW_COUNT() INTO rcount;"
 
-    if [ "$autoinc_key" -a -n "$foreign_key" ]; then
-        indent_line "-- DIY autoinc"
-        indent_line "COMMIT;"
-        indent_line "SET autocommit = 1;"
-        echo
-    fi
     indent_line "IF rcount > 0 THEN"
 
+    if [ "$autoinc_key" -a -n "$foreign_key" ]; then
+        indent_line "   -- DIY autoinc"
+        indent_line "   COMMIT;"
+    fi
     # We don't need LAST_INSERT_KEY() if we assigned newid with record lock
     if [ -z $autoinc_key ]; then
         indent_line "   SET newid = LAST_INSERT_ID();"
@@ -479,6 +477,13 @@ gsf_sql_proc_body_Add()
     if [ $varsproc ]; then
         indent_line "   CALL ${varsproc}();"
     fi
+
+    if [ "$autoinc_key" -a -n "$foreign_key" ]; then
+        indent_line "ELSE"
+        indent_line "   -- DIY autoinc"
+        indent_line "   ROLLBACK;"
+    fi
+    
     indent_line "END IF;"
 }
 
@@ -857,7 +862,7 @@ gsf_sql_import_proc_accept()
         indent_line " WHERE id_session = @session_confirmed_id;"
         echo
         indent_line "-- Start multi-statement transaction:"
-        indent_line "SET autocommit = 0;"
+        indent_line "START TRANSACTION;"
         echo
         indent_line "-- Need starting and ending values for new records:"
         indent_line "SELECT COALESCE(MAX(${AUTOINC_TARGET}),0) INTO start_max"
@@ -899,7 +904,6 @@ gsf_sql_import_proc_accept()
 
     if table_needs_bespoke_autoinc; then
         indent_line "COMMIT;"
-        indent_line "SET autocommit = 1;"
         indent_line "SET $acounter = NULL;"
         echo
     fi
