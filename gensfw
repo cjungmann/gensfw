@@ -499,8 +499,6 @@ gsf_get_vars_proc()
     return 1
 }
 
-
-
 # These simple functions interpret the callback data from function
 # gsf_callback_prefs_rows().
 CB_ROW_NAME()       { echo "${CALLBACK_ROW[0]}"; }
@@ -794,10 +792,15 @@ make_iact_default_data_str()
 prepare_default_IACT_DATA()
 {
     IACT_DATA=()
-    local name result al_tag
-    local include="TRUE"
+    local name include result al_tag
 
     for name in "${IACT_NAMES[@]}"; do
+        if [[ " Export Import " =~ "$name" ]]; then
+            include="FALSE"
+        else
+            include="TRUE"
+        fi
+
         if [ $name = "List" ]; then
             al_tag="page"
         elif [[ " Add Read Update " =~ " ${name} " ]]; then
