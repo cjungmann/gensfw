@@ -339,8 +339,7 @@ gsf_srm_mode_Add()
     echo "add"
     cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${add_cmds[@]}"
-    tabulate_array 1 "result" "1"
-    gsf_write_schema "Add" 2
+    gsf_write_schema "Add" 1
     
     echo
 
@@ -383,7 +382,7 @@ gsf_srm_mode_Update()
         type form-edit
         schema-proc "${GF_PROC_ROOT}Update"
         procedure "${GF_PROC_ROOT}Value"
-        title : "Edit ${GF_TNAME}"
+        title "Edit ${GF_TNAME}"
         form-action ?edit_submit
     )
 
