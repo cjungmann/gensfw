@@ -9,7 +9,7 @@
 # 6: Save Files Dialog
 
 # Universal script indentation string, must precede 'source' calls that use it:
-declare gsf_script_indent="  "
+declare gsf_script_indent="   "
 indent_line() { echo "${gsf_script_indent}${1}"; }
 
 get_source_path()
