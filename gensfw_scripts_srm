@@ -229,7 +229,7 @@ gsf_write_schema()
     # defined, add a delete button to the schema.
     if [ "${iact_name}" = "Edit" ]; then
         if gsf_IACT_included "Delete"; then
-            gsf_write_schema_delete_button 3
+            gsf_write_schema_delete_button $(( $schema_level+1 ))
         fi
     fi
 
