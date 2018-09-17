@@ -546,7 +546,7 @@ gsf_sql_update_proc_value()
                 echo ","
                 echo -n "${GSF_SELECT_SPACES}"
             fi
-            echo -n "$FIELD_NAME"
+            echo -n "${prefix}.$FIELD_NAME"
         fi
     }
 
