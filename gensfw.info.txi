@@ -301,6 +301,25 @@ Fields that cannot be changed from default values will not be
 included in the list, so if a flag is available, it can be
 changed.
 
+@subheading Update and Delete Special Considerations
+
+For @command{Update} and @command{Delete} interactions, the @strong{Param}
+column has a special meaning.  All parameters selected will be used
+to confirm authority to modify the record.
+
+For example, to help prevent accidental record deletion, setting
+a @emph{name} parameter in addition to the minimum-requirement
+@emph{id} parameter will require a @emph{name} match in addition
+to the @emph{id} to match the record to be deleted.  In practice,
+this should ensure that, in order to know the confirming field
+value, the user will be looking at record to delete it.
+
+Further, for an @command{Update} interaction, when a @emph{name}
+parameter is selected in addition to the @emph{id}, not only
+will the @emph{id} and the @emph{name} values be required to
+look at the record, it will be necessary to provide the procedure
+both the current and new values for the non-@emph{id} parameters.
+
 @subheading Field List Columns
 
 The left-most two columns of the field list are read-only. They
@@ -312,6 +331,10 @@ The remaining five colums can be changed according to need.
 @item Param
 Fields with the column checked will be included in the parameter
 list of the SQL procedure associated with the interaction.
+
+For @command{Update} and @command{Delete} interactions, the
+flagged columns will be used and required to confirm authority
+to modify as discussed in the previous section.
 
 @item Result
 Fields with this column checked will be included in the
