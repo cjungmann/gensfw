@@ -265,7 +265,7 @@ gsf_script_proc_top_comment()
 
 gsf_script_sql_proc_intro()
 {
-    local procname="$1"
+    local procname="${GF_PROC_ROOT}$1"
     local fields_to_list="none"
     if [ $# -gt 1 ]; then
         fields_to_list="$2"
@@ -287,7 +287,7 @@ gsf_script_sql_proc_intro()
 
 gsf_script_intro_sql()
 {
-    gsf_script_sql_proc_intro "${GF_PROC_ROOT}${iact_name}" "param"
+    gsf_script_sql_proc_intro "${iact_name}" "param"
 
     # local dropstr="DROP PROCEDURE IF EXISTS ${GF_PROC_ROOT}${IACT_NAME} \$\$"
     # local str_create_proc="CREATE PROCEDURE ${GF_PROC_ROOT}${IACT_NAME}("
@@ -569,7 +569,7 @@ gsf_sql_update_proc_value()
     }
     
     # CREATE PROCEDURE lines
-    gsf_script_sql_proc_intro "${GF_PROC_ROOT}Value" "param"
+    gsf_script_sql_proc_intro "Value" "param"
     echo "BEGIN"
     echo -n "${GSF_SELECT_LINE}"
     lambda_count=0
@@ -621,7 +621,7 @@ gsf_sql_update_proc_update()
     }
 
     # CREATE PROCEDURE lines
-    gsf_script_sql_proc_intro "${GF_PROC_ROOT}Update" "result"
+    gsf_script_sql_proc_intro "Update" "result"
     echo "BEGIN"
 
     # Query to update the record:
