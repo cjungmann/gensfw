@@ -21,6 +21,12 @@ save_sql_to_file()
     echo "DELIMITER ;" >> "$filepath"
 }
 
+gsf_sql_table_prefix()
+{
+    local p="${GF_TNAME:0:1}"
+    echo "${p,}"
+}
+
 gsf_write_script_sql()
 {
     local iact_name="$1"
@@ -313,7 +319,7 @@ declare GSF_INSERT_SPACES_LINE="${GSF_INSERT_VALUES_LINE//?/ }"
 gsf_sql_proc_body_List()
 {
     local -i where_count=0 if_count=0
-    local prefix="t"
+    local prefix=$( gsf_sql_table_prefix )
 
     gspbl_if()
     {
@@ -489,7 +495,7 @@ gsf_sql_proc_body_Add()
 
 gsf_sql_proc_body_Read()
 {
-    local prefix="t"
+    local prefix=$( gsf_sql_table_prefix )
     local -i where_count=0
 
     gspbr_where()
@@ -530,7 +536,7 @@ gsf_sql_proc_body_Read()
 
 gsf_sql_update_proc_value()
 {
-    local prefix="t"
+    local prefix=$( gsf_sql_table_prefix )
     local -i lambda_count=0
 
     gsupv_select()
@@ -582,7 +588,7 @@ gsf_sql_update_proc_value()
 
 gsf_sql_update_proc_update()
 {
-    local prefix="t"
+    local prefix=$( gsf_sql_table_prefix )
     local -i lambda_count=0
 
     gsupu_set()
@@ -653,7 +659,7 @@ gsf_write_script_sql_update()
 
 gsf_sql_proc_body_Delete()
 {
-    local prefix="t"
+    local prefix=$( gsf_sql_table_prefix )
     local -i lambda_count=0
 
     lambda_where()
@@ -685,7 +691,7 @@ gsf_sql_proc_body_Delete()
 
 gsf_sql_proc_body_Export()
 {
-    local prefix="t"
+    local prefix=$( gsf_sql_table_prefix )
     local -i lambda_count=0
 
     gspbe_where()
@@ -721,7 +727,7 @@ gsf_sql_proc_body_Export()
 
 gsf_sql_import_table()
 {
-    local prefix="t"
+    local prefix=$( gsf_sql_table_prefix )
     local -i lambda_count=0
 
     local param_format="${gsf_script_indent}%-${MAX_NAME_LEN}s %s,\n"
