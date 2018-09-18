@@ -103,6 +103,22 @@ tabulate_array()
     fi
 }
 
+gsf_get_edit_string_for_list()
+{
+    local estr="?edit"
+
+    gsmes_refs()
+    {
+        if CB_ROW_IS_PARAM && ! is_forkey; then
+            estr="${estr}&${FIELD_NAME}={@${FIELD_NAME}}"
+        fi
+    }
+
+    gsf_iact_callback_prefs_rows "Update" "gsmes_refs"
+
+    echo "${estr}"
+}
+
 gsf_get_delete_strings_for_edit()
 {
     local DELETE_TASK_STR="?delete"
@@ -112,11 +128,11 @@ gsf_get_delete_strings_for_edit()
     
     ggdts_lambda()
     {
-        if CB_ROW_IS_PARAM; then
-            DELETE_TASK_STR="${DELETE_TASK_STR}&${FIELD_NAME}={@${FIELD_NAME}}"
+        if CB_ROW_IS_PARAM && ! is_slink; then
+            DELETE_TASK_STR="${DELETE_TASK_STR}&${FIELD_NAME}={!${FIELD_NAME}}"
 
             if ! is_prikey; then
-                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR}${joiner}'{@${FIELD_NAME}}'"
+                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR}${joiner}'{!${FIELD_NAME}}'"
                 if [ "${joiner:0:1}" != "," ]; then
                     joiner=",${joiner}"
                 fi
@@ -223,6 +239,22 @@ gsf_write_schema()
         fi
     }
 
+    gws_schema_update_confirms()
+    {
+        if CB_ROW_IS_PARAM && ! is_prikey && ! is_slink; then
+            local level=$(( schema_level+1 ))
+            local name=$( CB_ROW_NAME )
+            local val="{@${name}}"
+            local -a props=(
+                readOnly true
+                hidden true
+                value "${val}"
+            )
+            tabulate_array $level "field : c_${name}"
+            tabulate_array $(( level+1 )) "${props[@]}"
+        fi
+    }
+
     gws_start_schema
 
     # For Update/(Edit) type only, when a Delete interaction is
@@ -234,6 +266,9 @@ gsf_write_schema()
     fi
 
     gsf_callback_prefs_rows "gws_schema_field"
+    if [ "${iact_name}" = "Edit" ]; then
+        gsf_callback_prefs_rows "gws_schema_update_confirms"
+    fi
 }
 
 # Entry point for printing one of the interaction types:
@@ -266,14 +301,17 @@ gsf_srm_mode_List()
     local -a cmds=(
         type table
         procedure "${GF_PROC_ROOT}List"
+        title "$GF_TNAME Management"
     )
 
+    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
+
     if gsf_IACT_included "Update"; then
-        cmds=( "${cmds[@]}" on_line_click ?edit )
+        local edit_str=$( gsf_get_edit_string_for_list )
+        cmds=( "${cmds[@]}" on_line_click "${edit_str}" )
     fi
 
     echo "list"
-    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) "title" "$GF_TNAME Management" )
     tabulate_array 1 "${cmds[@]}"
 
     if gsf_IACT_included "Add"; then
