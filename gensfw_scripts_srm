@@ -429,13 +429,15 @@ gsf_srm_mode_Update()
     cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
     tabulate_array 1 "${cmds[@]}"
 
+    # Schema goes with schema-proc, not the result data,
+    # make sure the schema is written outside of a result.
+    gsf_write_schema "Edit" 1
+
+    # No need for result 1, which is the form's data
+
     if [ "${varsproc}" ]; then
-        indent_line "result : 1"
-        gsf_write_schema "Edit" 2
         indent_line "result : 2"
         tabulate_array 2 "type" "variables"
-    else
-        gsf_write_schema "Edit" 1
     fi
     echo
 
