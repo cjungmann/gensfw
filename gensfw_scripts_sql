@@ -204,10 +204,6 @@ gsf_add_proc_params_sql()
         check_func="CB_ROW_IS_RESULT"
     fi
 
-    if [ $PARAMS_TYPE = "Update" ]; then
-        echo "Processing an Update type!" >&2
-    fi
-
     gsfpps_param()
     {
         if ! is_slink && $check_func; then
