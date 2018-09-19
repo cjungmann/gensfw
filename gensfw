@@ -746,8 +746,14 @@ make_iact_default_data_str()
                 # desired record.  It should be included:
                 echo -n "${YSEP}TRUE"
             fi
-        elif [[ " Add Update Import " =~ "$itype" ]]; then
-            # All value fields (non primary) for record writing interactions
+        elif [[ " Add Import " =~ "$itype" ]]; then
+            # All value fields (non primary) for record writing interactions,
+            # except for the Edit interaction, for which there are two
+            # procedures, one to read and one to update.  The Params column
+            # (which we're doing now) is used as parameter for the Value
+            # procedure and as confirmation parameters for the Update
+            # procedure.  The Result column for Edit works like the Param
+            # column for Add and Import.
             echo -n "${YSEP}TRUE"
         else
             echo -n "${YSEP}FALSE"
