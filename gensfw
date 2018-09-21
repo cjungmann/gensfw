@@ -104,6 +104,7 @@ reset_for_new_table()
     GF_FILEPATH_GSF=
     GF_FILEPATH_SQL=
     GF_FILEPATH_SRM=
+    GF_PROC_ROOT=
     GSF_FIELD_NAMES=()
     GSF_FIELD_LABELS=()
     GSF_FIELD_SLINKS=()
@@ -135,6 +136,7 @@ set_file_path_defaults()
         froot="$fname"
     fi
 
+    GF_PROC_ROOT="App_${froot}_"
     GF_FILEPATH_GSF="${froot}.gsf"
     GF_FILEPATH_SQL="${froot}.sql"
     GF_FILEPATH_SRM="${froot}.srm"
@@ -1556,7 +1558,10 @@ show_procedures_dialog()
 
 use_table_info()
 {
-    GF_PROC_ROOT="App_${GF_TNAME}_"
+    if [ -z $GF_PROC_ROOT ]; then
+        GF_PROC_ROOT="App_${GF_TNAME}_"
+    fi
+
     collect_column_indexes
     update_field_names_array
 
