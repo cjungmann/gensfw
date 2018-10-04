@@ -110,7 +110,7 @@ gsf_get_edit_string_for_list()
     gsmes_refs()
     {
         if CB_ROW_IS_PARAM && ! is_forkey; then
-            estr="${estr}&${FIELD_NAME}={@${FIELD_NAME}}"
+            estr="${estr}&${FIELD_NAME}={!${FIELD_NAME}}"
         fi
     }
 
@@ -129,10 +129,10 @@ gsf_get_delete_strings_for_edit()
     ggdts_lambda()
     {
         if CB_ROW_IS_PARAM && ! is_slink; then
-            DELETE_TASK_STR="${DELETE_TASK_STR}&${FIELD_NAME}={!${FIELD_NAME}}"
+            DELETE_TASK_STR="${DELETE_TASK_STR}&${FIELD_NAME}={@${FIELD_NAME}}"
 
             if ! is_prikey; then
-                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR}${joiner}'{!${FIELD_NAME}}'"
+                DELETE_CONFIRM_STR="${DELETE_CONFIRM_STR}${joiner}'{@${FIELD_NAME}}'"
                 if [ "${joiner:0:1}" != "," ]; then
                     joiner=",${joiner}"
                 fi
