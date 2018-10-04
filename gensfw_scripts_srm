@@ -25,7 +25,7 @@ save_srm_to_file()
     gsf_add_custom_srm_globals
 
     if gsf_IACT_included "Import"; then
-        cmds=( "${SRM_GLOBALS[@]}" "\$session-type" "simple" )
+        SRM_GLOBALS=( "${SRM_GLOBALS[@]}" "\$session-type" "simple" )
     fi
     
     tabulate_array 0 "${SRM_GLOBALS[@]}"  > $filepath
