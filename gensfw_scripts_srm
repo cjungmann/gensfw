@@ -300,12 +300,14 @@ gsf_write_script_srm()
 gsf_srm_append_metadata_to_cmds()
 {
     local LSEP="${IFS:0:1}"
+    local al_page="${meta_vals[2]}"
+
     for el in "${@}"; do
         echo -n "${el}${LSEP}"
     done
 
-    if [ -n "${meta_vals[2]}" ]; then
-        echo "autoload_tag${LSEP}${meta_vals[2]}${LSEP}"
+    if [ -n "$al_page" ]; then
+        echo "autoload_tag${LSEP}${al_page}${LSEP}"
     fi
 }
  
@@ -388,7 +390,9 @@ gsf_srm_mode_Add()
 
     # Form response mode:
     echo "add"
-    cmds=( $( gsf_srm_append_metadata_to_cmds "${cmds[@]}" ) )
+
+    add_cmds=( $( gsf_srm_append_metadata_to_cmds "${add_cmds[@]}" ) )
+
     tabulate_array 1 "${add_cmds[@]}"
     gsf_write_schema "Add" 1
     
