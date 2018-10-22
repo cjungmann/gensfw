@@ -3,6 +3,7 @@
 save_srm_to_file()
 {
     local filepath="$1"
+    local default_mode
 
     srto()
     {
@@ -19,8 +20,20 @@ save_srm_to_file()
     local -a SRM_GLOBALS=(
         "\$database" "${GF_DBNAME}"
         "\$xml-stylesheet" "default.xsl"
-        "\$default-mode" "list"
     )
+
+    # Find appropriate default mode, and add to array if one is found:
+    if gsf_IACT_included "List"; then
+        default_mode="List"
+    else
+        default_mode=$(gsf_IACT_single_included)
+    fi
+    if [ -n "$default_mode" ]; then
+        SRM_GLOBALS=(
+            "${SRM_GLOBALS[@]}" 
+            "\$default-mode" "${default_mode,,}"
+            )
+    fi
 
     gsf_add_custom_srm_globals
 
