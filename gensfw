@@ -435,18 +435,13 @@ gsf_IACT_single_included()
 
     gIsi_callback()
     {
-        if [ "${CB_EL_COUNT}" -lt 4 ]; then
-            if [ "${CALLBACK_ROW[0]}" = "TRUE" ]; then
-                found_name="$lname"
-                (( found_count++ ))
-            fi
-            return 1
+        if include_current_iact_record; then
+            found_name="$IACT_NAME"
+            (( found_count++ ))
         fi
     }
 
-    for lname in "${IACT_NAMES[@]}"; do
-        gsf_callback_iact_info "$lname" "gIsi_callback"
-    done
+    gsf_callback_iact_records "gIsi_callback"
 
     if [ $found_count -eq 1 ]; then
         echo "$found_name"
