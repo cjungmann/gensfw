@@ -427,6 +427,32 @@ gsf_callback_iact_info()
     done
 }
 
+gsf_IACT_single_included()
+{
+    local lname
+    local found_count=0
+    local found_name
+
+    gIsi_callback()
+    {
+        if [ "${CB_EL_COUNT}" -lt 4 ]; then
+            if [ "${CALLBACK_ROW[0]}" = "TRUE" ]; then
+                found_name="$lname"
+                (( found_count++ ))
+            fi
+            return 1
+        fi
+    }
+
+    for lname in "${IACT_NAMES[@]}"; do
+        gsf_callback_iact_info "$lname" "gIsi_callback"
+    done
+
+    if [ $found_count -eq 1 ]; then
+        echo "$found_name"
+    fi
+}
+
 gsf_IACT_included()
 {
     local name="$1"
