@@ -29,6 +29,9 @@ save_srm_to_file()
         default_mode=$(gsf_IACT_single_included)
     fi
     if [ -n "$default_mode" ]; then
+        if [ "$default_mode" = "Update" ]; then
+            default_mode="edit"
+        fi
         SRM_GLOBALS=(
             "${SRM_GLOBALS[@]}" 
             "\$default-mode" "${default_mode,,}"
