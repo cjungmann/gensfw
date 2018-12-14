@@ -1,0 +1,38 @@
+#!/bin/bash
+
+get_source_path()
+{
+    # Must include both the colon AND the space to trim
+    # the spaces from the path in the array:
+    local IFS=": "
+    local -a arr=( $( whereis gensfw_session_procs ) )
+    zpath=$( readlink "${arr[1]}" )
+    zpath="${zpath%%gensfw_session_procs}"
+}
+
+get_source_path
+xslpath="${zpath}gensfw_session_procs.xsl"
+
+if [ $# -lt 2 ]; then
+    echo >&2
+    echo "Usage:" >&2
+    echo "$ gensfw_session_procs [database name] [session information table name]" >&2
+    echo >&2
+else
+    database="${1}"
+    table="${2}"
+
+    declare -a aquery=(
+        "SELECT"
+        "COLUMN_NAME, DATA_TYPE, COLUMN_KEY, COLUMN_TYPE"
+        "FROM information_schema.COLUMNS"
+        "WHERE TABLE_SCHEMA='${database}'"
+        "AND TABLE_NAME='${table}'"
+    )
+
+    # mysql -X -e "${aquery[*]}"
+    mysql -X -e "${aquery[*]}" | xsltproc "${xslpath}" -
+fi
+
+
+
