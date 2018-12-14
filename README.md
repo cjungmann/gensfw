@@ -6,6 +6,9 @@ This project is an excuse to practice BASH application programming using
 The other purpose for this project is to aid in the creation of
 [Schema Framework](https://github.com/cjungmann/schemafw) scripts.
 
+There is second script in this project [gensfw_session_procs](README_gensfw_session_procs.md)
+that writes an SQL script file for session procedures.
+
 ## Unsuitablily of XSLT
 I started with the idea that I would use XSLT stylesheets to build
 dialogs and to interpret that saved file format.  I abandoned this
