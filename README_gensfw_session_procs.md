@@ -5,7 +5,7 @@ for session information to build a set of procedures to
 satisfy the built-in session handling procedures for the
 SchemaServer object **schema.fcgi**.
 
-The *gensfw_session_procs** script is installed along with
+The *gensfw_session_procs* script is installed along with
 [gensfw](README.md)
 
 ## Invoking The Script
@@ -62,3 +62,7 @@ The parsing requirements for this script are much simpler than
 full set of procedures are created based on the table identified
 as the session information table.  Because of this, I am using
 XSLT to generate the script file.
+
+This isn't important to the output, but some might be interested
+in comparing **gensfw** with **gensfw_session_procs** for how to
+collect and use table information from MySQL.
