@@ -15,9 +15,16 @@ save_settings_to_file()
 {
     local fpath="$1"
 
+    local -a meta_arr=( "${GF_DBNAME}" "${GF_TNAME}" )
+    if [ -n "${GF_PROC_TAG}" ]; then
+        meta_arr=( "${meta_arr[@]}" "${GF_PROC_TAG}" )
+    fi
+    local IFS="${FSEP}"
+    local meta_rec="${meta_arr[*]}"
+    # local meta_rec="${GF_DBNAME}${FSEP}${GF_TNAME}"
+
     local IFS="${RSEP}"
 
-    local meta_rec="${GF_DBNAME}${FSEP}${GF_TNAME}"
     local -a settings
     local settings_str=$( get_saved_settings_string )
 
@@ -92,15 +99,31 @@ gsf_open_table_from_record()
     local -i exval
 
     # Split the first record into the database and table names:
+    local dbase_name table_name proc_tag
     local -a names
     names=( $1 )
-
-    if [ $? -eq 0 -a "${#names[@]}" -eq 2 ]; then
-        set_dbase_name "${names[0]}"
-        exval=$?
-        if [ $exval -eq 0 ]; then
-            set_table_name "${names[1]}"
+    if [ $? -eq 0 ]; then
+        local -i ncount="${#names[@]}"
+        dbase_name="${names[0]}"
+        if [ $ncount -gt 1 ]; then
+            table_name="${names[1]}"
         fi
+
+        if [ $ncount -gt 2 ]; then
+            proc_tag="${names[2]}"
+        fi
+    fi
+
+    if [ "${dbase_name}" ]; then
+        if set_dbase_name "${dbase_name}"; then
+            if [ "${table_name}" ]; then
+                set_table_name "${table_name}"
+            fi
+        fi
+    fi
+
+    if [ "${proc_tag}" ]; then
+        set_proc_tag "${proc_tag}"
     fi
 
     return $exval
