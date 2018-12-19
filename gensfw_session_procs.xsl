@@ -59,27 +59,60 @@
     </xsl:if>
   </xsl:template>
 
+  <xsl:template match="row" mode="raw">
+    <xsl:param name="indent" select="''" />
+
+    <xsl:if test="position() &gt; 1">
+      <xsl:value-of select="concat(',',$nl,$indent)" />
+    </xsl:if>
+
+    <xsl:value-of select="field[@name='COLUMN_NAME']" />
+  </xsl:template>
+
+  <xsl:template match="row" mode="ticked">
+    <xsl:param name="indent" select="''" />
+
+    <xsl:if test="position() &gt; 1">
+      <xsl:value-of select="concat(',',$nl,$indent)" />
+    </xsl:if>
+
+    <xsl:value-of select="concat('`',field[@name='COLUMN_NAME'],'`')" />
+  </xsl:template>
+
+
+  <xsl:template match="row" mode="self-set">
+    <xsl:param name="indent" select="''" />
+
+    <xsl:variable name="name" select="field[@name='COLUMN_NAME']" />
+
+    <xsl:if test="position() &gt; 1">
+      <xsl:value-of select="concat(',',$nl,$indent)" />
+    </xsl:if>
+
+    <xsl:value-of select="concat('`',$name,'` = ', $name)" />
+  </xsl:template>
+
+  <xsl:template match="row" mode="add_parameter">
+    <xsl:param name="indent" select="''" />
+
+    <xsl:variable name="name" select="field[@name='COLUMN_NAME']" />
+    <xsl:variable name="type">
+      <xsl:apply-templates select="." mode="get_data_type" />
+    </xsl:variable>
+
+    <xsl:if test="position() &gt; 1"><xsl:value-of select="concat(',',$nl,$indent)" /></xsl:if>
+    <xsl:value-of select="concat($name, ' ', $type)" />
+  </xsl:template>
+
   <xsl:template match="row" mode="sessionize">
-    <xsl:param name="indent" />
+    <xsl:param name="indent" select="''" />
+
+    <xsl:if test="position() &gt; 1">
+      <xsl:value-of select="concat(',',$nl,$indent)" />
+    </xsl:if>
 
     <xsl:value-of select="concat('@session_', field[@name='COLUMN_NAME'])" />
-    <xsl:if test="not(position()=last())">
-      <xsl:text>, </xsl:text>
-    <xsl:value-of select="$nl" />
-    <xsl:if test="$indent"><xsl:value-of select="$indent" /></xsl:if>
-    </xsl:if>
   </xsl:template>
-
-  <xsl:template match="row" mode="raw">
-    <xsl:param name="indent" />
-    <xsl:value-of select="field[@name='COLUMN_NAME']" />
-    <xsl:if test="not(position()=last())">
-      <xsl:text>, </xsl:text>
-      <xsl:value-of select="$nl" />
-      <xsl:if test="$indent"><xsl:value-of select="$indent" /></xsl:if>
-    </xsl:if>
-  </xsl:template>
-
 
   <xsl:template match="row" mode="set_sessions">
   </xsl:template>
@@ -129,7 +162,7 @@ END $$
 -- System Session Procedure Override
 -- --------------------------------------------
 DROP PROCEDURE IF EXISTS App_Session_Restore $$
-CREATE PROCEDURE App_Session_Restore()
+CREATE PROCEDURE App_Session_Restore(session_id INT UNSIGNED)
 BEGIN
    SELECT <xsl:apply-templates select="$rows" mode="raw">
    <xsl:with-param name="indent" select="$indent" />
@@ -138,7 +171,7 @@ BEGIN
    <xsl:with-param name="indent" select="$indent" />
  </xsl:apply-templates>
      FROM <xsl:value-of select="$table_name" />
-    WHERE <xsl:value-of select="$index_column_name" /> = @session_confirmed_id;
+    WHERE <xsl:value-of select="$index_column_name" /> = session_id;
 END $$
   </xsl:template>
 
@@ -177,6 +210,37 @@ BEGIN
 END $$
   </xsl:template>
 
+
+  <xsl:template match="resultset" mode="initialize_session">
+    <xsl:variable name="create_string" select="'CREATE PROCEDURE App_Session_Initialize('" />
+    <xsl:variable name="param_indent">
+      <xsl:call-template name="spacify">
+        <xsl:with-param name="str" select="$create_string" />
+      </xsl:call-template>
+    </xsl:variable>
+
+    <!-- field and value alignment variables -->
+    <xsl:variable name="set_str" select="'      SET '" />
+    <xsl:variable name="set_indent">
+      <xsl:call-template name="spacify">
+        <xsl:with-param name="str" select="$set_str" />
+      </xsl:call-template>
+    </xsl:variable>
+-- -----------------------------------------------    
+DROP PROCEDURE IF EXISTS App_Session_Initialize $$
+<xsl:value-of select="$create_string" /><xsl:apply-templates select="$rows" mode="add_parameter">
+<xsl:with-param name="indent" select="$param_indent" />
+</xsl:apply-templates>)
+BEGIN
+   UPDATE <xsl:value-of select="$table_name" />
+<xsl:value-of select="concat($nl,$set_str)" />
+<xsl:apply-templates select="$rows" mode="self-set">
+  <xsl:with-param name="indent" select="$set_indent" />
+</xsl:apply-templates>
+    WHERE <xsl:value-of select="concat('`',$index_column_name,'` = @session_confirmed_id;')" />
+END $$
+  </xsl:template>
+
   
   <xsl:template match="/">
 USE <xsl:value-of select="$dbase_name" />;
@@ -185,6 +249,8 @@ DELIMITER $$
     <xsl:apply-templates select="resultset" mode="start" />
     <xsl:apply-templates select="resultset" mode="restore" />
     <xsl:apply-templates select="resultset" mode="abandon" />
+
+    <xsl:apply-templates select="resultset" mode="initialize_session" />
 
     <xsl:apply-templates select="$rows" mode="set_function" />
 DELIMITER ;
