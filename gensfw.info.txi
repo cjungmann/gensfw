@@ -65,6 +65,8 @@ a more pressing need than a complete set of documentation.
 * Selecting a Table::            Different ways to select a table
 * Table Interactions Dialog::    The main working dialog from which all options are available
 * Supported Interactions::       Learn about the supported interactions
+* Main Display::                 Guide to the main display
+* Settings Page::
 @end menu
 
 @node Introduction
@@ -471,5 +473,8 @@ quarantine table into the target table.
 This is a pretty simple interaction, the @strong{Result} flags
 determine which fields will be included in the exported
 spreadsheet.
+
+@include gensfw.main_display.txi
+@include gensfw.settings.txi
 
 @bye
