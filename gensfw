@@ -1230,18 +1230,19 @@ build_table_preferences_dialog()
 
     # Collect information to put in the text section of
     # the dialog.  This used to be the "meta" pane.
-    local -a meta=(
+    local -a meta
+
+    if [ -n "${GF_FILE_ARG}" ]; then
+        meta=( "Settings File" "${GF_FILEPATH_GSF}" )
+    fi
+
+    meta=( "${meta[@]}"
         "Database" "${GF_DBNAME}"
         "Table" "${GF_TNAME}"
         "Field Count" "${fcount}"
         "Procedure Tag" "${GF_PROC_TAG:-n/a}"
     )
 
-    if [ -n "${GF_FILE_ARG}" ]; then
-        meta=( "${meta[@]}"
-               "Settings File" "${GF_FILEPATH_GSF}"
-            )
-    fi
 
     local -a row_data
     row_data=( $( get_table_prefs_data_str ) )
