@@ -12,6 +12,14 @@
 @node Settings Page Introduction
 @section Settings Page Introduction
 
+This page is kind of lame, with the selection buttons on the
+bottom.  Unfortunately, a limitation on the @code{yad}
+command makes it difficult to use form buttons to open
+other pages.
+
+@strong{There is no cancel or exit button}.  Use the @key{Esc}
+key to exit the page.
+
 @node Set SRM Globals Page
 @section Set SRM Globals Page
 
@@ -34,7 +42,11 @@ overridden on the fields lines on the interactions page.
 @node Set Links Page
 @section Set Links Page
 
-This page must be completed after a review of the feature.
+This page allows the developer to specify session variable
+associations with fields.  If a field is associated with a
+session variable, procedure parameters and insert values
+for that field will use the session variable instead of
+looking for user input.
 
 
 @node Set Procedure Tag Page
