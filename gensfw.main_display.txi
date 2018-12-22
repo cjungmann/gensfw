@@ -1,0 +1,93 @@
+@node Main Display
+@chapter Main Display
+
+The main display consists of a top status pane, a interactions
+list pane, and a string of buttons on the bottom.
+
+@menu
+* Main Status Pane::
+* Main Interactions Pane::
+* Main Buttons Line::
+@end menu
+
+@node Main Status Pane
+@section Main Status Pane
+
+The status pane has four or five lines, depending on how the
+page was accessed.
+
+@table @strong
+@item Settings File
+This conditional line is only shown if @code{gensfw} has opened
+a @emph{gensfw} file, in which case it shows the file name of the
+@emph{gensfw} file.
+
+@item Database
+The database in which the table is found.
+
+@item Table
+The table for which the interactions are being defined
+
+@item Field Count
+The number of fields in the context table.  This information
+can help a user confirm that the table is appropriately selected.
+
+@item Procedure Tag
+This value, if entered, is inserted into procedure names just
+before the category.  If @code{gensfw} is working on a table
+named @emph{Person}, the normal list procedure name would be
+@strong{App_Person_List}, but with the @emph{Procedure Tag}
+set to @emph{AsStudent}, the procedure name would be
+@strong{App_Person_AsStudent_List}.
+
+@xref{Set Procedure Tag Page}
+
+@end table
+
+If @code{gensfw} opens an existing *gensfw*
+file, the *gensfw* file name will be listed on the top line
+with the label @strong{Settings File}
+
+
+
+
+
+@node Main Interactions Pane
+@section Main Interactions Pane
+
+This pane shows the list of interactions that can be generated
+by @code{gensfw}.  The left-most column of the two-column table
+is an inclusion indicator.  The right column is the interaction
+name.  Use the mouse to click on a line, or up and down arrows
+to move the selection and ENTER to open the interaction.
+
+@node Main Buttons Line
+@section Main Buttons Line
+
+There are four buttons on the bottom of the Main Display page.
+The buttons can be accessed by keyboard by pressing a letter
+while holding down the Alt-key.  Holding the Alt-key down
+alone will cause each button to indicate its activation
+letter with an underline.
+
+@table @strong
+@item Settings Page
+(Alt-p) Go to the settings page (@pxref{Settings Page})
+
+@item Save Files
+(Alt-s)  Go to the @emph{Save Files} page, where the developer can
+save the @emph{gensfw} settings file, the SQL file and/or the SRM
+file according to the interaction and other settings currently in
+force.
+
+@item Cancel
+(Esc key)
+This button will return to the list of tables display if @code{gensfw}
+arrived at the main display through that list. Otherwise, @emph{Cancel}
+will leave the application.
+
+@item OK
+(Alt-o)
+This button will open an interaction if a interaction line is selected.
+
+@end table

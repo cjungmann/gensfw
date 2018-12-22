@@ -1,0 +1,49 @@
+@node Settings Page
+@chapter Settings Page
+
+@menu
+* Settings Page Introduction::
+* Set SRM Globals Page::
+* Set Labels Page::
+* Set Links Page::
+* Set Procedure Tag Page::
+@end menu
+
+@node Settings Page Introduction
+@section Settings Page Introduction
+
+@node Set SRM Globals Page
+@section Set SRM Globals Page
+
+This page of paired fields are added as global instructions
+in the generated SRM file.  Typically, one would set include
+instructions with these paired settings.
+
+@node Set Labels Page
+@section Set Labels Page
+
+This page allows the developer to enter labels for the table's
+fields to be used throughout the generated SRM file.  For example,
+if a Person table has an @emph{fname} field, the developer might
+enter @emph{First Name} as the default label on this page.
+
+These settings are global, in that the defined labels will be
+included in every generated schema.  However, the value can be
+overridden on the fields lines on the interactions page.
+
+@node Set Links Page
+@section Set Links Page
+
+This page must be completed after a review of the feature.
+
+
+@node Set Procedure Tag Page
+@section Set Procedure Tag Page
+
+This page sets only one value, the @emph{Procedure Tag}.  The
+@emph{procedure tag} is a string value that will be inserted
+into a procedure name between the table name and the procedure
+action.  For example, if the current table is @emph{Person},
+the normal list procedure name would be @emph{App_Person_List},
+but with the @emph{procedure tag} set to @strong{AsStudent},
+if would be @emph{App_Person_AsStudent_List}.
