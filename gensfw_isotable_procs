@@ -1,0 +1,124 @@
+#!/bin/bash
+
+show_usage()
+{
+    echo >&2
+    echo "Usage: " >&2
+    echo "$ gensfw_isotable_procs <database name> <table name>" >&2
+    echo >&2
+}
+
+MISSING_DATABASE()
+{
+    local -i result
+    local query=(
+        "SELECT COUNT(*)"
+        "FROM information_schema.SCHEMATA"
+        "WHERE SCHEMA_NAME='${dbase_name}'")
+
+    result=$(mysql -BN -e "${query[*]}" )
+
+    [ $result -eq 0 ]
+}
+
+MISSING_TABLE()
+{
+    local -i result
+    local query=(
+        "SELECT COUNT(*)"
+        "FROM information_schema.TABLES"
+        "WHERE TABLE_SCHEMA='${dbase_name}'"
+        "AND TABLE_NAME='${table_name}'" )
+
+    result=$(mysql -BN -e "${query[*]}" )
+
+    [ $result -eq 0 ]
+}
+
+show_database_tables()
+{
+    local -a table_names
+    local query=(
+        "SELECT TABLE_NAME"
+        "FROM information_schema.TABLES"
+        "WHERE TABLE_SCHEMA='${dbase_name}'")
+
+    table_names=( $(mysql -BN -e "${query[*]}" ) )
+    echo "The tables of database '${dbase_name}' are:" >&2
+    printf "'%s'\n" "${table_names[@]}" >&2
+}
+
+
+# Parameter confirmation, assignment, validation:
+# Confirm parameter count
+if [ $# -lt 2 ]; then
+    show_usage
+    exit 1
+fi
+
+# Assign parameters to named variables:
+declare dbase_name="${1}"
+declare table_name="${2}"
+declare fields_guidance="${@:3}"
+
+# dbase_name="${1:-SFW_Households}"
+# table_name="${2:-Person}"
+
+# Validate database and table name parameters:
+if MISSING_DATABASE; then
+    echo "'${dbase_name}' is not a database on this server." >&2
+    show_usage
+    exit 1
+elif MISSING_TABLE; then
+    echo "'${table_name}' is not a table in the '${dbase_name}' database." >&2
+    show_database_tables
+    show_usage
+    exit 1
+fi
+
+columns_info_xml()
+{
+    declare -a TABLE_QUERY=(
+        "SELECT"
+        "COLUMN_NAME, DATA_TYPE, COLUMN_KEY, COLUMN_TYPE"
+        "FROM information_schema.COLUMNS"
+        "WHERE TABLE_SCHEMA='${dbase_name}'"
+        "AND TABLE_NAME='${table_name}'"
+    )
+
+    mysql -X "${dbase_name}" -e "${TABLE_QUERY[*]}"
+}
+
+column_names_list_from_xml()
+{
+    local els=$( echo "${1}" | xmllint --xpath "resultset/row/field[@name='COLUMN_NAME']" - )
+    echo "${els}" | grep -oP '(?<=>)[^<>]*(?=<)' -
+}
+
+reconcile_columns()
+{
+    local -a cnames=( $( column_names_list_from_xml "${COLS_XML}" ) )
+
+    if [ "${#fields_guidance}" -eq 0 ]; then
+        echo "${cnames[@]}"
+    else
+        local cname
+        for cname in "${cnames[@]}"; do
+            if [[ "${fields_guidance}" =~ ([+-]?)("${cname}") ]]; then
+                local sign="${BASH_REMATCH[1]:-+}"
+                local col="${BASH_REMATCH[2]}"
+                if [ $sign = + ]; then
+                    echo "${col}"
+                fi
+            fi
+        done
+    fi
+}
+
+# Begin processing
+declare COLS_XML=$( columns_info_xml )
+declare -a FLIST=( $( reconcile_columns ) )
+echo "Processing ${#FLIST[@]} columns, ${FLIST[*]}" >&2
+
+echo "${COLS_XML}"
+
