@@ -134,7 +134,7 @@ declare -a FLIST=( $( reconcile_columns ) )
 echo "Processing ${#FLIST[@]} columns, ${FLIST[*]}" >&2
 
 declare -a xslargs=(
-    --stringparam prefix "App_${table_name}_ILTable_"
+    --stringparam prefix "App_${table_name}_isoTable_"
     --stringparam table_name "Buffer_Table_${table_name}"
     "${xslpath}"
     )
