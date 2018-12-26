@@ -115,10 +115,32 @@ reconcile_columns()
     fi
 }
 
+get_source_path()
+{
+    # Must include both the colon AND the space to trim
+    # the spaces from the path in the array:
+    local IFS=": "
+    local -a arr=( $( whereis gensfw_session_procs ) )
+    zpath=$( readlink "${arr[1]}" )
+    zpath="${zpath%%gensfw_session_procs}"
+}
+
+get_source_path
+xslpath="${zpath}gensfw_isotable_procs.xsl"
+
 # Begin processing
 declare COLS_XML=$( columns_info_xml )
 declare -a FLIST=( $( reconcile_columns ) )
 echo "Processing ${#FLIST[@]} columns, ${FLIST[*]}" >&2
 
-echo "${COLS_XML}"
+declare -a xslargs=(
+    --stringparam prefix "App_${table_name}_ILTable_"
+    --stringparam table_name "Buffer_Table_${table_name}"
+    "${xslpath}"
+    )
+
+declare procs
+procs=$( echo "${COLS_XML}" | xsltproc "${xslargs[@]}" - )
+
+echo "${procs}"
 
