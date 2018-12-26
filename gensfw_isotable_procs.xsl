@@ -22,7 +22,7 @@
 
   <xsl:template match="/">
 
-    <xsl:text>DELIMITER</xsl:text>
+    <xsl:text>DELIMITER </xsl:text>
     <xsl:value-of select="concat($delimiter,$nl)" />
 
     <xsl:apply-templates select="resultset" mode="make_create_table_proc">
