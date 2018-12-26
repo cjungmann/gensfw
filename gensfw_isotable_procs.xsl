@@ -256,16 +256,6 @@
     <xsl:value-of select="field[@name='COLUMN_NAME']" />
   </xsl:template>
 
-  <xsl:template match="row" mode="field_list">
-    <xsl:param name="enclose" />
-    <xsl:if test="position() &gt; 1">
-      <xsl:text>, </xsl:text>
-    </xsl:if>
-    <xsl:if test="$enclose"><xsl:text>[</xsl:text></xsl:if>
-    <xsl:value-of select="field[@name='COLUMN_NAME']" />
-    <xsl:if test="$enclose"><xsl:text>]</xsl:text></xsl:if>
-  </xsl:template>
-
   <xsl:template match="resultset" mode="make_create_table_proc">
     <xsl:param name="fields" select="/.." />
     <xsl:param name="prefix" select="''" />
@@ -307,7 +297,7 @@
     <xsl:text>DROP PROCEDURE IF EXISTS </xsl:text>
     <xsl:value-of select="concat($proc_name,' ',$delimiter,$nl)" />
     <xsl:text>CREATE PROCEDURE </xsl:text>
-    <xsl:value-of select="concat($proc_name,'(lines TEXT)')" />
+    <xsl:value-of select="concat($proc_name,'(tabletext TEXT)')" />
 
     <xsl:value-of select="concat($nl,'BEGIN',$nl)" />
 
@@ -329,7 +319,7 @@
     <xsl:value-of select="concat($nl,$indent)" />
     <xsl:text>SELECT ';', '|' INTO TOK_LINE, TOK_FIELD;</xsl:text>
     <xsl:value-of select="concat($nl,$indent)" />
-    <xsl:text>SET REM_LINES = lines;</xsl:text>
+    <xsl:text>SET REM_LINES = tabletext;</xsl:text>
 
     <xsl:value-of select="concat($nl,$indent)" />
     <xsl:text>WHILE LENGTH(REM_LINES) &gt; 0 DO</xsl:text>
@@ -374,9 +364,7 @@
     <xsl:text>INSERT INTO </xsl:text>
     <xsl:value-of select="$table_name" />
     <xsl:value-of select="concat($nl,$indent,$indent,$indent,$indent,'(')" />
-    <xsl:apply-templates select="$fields" mode="field_list">
-      <xsl:with-param name="enclose" select="1" />
-    </xsl:apply-templates>
+    <xsl:apply-templates select="$fields" mode="field_list" />
     <xsl:value-of select="concat(')',$nl,$indent,$indent,$indent,'VALUES')" />
     <xsl:value-of select="concat($nl,$indent,$indent,$indent,$indent)" />
     <xsl:text>(</xsl:text>
