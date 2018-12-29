@@ -327,6 +327,8 @@
     <xsl:text>SET REM_FIELDS = SUBSTRING_INDEX(REM_LINES, TOK_LINE, 1);</xsl:text>
     <xsl:value-of select="concat($nl,$indent,$indent)" />
     <xsl:text>SET REM_LINES = SUBSTRING(REM_LINES, LENGTH(REM_FIELDS)+2);</xsl:text>
+    <xsl:value-of select="concat($nl,$indent,$indent)" />
+    <xsl:text>SET NDX_FIELD = 0;</xsl:text>
     <xsl:value-of select="concat($nl,$nl)" />
 
     <xsl:apply-templates select="$fields" mode="null_field_buffer">
@@ -342,6 +344,7 @@
     <xsl:value-of select="concat($nl,$indent,$indent,$indent)" />
     <xsl:text>SET REM_FIELDS = SUBSTRING(REM_FIELDS, LENGTH(CUR_FIELD)+2);</xsl:text>
     <xsl:value-of select="concat($nl,$indent,$indent,$indent)" />
+
 
     <xsl:text>CASE NDX_FIELD</xsl:text>
     <xsl:value-of select="$nl" />
