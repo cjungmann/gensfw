@@ -48,6 +48,33 @@ show_database_tables()
     printf "'%s'\n" "${table_names[@]}" >&2
 }
 
+# Search for the first argument (the needle) in the
+# remaining arguments (the haystack).
+#
+# Returns 0-based position of the needle in the haystack,
+# returns -1 if not found.
+#
+# Additionally, exit value is 0 (true) if needle found,
+# 1 (false) if not found, to operate as a simple existence
+# test.
+position_in_array()
+{
+    local needle="${1}"
+    local -a haystack=( "${@:2}" )
+    local -i ndx=0
+    local sample
+    for sample in "${haystack[@]}"; do
+        if [ "$sample" == "$needle" ]; then
+            echo $ndx
+            return 0
+        fi
+        (( ++ndx ))
+    done
+
+    echo -1
+    return 1
+}
+
 
 # Parameter confirmation, assignment, validation:
 # Confirm parameter count
@@ -76,9 +103,21 @@ elif MISSING_TABLE; then
     exit 1
 fi
 
+column_names_inventory()
+{
+    local -a COLUMNS_QUERY=(
+        "SELECT COLUMN_NAME"
+        "FROM information_schema.COLUMNS"
+        "WHERE TABLE_SCHEMA='${dbase_name}'"
+        "AND TABLE_NAME='${table_name}'"
+    )
+
+    mysql -BN -e "${COLUMNS_QUERY[*]}"
+}
+
 columns_info_xml()
 {
-    declare -a TABLE_QUERY=(
+    local -a TABLE_QUERY=(
         "SELECT"
         "COLUMN_NAME, DATA_TYPE, COLUMN_KEY, COLUMN_TYPE"
         "FROM information_schema.COLUMNS"
@@ -86,32 +125,62 @@ columns_info_xml()
         "AND TABLE_NAME='${table_name}'"
     )
 
-    mysql -X "${dbase_name}" -e "${TABLE_QUERY[*]}"
-}
+    local cname
+    local newline
+    local -i count=0
+    for cname in "${@}"; do
+        if [ $count -eq 0 ]; then
+            count=1
+            TABLE_QUERY=( "${TABLE_QUERY[@]}" "AND (" )
+        else
+            TABLE_QUERY=( "${TABLE_QUERY[@]}" "OR" )
+        fi
+        TABLE_QUERY=( "${TABLE_QUERY[@]}" "COLUMN_NAME='${cname}'" )
+    done
 
-column_names_list_from_xml()
-{
-    local els=$( echo "${1}" | xmllint --xpath "resultset/row/field[@name='COLUMN_NAME']" - )
-    echo "${els}" | grep -oP '(?<=>)[^<>]*(?=<)' -
+    TABLE_QUERY=( "${TABLE_QUERY[@]}" ")" )
+
+    mysql -X "${dbase_name}" -e "${TABLE_QUERY[*]}"
 }
 
 reconcile_columns()
 {
-    local -a cnames=( $( column_names_list_from_xml "${COLS_XML}" ) )
+    local -a cnames=( $( column_names_inventory ) )
+    local -a return_fields
 
-    if [ "${#fields_guidance}" -eq 0 ]; then
-        echo "${cnames[@]}"
+    if [ "${#fields_guidance[@]}" -eq 0 ]; then
+        return_fields=( "${cnames[@]}" )
     else
-        local cname
-        for cname in "${cnames[@]}"; do
-            if [[ "${fields_guidance}" =~ ([+-]?)("${cname}") ]]; then
-                local sign="${BASH_REMATCH[1]:-+}"
-                local col="${BASH_REMATCH[2]}"
-                if [ $sign = + ]; then
-                    echo "${col}"
+        local -i add_to_empty=0
+        local -i ndx_to_remove
+        local guidance sign col
+
+        for guidance in "${fields_guidance[@]}"; do
+            if [[ "$guidance" =~ ([+-]?)(.*) ]]; then
+                if [ -z $sign ]; then
+                    sign="${BASH_REMATCH[1]:-+}"
+
+                    if [ $sign = '+' ]; then
+                        add_to_empty=1
+                    else
+                        return_fields=( "${cnames[@]}" )
+                    fi
+                fi
+
+                col="${BASH_REMATCH[2]}"
+
+                if [ $add_to_empty -eq 1 ]; then
+                    return_fields=( "${return_fields[@]}" "$col" )
+                else
+                    if ndx_to_remove=$( position_in_array "${col}" "${return_fields[@]}" ); then
+                        unset "return_fields[${ndx_to_remove}]"
+                        return_fields=( "${return_fields[@]}" )
+                    fi
                 fi
             fi
         done
+
+        echo "${return_fields[@]}"
     fi
 }
 
@@ -129,9 +198,8 @@ get_source_path
 xslpath="${zpath}gensfw_isotable_procs.xsl"
 
 # Begin processing
-declare COLS_XML=$( columns_info_xml )
 declare -a FLIST=( $( reconcile_columns ) )
-echo "Processing ${#FLIST[@]} columns, ${FLIST[*]}" >&2
+declare COLS_XML=$( columns_info_xml "${FLIST[@]}" )
 
 declare -a xslargs=(
     --stringparam prefix "App_${table_name}_isoTable_"
