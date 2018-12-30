@@ -142,8 +142,6 @@ columns_info_xml()
         TABLE_QUERY=( "${TABLE_QUERY[@]}" ")" )
     fi
 
-    echo "${TABLE_QUERY[*]}" >&2
-
     mysql -X "${dbase_name}" -e "${TABLE_QUERY[*]}"
 }
 
