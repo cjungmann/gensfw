@@ -141,7 +141,7 @@
     </xsl:if>
 
     <xsl:value-of
-        select="concat($name,$extra,' ',translate($type,$minors,$majors))" />
+        select="concat($name,$extra,' ',translate($type,$minors,$majors),' NULL')" />
     
   </xsl:template>
 
@@ -234,7 +234,7 @@
                   select="field[@name='COLUMN_NAME']" />
 
     <xsl:value-of
-        select="concat($indent,'WHEN ',$ndx,' THEN SET ',$name,' = CUR_FIELD;',$nl)" />
+        select="concat($indent,'WHEN ',$ndx,' THEN SET ',$name,' = NULLIF(CUR_FIELD,',$apos,$apos,');',$nl)" />
   </xsl:template>
 
   <!-- Generate IF statement that confirms no field is NULL -->
@@ -360,22 +360,17 @@
     <xsl:text>END WHILE;</xsl:text>
 
     <xsl:value-of select="concat($nl,$nl,$indent,$indent)" />
-    <xsl:text>IF </xsl:text>
-    <xsl:apply-templates select="$fields" mode="confirm_not_null" />
-    <xsl:text> THEN </xsl:text>
-    <xsl:value-of select="concat($nl,$indent,$indent,$indent)" />
     <xsl:text>INSERT INTO </xsl:text>
     <xsl:value-of select="$table_name" />
-    <xsl:value-of select="concat($nl,$indent,$indent,$indent,$indent,'(')" />
+    <xsl:value-of select="concat($nl,$indent,$indent,$indent,'(')" />
     <xsl:apply-templates select="$fields" mode="field_list" />
-    <xsl:value-of select="concat(')',$nl,$indent,$indent,$indent,'VALUES')" />
-    <xsl:value-of select="concat($nl,$indent,$indent,$indent,$indent)" />
+    <xsl:value-of select="concat(')',$nl,$indent,$indent,'VALUES')" />
+    <xsl:value-of select="concat($nl,$indent,$indent,$indent)" />
     <xsl:text>(</xsl:text>
     <xsl:apply-templates select="$fields" mode="field_list" />
     <xsl:text>);</xsl:text>
 
     <xsl:value-of select="concat($nl,$indent,$indent)" />
-    <xsl:text>END IF;</xsl:text>
     <xsl:value-of select="concat($nl,$indent)" />
     <xsl:text>END WHILE;</xsl:text>
 
