@@ -994,6 +994,10 @@ set_proc_tag()
 
 auto_save()
 {
+    if [ "${GF_FILEPATH_GSF}" ]; then
+        save_settings_to_file "${GF_FILEPATH_GSF}"
+    fi
+
     if [ "${GF_FILEPATH_SQL}" ]; then
         save_sql_to_file "${GF_FILEPATH_SQL}"
     fi
