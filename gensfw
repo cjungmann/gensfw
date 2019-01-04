@@ -1805,11 +1805,11 @@ GF_TABLE_READY_CALLBACK="show_table_preferences_dialog"
 parse_args "$@"
 
 if is_table_open && is_dbase_open; then
+    if [ "$CL_CMD" = "save" ]; then
+        GF_TABLE_READY_CALLBACK="auto_save"
+    fi
     if is_gsf_open; then
         collect_procedure_names
-        if [ "$CL_CMD" = "save" ]; then
-            GF_TABLE_READY_CALLBACK="auto_save"
-        fi
     fi
     collect_table_info
 else
