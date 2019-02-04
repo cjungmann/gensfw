@@ -67,6 +67,7 @@ a more pressing need than a complete set of documentation.
 * Supported Interactions::       Learn about the supported interactions
 * Main Display::                 Guide to the main display
 * Settings Page::
+* gensfw_isotable_procs::
 @end menu
 
 @node Introduction
@@ -476,5 +477,25 @@ spreadsheet.
 
 @include gensfw.main_display.txi
 @include gensfw.settings.txi
+
+@node gensfw_isotable_procs
+@chapter gensfw_isotable_procs
+
+This extra utility generates MySQL procedures to support the use of
+@emph{isotable} interactions @inforef{ISOTable Widget,,schemafw}. Call
+with the following command line, where @emph{database} and @emph{table}
+are the names of the the database and table, and @emph{isotable_procs.sql}
+is the script file into which the procedure code will be saved.
+
+@example
+gensfw_isotable_procs database table > isotable_procs.sql
+@end example
+
+Using the designated table as a model, the command generates code for
+a stored procedure to create a matching temporary table and another
+procedure to parse a single text line to create rows in the table.
+
+The temporary table, filled with the user's @emph{isotable} contents,
+can then be used to update the application's permanent storage.
 
 @bye
