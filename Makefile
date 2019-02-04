@@ -13,10 +13,11 @@ install:
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_session_procs /usr/bin/gensfw_session_procs
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs /usr/bin/gensfw_isotable_procs
 
-	# Install the man page
-	cp gensfw.1 /usr/share/man/man1
+	# Install the man pages
+	cp *.1 /usr/share/man/man1
 	gzip -f /usr/share/man/man1/gensfw.1
-	# Install the info file
+	gzip -f /usr/share/man/man1/gensfw_isotable_procs.1
+	# Install the info files
 	makeinfo gensfw.info.txi --paragraph-indent=0 -o /usr/share/info
 	gzip -f      /usr/share/info/gensfw.info
 	install-info /usr/share/info/gensfw.info.gz /usr/share/info/dir
@@ -32,4 +33,4 @@ uninstall:
 	# Remove documentation files
 	install-info --delete /usr/share/info/gensfw.info.gz /usr/share/info/dir
 	rm -f /usr/share/info/gensfw.info.gz
-	rm -f /usr/share/man/man1/gensfw.1.gz
+	rm -f /usr/share/man/man1/gensfw*.1.gz

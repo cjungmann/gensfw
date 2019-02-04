@@ -1,0 +1,46 @@
+.TH gensfw_isotable_procs 1 "February 2019"
+.SH NAME
+gensfw_isotable_procs \- Generate Schema Framework ISOTable Procedures
+.SH SYNOPSIS
+\fBgensfw_isotable_procs\fR \fI"Database Name"\fR \fI"Table Name"\fR
+.SH DESCRIPTION
+.B gensfw_isotable_procs
+writes MySQL procedure code to
+.IR stdio .
+.LP
+The generated procedures support the interpretation of a Schema
+Framework \fBisotable\fR based on an existing MySQL table, as specified
+by the table's database and table names.
+.LP
+The two generated procedures are named after the forms, with the token
+\fITABLE\fR replaced by the table name specified on the command line.
+.LP
+App_\fITABLE\fR_isoTable_Create_Temp_Table
+.br
+App_\fITABLE\fR_isoTable_Fill_Temp_Table
+
+.SH EXAMPLE
+To generate procedures for an
+.I Items
+table, enter the following command:
+.LP
+.B gensfw_isotable_procs MyDatabase Items
+.LP
+To save the resulting text to a file, use the
+.B >
+redirection operator:
+.LP
+.B gensfw_isotable_procs MyDatabase Items
+> Item_ISOTable.sql
+
+
+.SH AUTHOR
+Charles P. Jungmann
+.SH SEE ALSO
+gensfw(1)
+.br
+.B info gensfw
+.br
+.B info schemafw
+.br
+.B info schemaserver
