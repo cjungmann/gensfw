@@ -19,20 +19,20 @@ The documentation for using \fBgensfw\fR is found in the \fIinfo gensfw\fR
 pages.
 .SH OPTIONS
 .TP
-.BI \-d " Database Name"
+\fB\-d \fI"Database Name"\fR
 Open the named database.
 
 .TP
-.BI \-t " Table Name"
+\fB\-t \fI"Table Name"\fR
 Open the named table.  Results in error if table not in named database.
 
 .TP
-.BI \-g " GSF file name"
+\fB\-g \fI"GSF file name"\fR
 Open the named gsf file.  If the file extension is omitted, an extension
 of \fI.gsf\fR will be assumed.
 
 .TP
-.BI \-c " Command"
+\fB\-c \fICommand\fR
 This option runs \fBgensfw\fR in batch mode.
 
 For now, the only honored value for \fICommand\fR is \fBsave\fR,
@@ -54,7 +54,7 @@ Open with the list of tables in database \fIdatabase\fR.
 Open with the interaction editor for table \fItable\fR in database \fIdatabase\fR.
 .br
 .TP
-.BI "gensfw -g" "Person.gsf"
+.BI "gensfw -g" " Person.gsf"
 .BI "gensfw" " Person.gsf"
 .BI "gensfw" " Person"
 .br
@@ -71,4 +71,6 @@ and SRM files.
 .SH AUTHOR
 Charles P. Jungmann
 .SH SEE ALSO
-info gensfw
+gensfw_isotable_procs(1)
+.br
+.B info gensfw
