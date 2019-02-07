@@ -273,6 +273,7 @@ SELECT c.COLUMN_NAME,
        LEFT JOIN TABLE_CONSTRAINTS tc
              ON kcu.CONSTRAINT_NAME=tc.CONSTRAINT_NAME
                 AND c.TABLE_SCHEMA=tc.CONSTRAINT_SCHEMA
+ WHERE c.DATA_TYPE NOT IN ('binary','blob','mediumblob','longblob')
 "
 
 # gsf_callback_iact_records()
@@ -1707,7 +1708,7 @@ collect_table_info()
 
     query="\
 ${COLS_QUERY}
-WHERE c.TABLE_SCHEMA='${GF_DBNAME}'
+AND c.TABLE_SCHEMA='${GF_DBNAME}'
 AND c.TABLE_NAME='${GF_TNAME}'"
 
     source bashmysql -s "${SEPS}" "information_schema" "${query}" -c "use_table_info"
