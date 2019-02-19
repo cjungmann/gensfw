@@ -1,0 +1,587 @@
+#!/usr/bin/env python3
+""" Tool for modifying SRM files
+
+This tool allows a user to make changes to an SRM file with command line
+options.  Its purpose is to modify gensfw-generated scripts to illustrate
+Schema Framework concepts and to make installation changes.
+
+gensfw_es <filename>
+"""
+import sys
+
+# pylint: disable=missing-docstring
+
+class PStepError(Exception):
+    """Raised for any parsing path error."""
+    def __init__(self, message=None):
+        super().__init__(message)
+
+class SRMFileError(Exception):
+    """Raised for any SRM file parsing error."""
+    def __init__(self, message=None):
+        super().__init__(message)
+
+class SRMFileRangeError(SRMFileError):
+    """Raised when an invalid range index is used."""
+    def __init__(self, message=None):
+        super().__init__(message)
+
+def parse_srm_line(linestr):
+    """Returns a (tag, value) tuple from an SRM file line,
+    in which the values are both trimmed of leading and
+    trailing spaces."""
+    linestr = linestr.strip()
+    tag = None
+    value = None
+    if linestr[0] == "#":
+        tag = linestr
+    else:
+        parts = linestr.split(":", 1)
+        tag = parts[0].strip()
+        if len(parts) > 1:
+            value = parts[1].strip()
+
+    return (tag, value)
+
+class PStep:
+    """A linked class that identifies an acceptable match
+    for a line in an SRM file."""
+    def __init__(self, phrase_generator, starts_with=None):
+        self.starts_with = starts_with
+        self.tag = None
+        self.value = None
+        self.predicates = []
+        self.next_step = None
+
+        self.parse(phrase_generator)
+
+    def node_test_set(self):
+        return self.tag is not None
+
+    def set_node_test(self, node_test):
+        self.tag, self.value = parse_srm_line(node_test)
+
+    def node_test_str(self):
+        if self.value:
+            return "%s : %s" % (self.tag, self.value)
+        elif self.tag:
+            return self.tag
+        else:
+            return "unassigned"
+
+    def parse(self, phrase_generator):
+        try:
+            while True:
+                phrase, token = next(phrase_generator)
+
+                # Test to set required because each predicate expression
+                # passes through here, but only the first is preceded by
+                # the node test.
+                if not self.node_test_set() and len(phrase):
+                    self.set_node_test(phrase)
+
+                if token and token in "[]/":
+                    if token == "[":
+                        pstep = PStep(phrase_generator, token)
+                        self.predicates.append(pstep)
+                    elif token == "/":
+                        pstep = PStep(phrase_generator, token)
+                        self.next_step = PStep(pstep)
+                    elif token == "]":
+                        if self.starts_with == "[":
+                            break
+                        else:
+                            raise PStepError("Mismatched braces.")
+        except StopIteration:
+            pass
+
+    def matches_line(self, srmline):
+        if self.tag == srmline.tag:
+            return self.value is None or self.value == srmline.value
+        else:
+            return False
+
+    def has_predicate(self):
+        return len(self.predicates) > 0
+
+    def __str__(self):
+        alist = [self.node_test_str()]
+        for pred in self.predicates:
+            alist.append("[%s]" % pred)
+        if self.next_step is not None:
+            alist.append("/%s" % self.next_step)
+
+        return "".join(alist)
+
+    def dump(self, level=0):
+        indent = ('..' * level)
+        print("%snode_test: %s" % (indent, self.node_test_str()))
+        print("%s...tag: %s" % (indent, self.tag))
+        for pred in self.predicates:
+            print("%s...[%s]" % (indent, str(pred)))
+
+        if self.next_step is not None:
+            self.next_step.dump(level+1)
+
+
+def read_path_string(path_string):
+    buff = []
+
+    for char in path_string:
+        if char in "[]/":
+            yield ("".join(buff), char)
+            buff = []
+        else:
+            buff.append(char)
+
+    # Flush the buffer (final step without terminating token)
+    if len(buff):
+        yield("".join(buff), None)
+
+def build_pstep(pathstr):
+    return PStep(read_path_string(pathstr))
+
+class SRMLine:
+    def __init__(self, level=0, tag=None, value=None):
+        self.level = level
+        self.value = value
+        self.tag = tag
+        self.is_comment = (tag and tag[0] == "#")
+
+    def __str__(self):
+        if self.tag:
+            parts = [self.tag]
+            if self.value and len(self.value) > 0:
+                parts.append(" : %s" % self.value)
+            return "".join(parts)
+        else:
+            return ""
+
+    def display(self, colon_align=None):
+        """Prints the line according to its contents.
+
+        :param colon_align: Setting this optional parameter
+           will pad the printout of the *tag* value to align
+           the colon for a more pleasing-to-read output.
+
+        This method prints 3 spaces per level, then the
+        tag.  If the line includes a value, a comma and the
+        value string will be printed following the tag.
+        """
+
+        if self.level:
+            print("   " * self.level, end="")
+        if self.tag:
+            print(self.tag, end="")
+            if self.value:
+                if colon_align:
+                    colon_spaces = " " * colon_align - self.tag_len()
+                    print(colon_spaces, end="")
+
+                print(" : %s" % self.value, end="")
+        print()
+
+    def tag_len(self):
+        """This method returns the length of the tag value,
+        unless the line is a comment type, in which case the
+        tag_len will be 0.
+        """
+
+        if self.tag and not self.is_comment:
+            return len(self.tag)
+        else:
+            return 0
+
+    def matches_pstep(self, pstep):
+        if self.is_comment:
+            return False
+
+        if pstep.tag and pstep.tag == self.tag:
+            return pstep.value is None or pstep.value == self.value
+        else:
+            return False
+
+class SRMLineParser:
+    """Parses lines of an SRM file, creating an SRMLine object
+    that can then be added to an SRMFile.
+
+    The best use of an SRMLineParser object is to use a single
+    instance to parse all the lines of an SRM file.  The parser
+    tracks consecutive lines to deduce the intended level, so
+    using a new SRMLineParser to process different lines will
+    hinder the object's ability to recognize levels.
+    """
+
+    level_stops = [0]
+    lines_parsed = 0
+    bad_level_msg = ("Spaces count in line not "
+                     "previously used in current "
+                     "branch.")
+
+    def __init__(self):
+        self.level_stops = [0]
+        self.lines_parsed = 0
+
+    def cur_level_spaces(self):
+        return self.level_stops[-1]
+
+    def get_level_from_spaces_count(self, spaces_count):
+        """This method deduces the current line's hierachical
+        level based on the number of leading spaces of consecutive
+        lines and a persistent record of the indentation level of
+        previous level definitions.
+
+        Possible "Bad Level" Exception
+        ------------------------------
+
+        This method may raise an exception if the levels are disordered.
+        Confusion occurs when the indentation of a line decreases from
+        the previous line to a greater indentation level than the new
+        lines parent line.
+
+        The following shows a disordered indentation:
+
+        edit
+           procedure   : App_Item_Update
+           schema_proc : App_Item_Value
+           schema
+              button
+                 type : add
+                label : Add
+              button
+                 type : delete
+                 label : Delete
+
+
+        Notice the two lines under the first *button*.  The *type : add*
+        and *label : Add* lines look to be siblings under the *button*
+        parent line, but since the indentation levels are not consistent,
+        the appropriate level can only be guessed.
+
+        This type of error can be much less obvious if the siblings are
+        separated by many lines of code.
+        """
+        if spaces_count > self.cur_level_spaces():
+            self.level_stops.append(spaces_count)
+            return len(self.level_stops) - 1
+        elif spaces_count == self.cur_level_spaces():
+            return len(self.level_stops) - 1
+        else:
+            # backing down levels, must be in level_stops:
+            while self.level_stops[-1] > spaces_count:
+                self.level_stops.pop()
+
+            if self.level_stops[-1] == spaces_count:
+                return len(self.level_stops) - 1
+            else:
+                raise SRMFileError(self.bad_level_msg)
+
+    def parse_line(self, line):
+        self.lines_parsed += 1
+        sline = line.lstrip()
+        spaces = len(line) - len(sline)
+
+        level = self.get_level_from_spaces_count(spaces)
+        tag = None
+        value = None
+
+        if len(sline):
+            tag, value = parse_srm_line(sline)
+        else:
+            # Override level for a blank line
+            level = 0
+
+        return SRMLine(level, tag, value)
+
+class SRMFile:
+    """This class contains the parsed contents of an SRM file."""
+
+    lines_list = []
+    def __init__(self, filepath=None):
+        self.lines_list = []
+        if filepath != None:
+            self.initialize(filepath)
+
+    def initialize(self, filepath):
+        self.lines_list = []
+        with open(filepath) as fileobj:
+            parser = SRMLineParser()
+            for line in fileobj:
+                self.lines_list.append(parser.parse_line(line.rstrip()))
+
+    def get_line_count(self):
+        return len(self.lines_list)
+
+    def in_range(self, index):
+        return index >= 0 and index < len(self.lines_list)
+
+    def level_at_index(self, index):
+        if self.in_range(index):
+            return self.lines_list[index].level
+        else:
+            return -1
+
+    def get_unchecked_line_at(self, index):
+        """Use this more efficient function if the index
+        has already been checked."""
+        return self.lines_list[index]
+
+    def get_line_at(self, index):
+        if self.in_range(index):
+            return self.get_unchecked_line_at(index)
+        else:
+            return None
+
+    def get_first_child_index(self, index):
+        """Get first child line of SRMLine at index."""
+        if self.in_range(index):
+            line = self.get_unchecked_line_at(index)
+            level = line.level + 1
+            for ndx in range(index+1, len(self.lines_list)):
+                line = self.get_unchecked_line_at(ndx)
+                if line.level > level:
+                    continue
+                elif line.level < level:
+                    break
+                elif not line.is_comment:
+                    return ndx
+
+        return -1
+
+    def get_last_child_index(self, index):
+        """Get last child line of SRMLine at index."""
+        lastchild = -1
+        if self.in_range(index):
+            line = self.get_unchecked_line_at(index)
+            level = line.level + 1
+            for ndx in range(index+1, len(self.lines_list)):
+                line = self.get_unchecked_line_at(ndx)
+                if line.level > level:
+                    continue
+                elif line.level < level:
+                    break
+                elif not line.is_comment:
+                    lastchild = ndx
+
+        return lastchild
+
+
+    def get_level_at(self, index):
+        line = self.get_line_at(index)
+        if line is not None:
+            return line.level
+        else:
+            return -1
+
+    def append_after_last_child(self, index, linestr):
+        lastchild = self.get_last_child_index(index)
+        tag, value = parse_srm_line(linestr)
+        if lastchild >= 0:
+            line = self.get_unchecked_line_at(lastchild)
+            newline = SRMLine(line.level, tag, value)
+            if self.in_range(lastchild+1):
+                self.lines_list.insert(lastchild+1, newline)
+            else:
+                self.lines_list.append(newline)
+
+    def insert_before_sibling(self, index, linestr):
+        if self.in_range(index):
+            tag, value = parse_srm_line(linestr)
+            line = self.get_unchecked_line_at(index)
+            self.lines_list.insert(index,
+                                   SRMLine(line.level, tag, value))
+
+    def insert_after_sibling(self, index, linestr):
+        if self.in_range(index):
+            tag, value = parse_srm_line(linestr)
+            line = self.get_unchecked_line_at(index)
+
+            # Since the lines are flat (not in a tree), the level of
+            # the next line doesn't matter. If it exists, we can just
+            # insert a line before it with the appropriate level.
+            if self.in_range(index+1):
+                self.lines_list.insert(index+1,
+                                       SRMLine(line.level, tag, value))
+            # If the target line is the last line in the SRM file
+            # (highly unlikely), simply append the line at the end
+            # of the list, using the appropriate level, of course:
+            else:
+                self.lines_list.append(SRMLine(line.level, tag, value))
+
+    def get_colon_alignment_value(self, index):
+        """Surveys the tag string lengths of following lines that
+        will be printed consecutively at the same level to return
+        the longest tag string of the group.  This value is then
+        passed on to the SRMLine::print() to align the colons and
+        values for a more pleasing printout.
+
+        :param index: This parameter identifies the starting point
+           for consideration of tag string lengths.
+        """
+
+        limit = len(self.lines_list)
+        max_tag_len = 0
+        ref_line = self.lines_list[index]
+        ref_level = ref_line.level
+
+        index += 1
+        while index < limit:
+            new_line = self.lines_list[index]
+            if new_line.level == ref_level:
+                max_tag_len = max(max_tag_len, new_line.tag_len())
+            else:
+                break
+
+            index += 1
+
+        return max_tag_len
+
+    def display(self):
+        limit = len(self.lines_list)
+        i = 0
+
+        last_line_level = 0
+        group_max_tag_len = self.get_colon_alignment_value(0)
+
+        while i < limit:
+            line = self.lines_list[i]
+
+            if line.level > last_line_level:
+                group_max_tag_len = self.get_colon_alignment_value(i)
+            elif line.level < last_line_level:
+                group_max_tag_len = 0
+
+            line.display(group_max_tag_len)
+
+            last_line_level = line.level
+            i += 1
+
+    def seek_line_index(self, pstep, index=-1):
+        if index == -1:
+            level = 0
+        elif self.in_range(index):
+            level = self.get_unchecked_line_at(index).level + 1
+        else:
+            raise SRMFileRangeError("seek_line_index out of range.")
+
+        for ndx in range(index+1, self.get_line_count()):
+            line = self.get_unchecked_line_at(ndx)
+            # Ignore comments and sub-children:
+            if line.is_comment or line.level > level:
+                continue
+            # Abandon search upon encountering earlier generation:
+            elif line.level < level:
+                return -1
+            elif line.matches_pstep(pstep):
+                # Confirm predicates, if any, by recursion
+                pred_failed = False
+                for predicate in pstep.predicates:
+                    pred_failed = not self.confirm_line_index(predicate, ndx)
+                    if pred_failed:
+                        break
+
+                # Try next sibling
+                if pred_failed:
+                    continue
+                elif pstep.next_step is not None:
+                    # Recurse for following steps
+                    return self.seek_line_index(pstep.next_step, ndx)
+                else:
+                    return ndx
+
+    def confirm_line_index(self, pstep, index=-1):
+        return self.seek_line_index(pstep, index) >= 0
+
+
+# The following functions are of the form "do_" plus an action name.
+# They can be called by execute_arglist()
+def do_last_child(srmfile, content_list=None):
+    if content_list and len(content_list) > 0:
+        pstep = build_pstep(content_list[0])
+        if pstep:
+            index = srmfile.seek_line_index(pstep)
+            if index >= 0:
+                for line in content_list[1:]:
+                    srmfile.append_after_last_child(index, line)
+                    index = index + 1
+
+def do_before_sibling(srmfile, content_list=None):
+    if content_list and len(content_list) > 0:
+        pstep = build_pstep(content_list[0])
+        if pstep:
+            index = srmfile.seek_line_index(pstep)
+            if index >= 0:
+                for line in content_list[1:]:
+                    srmfile.insert_before_sibling(index, line)
+                    index = index + 1
+
+def do_after_sibling(srmfile, content_list=None):
+    if content_list and len(content_list) > 0:
+        pstep = build_pstep(content_list[0])
+        if pstep:
+            index = srmfile.seek_line_index(pstep)
+            if index >= 0:
+                for line in content_list[1:]:
+                    srmfile.insert_after_sibling(index, line)
+                    index = index + 1
+
+def do_display(srmfile, content_list=None):
+    context = srmfile
+    if content_list and len(content_list) > 0:
+        pstep = build_pstep(content_list[0])
+        if pstep:
+            index = srmfile.seek_line_index(pstep)
+            if index >= 0:
+                context = srmfile.get_unchecked_line_at(index)
+
+    context.display()
+
+def show_usage():
+    msg = """
+    gensfw_es <filename> 
+"""
+    print(msg)
+
+def execute_arglist(srmfile, arglist):
+    if len(arglist) > 0:
+        cur_action = "do_" + arglist[0].replace("-", "_")
+        cur_function = getattr(sys.modules[__name__], cur_action)
+        if cur_function and len(arglist) > 1:
+            cur_function(srmfile, arglist[1:])
+
+def process_args(srmfile):
+    arglist = []
+    # skip argv[1], which was an SRM filepath
+    for arg in sys.argv[2:]:
+        if arg == "--":
+            execute_arglist(srmfile, arglist)
+            arglist = []
+        else:
+            arglist.append(arg)
+
+    if len(arglist):
+        execute_arglist(srmfile, arglist)
+
+def main():
+    srm_file = SRMFile()
+    if len(sys.argv) < 2:
+        show_usage()
+        sys.exit(0)
+    elif sys.argv[1] == "--help":
+        show_usage()
+        sys.exit(0)
+    else:
+        try:
+            srm_file.initialize(sys.argv[1])
+            process_args(srm_file)
+
+            srm_file.display()
+        except PStepError as exception:
+            print(exception)
+        except SRMFileError as exception:
+            print("The first parameter must be a path to a valid SRM file (%s)" % exception)
+        except BaseException as exception:
+            print("Unexpected exception: %s" % exception)
+
+if __name__ == "__main__":
+    main()
