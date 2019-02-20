@@ -82,11 +82,11 @@ class PStep:
 
                 if token and token in "[]/":
                     if token == "[":
-                        pstep = PStep(phrase_generator, token)
-                        self.predicates.append(pstep)
+                        self.predicates.append(
+                            PStep(phrase_generator, token)
+                        )
                     elif token == "/":
-                        pstep = PStep(phrase_generator, token)
-                        self.next_step = PStep(pstep)
+                        self.next_step = PStep(phrase_generator, token)
                     elif token == "]":
                         if self.starts_with == "[":
                             break
