@@ -175,7 +175,7 @@ class SRMLine:
             print(self.tag, end="")
             if self.value:
                 if colon_align:
-                    colon_spaces = " " * colon_align - self.tag_len()
+                    colon_spaces = " " * (colon_align - self.tag_len())
                     print(colon_spaces, end="")
 
                 print(" : %s" % self.value, end="")
@@ -580,8 +580,8 @@ def main():
             print(exception)
         except SRMFileError as exception:
             print("The first parameter must be a path to a valid SRM file (%s)" % exception)
-        except BaseException as exception:
-            print("Unexpected exception: %s" % exception)
+        # except BaseException as exception:
+        #     print("Unexpected exception: %s" % exception)
 
 if __name__ == "__main__":
     main()
