@@ -580,8 +580,6 @@ def main():
             print(exception)
         except SRMFileError as exception:
             print("The first parameter must be a path to a valid SRM file (%s)" % exception)
-        # except BaseException as exception:
-        #     print("Unexpected exception: %s" % exception)
 
 if __name__ == "__main__":
     main()
