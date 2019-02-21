@@ -457,6 +457,9 @@ class SRMFile:
         level = self.level_at_index(index)
         limit = self.get_line_count()
 
+        # Predefine to preempt pylint3
+        ndx = 0
+
         # Walk list to first non-offspring line
         for ndx in range(index+1, limit):
             ilevel = self.level_at_index(ndx)
@@ -523,6 +526,7 @@ class SRMFile:
                 self.lines_list.append(SRMLine(line.level, tag, value))
 
     def delete_branch(self, index):
+        """Delete branch (or line, if no children) at index."""
         if self.in_range(index):
             limit = self.get_last_offspring_index(index)
             if self.in_range(limit):
@@ -634,7 +638,7 @@ class SRMFile:
         check for the existence of the line specified in the expression."""
         return self.seek_line_index(pstep, index) >= 0
 
-def set_ansi_message_color(text = None):
+def set_ansi_message_color(text=None):
     """Prints a line with ansi console code to change foreground color.
     If a text parameter is included, it will be added just after the color
     change as a separator from normal output."""
@@ -642,9 +646,8 @@ def set_ansi_message_color(text = None):
 
     if text is not None:
         print(text)
-    
 
-def set_ansi_default_color(text = None):
+def set_ansi_default_color(text=None):
     """Prints a line with ansi console code to return to normal foreground color.
     If a text parameter is included, it will be added just before the color
     change as a separator from normal output."""
@@ -716,6 +719,9 @@ def do_display(srmfile, content_list=None):
 
     srmfile.display(index)
 
+# Must accept unused srmfile argument because the
+# call to this function is automatically generated.
+# pylint: disable=unused-argument
 def do_pause(srmfile, content_list=None):
     """Pause, with optional message, until the user presses ENTER."""
     set_ansi_message_color(".")
@@ -726,7 +732,11 @@ def do_pause(srmfile, content_list=None):
 
     input("Press ENTER to continue.")
     set_ansi_default_color(".")
+# pylint: enable=unused-argument
 
+# Must accept unused srmfile argument because the
+# call to this function is automatically generated.
+# pylint: disable=unused-argument
 def do_message(srmfile, content_list=None):
     """Display a message in output.  Used for demonstration purposes."""
     if content_list and len(content_list) > 0:
@@ -736,10 +746,12 @@ def do_message(srmfile, content_list=None):
             print(msg)
 
         set_ansi_default_color(".")
+# pylint: enable=unused-argument
 
 def show_actions(with_docs=False):
-    do_functions = []
-
+    """Reads module to find functions that start with 'do_'.
+    The functions list is displayed with or without documentation
+    according to the setting of parameter 'with_docs'."""
     thismod = sys.modules[__name__]
     for elname in dir(thismod):
         obj = getattr(thismod, elname)
@@ -803,7 +815,7 @@ def main():
         show_usage()
         sys.exit(0)
     elif sys.argv[1].startswith("-"):
-        option=sys.argv[1][1:]
+        option = sys.argv[1][1:]
         if option == "-help" or option == "h":
             show_usage()
         elif option == "-show_actions":
