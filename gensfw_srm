@@ -745,18 +745,17 @@ def show_actions(with_docs=False):
         obj = getattr(thismod, elname)
         if isinstance(obj, types.FunctionType):
             if elname.startswith("do_"):
-                set_ansi_message_color()
-                print(elname)
-                set_ansi_default_color()
+                print(elname[3:])
 
                 if with_docs:
+                    set_ansi_message_color()
                     if obj.__doc__:
                         print(obj.__doc__)
                     else:
                         print("Documentation missing")
+                    set_ansi_default_color()
 
-                print()
-
+                    print()
 def show_usage():
     """Show command usage upon request or after a mistake."""
     msg = """
