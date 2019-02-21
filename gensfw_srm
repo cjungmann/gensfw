@@ -457,12 +457,16 @@ class SRMFile:
         level = self.level_at_index(index)
         limit = self.get_line_count()
 
+        # Walk list to first non-offspring line
         for ndx in range(index+1, limit):
             ilevel = self.level_at_index(ndx)
             if ilevel < 0 or ilevel > level:
                 continue
             if ilevel <= level:
                 break
+
+        # Back one to first line before first non-offspring line
+        ndx -= 1
 
         # Back-off any space or comment lines:
         while ndx > index:
@@ -472,7 +476,6 @@ class SRMFile:
                 break
 
         return ndx
-
 
     def append_after_last_child(self, index, linestr):
         """Splicing function to insert a new line at the indicated position.
@@ -534,6 +537,13 @@ class SRMFile:
             # of the list, using the appropriate level, of course:
             else:
                 self.lines_list.append(SRMLine(line.level, tag, value))
+
+    def delete_branch(self, index):
+        if self.in_range(index):
+            limit = self.get_last_offspring_index(index)
+            if self.in_range(limit):
+                newlist = self.lines_list[0:index] + self.lines_list[limit+1:]
+                self.lines_list = newlist
 
     def get_colon_alignment_value(self, index):
         """Surveys the tag string lengths of following lines that
@@ -679,6 +689,15 @@ def do_after_sibling(srmfile, content_list=None):
                     srmfile.insert_after_sibling(index, line)
                     index = index + 1
 
+def do_delete(srmfile, content_list=None):
+    """Command line action that removes a branch from the SRMFile."""
+    if content_list and len(content_list) > 0:
+        pstep = build_pstep(content_list[0])
+        if pstep:
+            index = srmfile.seek_line_index(pstep)
+            if index >= 0:
+                srmfile.delete_branch(index)
+
 def do_display(srmfile, content_list=None):
     """Command Line action that will display the implied SRMFile
     tree ath the branch indicated by the srm path string.
@@ -692,6 +711,8 @@ def do_display(srmfile, content_list=None):
             index = srmfile.seek_line_index(pstep)
 
     srmfile.display(index)
+
+    print("----------")
 
 def show_usage():
     """Show command usage upon request or after a mistake."""
