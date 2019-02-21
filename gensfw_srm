@@ -638,22 +638,21 @@ def set_ansi_message_color(text = None):
     """Prints a line with ansi console code to change foreground color.
     If a text parameter is included, it will be added just after the color
     change as a separator from normal output."""
-    toprint=["[32m"]
+    print("[32m", end="")
+
     if text is not None:
-        toprint.append(text)
-    
-    print("".join(toprint))
+        print(text)
     
 
 def set_ansi_default_color(text = None):
     """Prints a line with ansi console code to return to normal foreground color.
     If a text parameter is included, it will be added just before the color
     change as a separator from normal output."""
-    toprint=["[0m"]
-    if text is not None:
-        toprint.insert(0,text)
 
-    print("".join(toprint))
+    if text is not None:
+        print(text)
+
+    print("[0m", end="")
 
 
 # The following functions are of the form "do_" plus an action name.
@@ -738,9 +737,7 @@ def do_message(srmfile, content_list=None):
 
         set_ansi_default_color(".")
 
-def show_usage():
-    """Show command usage upon request or after a mistake."""
-
+def show_actions(with_docs=False):
     do_functions = []
 
     thismod = sys.modules[__name__]
@@ -748,24 +745,31 @@ def show_usage():
         obj = getattr(thismod, elname)
         if isinstance(obj, types.FunctionType):
             if elname.startswith("do_"):
-                do_functions.append((elname[3:],obj))
+                set_ansi_message_color()
+                print(elname)
+                set_ansi_default_color()
 
-    for tfunc in do_functions:
-        print("Action '%s':" % tfunc[0])
-        if tfunc[1].__doc__:
-            print(tfunc[1].__doc__)
-        else:
-            "Available but undocumented."
+                if with_docs:
+                    if obj.__doc__:
+                        print(obj.__doc__)
+                    else:
+                        print("Documentation missing")
 
-        if tfunc[1].__annotations__:
-            print(tfunc[1].__annotations__)
+                print()
 
-        print()
-            
-        
-
+def show_usage():
+    """Show command usage upon request or after a mistake."""
     msg = """
-    gensfw_es <filename> 
+Usage:
+    gensfw_srm <filename> [ <action> <argument>... ] [ -- <action> <argument>... ]
+    gensfw_srm --help
+    gensfw_srm --show_actions
+    gensfw_srm --show_action_docs
+
+Options:
+    --help, -h          This page
+    --show_actions      Display the list of available actions.
+    --show_action_docs  Display list of actions with explanations.
 """
     print(msg)
 
@@ -799,8 +803,14 @@ def main():
     if len(sys.argv) < 2:
         show_usage()
         sys.exit(0)
-    elif sys.argv[1] == "--help":
-        show_usage()
+    elif sys.argv[1].startswith("-"):
+        option=sys.argv[1][1:]
+        if option == "-help" or option == "h":
+            show_usage()
+        elif option == "-show_actions":
+            show_actions()
+        elif option == "-show_action_docs":
+            show_actions(True)
         sys.exit(0)
     else:
         try:
