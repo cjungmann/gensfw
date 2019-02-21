@@ -570,7 +570,7 @@ class SRMFile:
         last_line_level = 0
         group_max_tag_len = self.get_colon_alignment_value(0)
 
-        while i < limit:
+        while i <= limit:
             line = self.lines_list[i]
 
             if line.level > last_line_level:
@@ -634,6 +634,27 @@ class SRMFile:
         check for the existence of the line specified in the expression."""
         return self.seek_line_index(pstep, index) >= 0
 
+def set_ansi_message_color(text = None):
+    """Prints a line with ansi console code to change foreground color.
+    If a text parameter is included, it will be added just after the color
+    change as a separator from normal output."""
+    toprint=["[32m"]
+    if text is not None:
+        toprint.append(text)
+    
+    print("".join(toprint))
+    
+
+def set_ansi_default_color(text = None):
+    """Prints a line with ansi console code to return to normal foreground color.
+    If a text parameter is included, it will be added just before the color
+    change as a separator from normal output."""
+    toprint=["[0m"]
+    if text is not None:
+        toprint.insert(0,text)
+
+    print("".join(toprint))
+
 
 # The following functions are of the form "do_" plus an action name.
 # They can be called by execute_arglist()
@@ -695,6 +716,27 @@ def do_display(srmfile, content_list=None):
             index = srmfile.seek_line_index(pstep)
 
     srmfile.display(index)
+
+def do_pause(srmfile, content_list=None):
+    """Pause, with optional message, until the user presses ENTER."""
+    set_ansi_message_color(".")
+
+    if content_list and len(content_list) > 0:
+        for msg in content_list:
+            print(msg)
+
+    input("Press ENTER to continue.")
+    set_ansi_default_color(".")
+
+def do_message(srmfile, content_list=None):
+    """Display a message in output.  Used for demonstration purposes."""
+    if content_list and len(content_list) > 0:
+        set_ansi_message_color(".")
+
+        for msg in content_list:
+            print(msg)
+
+        set_ansi_default_color(".")
 
 def show_usage():
     """Show command usage upon request or after a mistake."""
