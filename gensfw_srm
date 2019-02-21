@@ -481,29 +481,13 @@ class SRMFile:
         """Splicing function to insert a new line at the indicated position.
         The 'linestr' string will be parsed for tag and value, and the level
         of the new SRMLine will match that of the last child."""
+
+        # Make new SRMLine with level of child of reference (ie 1 greater):
         level = self.level_at_index(index)
         tag, value = parse_srm_line(linestr)
-        ndx = 0
-
-        # Increment the parent level for the appropriate child level
         newline = SRMLine(level+1, tag, value)
 
-        # Seek a line that follows the last child, which
-        # will be the first line that has the same or
-        # lower level than the parent.
-        for ndx in range(index+1, self.get_line_count()):
-            ilevel = self.level_at_index(ndx)
-            if ilevel < 0 or ilevel > level:
-                continue
-            if ilevel <= level:
-                break
-
-        # Back-off any space or comment lines:
-        while ndx > index:
-            if self.is_empty_at_index(ndx-1):
-                ndx -= 1
-            else:
-                break
+        ndx = self.get_last_offspring_index(index)
 
         if self.in_range(ndx):
             self.lines_list.insert(ndx, newline)
