@@ -8,8 +8,9 @@ Schema Framework concepts and to make installation changes.
 gensfw_es <filename>
 """
 import sys
+import types
 
-# pylint: disable=missing-docstring
+# disable_pylint: disable=missing-docstring
 
 class PStepError(Exception):
     """Raised for any parsing path error."""
@@ -56,12 +57,15 @@ class PStep:
         self.parse(phrase_generator)
 
     def node_test_set(self):
+        """Boolean function returning initialization status."""
         return self.tag is not None
 
     def set_node_test(self, node_test):
+        """Initializes the non-predicate part of the step."""
         self.tag, self.value = parse_srm_line(node_test)
 
     def node_test_str(self):
+        """Builds a node_test string from the current state of the object."""
         if self.value:
             return "%s : %s" % (self.tag, self.value)
         elif self.tag:
@@ -70,6 +74,16 @@ class PStep:
             return "unassigned"
 
     def parse(self, phrase_generator):
+        """Recursive function that parses node test, predicate expression,
+        and path step strings to build a linked PStep tree that can then
+        be used to search an SRM document.
+
+        :param phrase_generator: Generator that, with each next() call,
+                                 returns a tuple with a string and the
+                                 token that signalled the end of the
+                                 string.
+        :return: No return value.
+        """
         try:
             while True:
                 phrase, token = next(phrase_generator)
@@ -95,16 +109,14 @@ class PStep:
         except StopIteration:
             pass
 
-    def matches_line(self, srmline):
-        if self.tag == srmline.tag:
-            return self.value is None or self.value == srmline.value
-        else:
-            return False
-
     def has_predicate(self):
+        """Boolean test for existence of predicates.  Used mostly
+        to communicate the intention of the code, that is, to make
+        more clear the 'if' statement that calls it."""
         return len(self.predicates) > 0
 
     def __str__(self):
+        """Override default __str__ function."""
         alist = [self.node_test_str()]
         for pred in self.predicates:
             alist.append("[%s]" % pred)
@@ -114,6 +126,9 @@ class PStep:
         return "".join(alist)
 
     def dump(self, level=0):
+        """Prints out a representation of the PStep with its links.
+        It is meant to be used for debugging how a SRM path is
+        evaluated."""
         indent = ('..' * level)
         print("%snode_test: %s" % (indent, self.node_test_str()))
         print("%s...tag: %s" % (indent, self.tag))
@@ -125,6 +140,14 @@ class PStep:
 
 
 def read_path_string(path_string):
+    """Generator function that allows parsing of a path string
+    with a single pass through its characters.  It yields a
+    tuple with a string and the character that signalled the
+    string's end.
+
+    This generator is used by the PStep class, especially the
+    parse method of the PStep class."""
+
     buff = []
 
     for char in path_string:
@@ -139,16 +162,20 @@ def read_path_string(path_string):
         yield("".join(buff), None)
 
 def build_pstep(pathstr):
+    """Global command to build a PStep tree from a pathstr."""
     return PStep(read_path_string(pathstr))
 
 class SRMLine:
+    """Represents a single line of an SRM file that contains
+    values for the level of the line and values for the tag
+    and value parts of the SRM line."""
     def __init__(self, level=0, tag=None, value=None):
         self.level = level
         self.value = value
         self.tag = tag
-        self.is_comment = (tag and tag[0] == "#")
 
     def __str__(self):
+        """Override default __str__ function."""
         if self.tag:
             parts = [self.tag]
             if self.value and len(self.value) > 0:
@@ -156,6 +183,19 @@ class SRMLine:
             return "".join(parts)
         else:
             return ""
+
+    def is_comment(self):
+        """Returns True if the line is a comment, False otherwise."""
+        return self.tag and self.tag[0] == "#"
+
+    def is_empty(self):
+        """Returns True for an empty line, False otherwise."""
+        return self.tag is None
+
+    def is_content(self):
+        """Returns True if the line is a content line, False otherwise.
+        A content line is a non-comment line that has at least a tag value."""
+        return not (self.is_comment() or self.is_empty())
 
     def display(self, colon_align=None):
         """Prints the line according to its contents.
@@ -166,8 +206,7 @@ class SRMLine:
 
         This method prints 3 spaces per level, then the
         tag.  If the line includes a value, a comma and the
-        value string will be printed following the tag.
-        """
+        value string will be printed following the tag."""
 
         if self.level:
             print("   " * self.level, end="")
@@ -187,13 +226,17 @@ class SRMLine:
         tag_len will be 0.
         """
 
-        if self.tag and not self.is_comment:
+        if self.tag and not self.is_comment():
             return len(self.tag)
         else:
             return 0
 
     def matches_pstep(self, pstep):
-        if self.is_comment:
+        """Returns equivalence value of a node test comparison
+        between this line and a given PStep object.
+
+        Comments cannot be matched and always return False."""
+        if self.is_comment():
             return False
 
         if pstep.tag and pstep.tag == self.tag:
@@ -223,6 +266,9 @@ class SRMLineParser:
         self.lines_parsed = 0
 
     def cur_level_spaces(self):
+        """Returns the current inferred level value of the
+        current line based on the number of spaces that precede
+        tag of this and previous SRM lines."""
         return self.level_stops[-1]
 
     def get_level_from_spaces_count(self, spaces_count):
@@ -277,6 +323,9 @@ class SRMLineParser:
                 raise SRMFileError(self.bad_level_msg)
 
     def parse_line(self, line):
+        """Returns an SRMLine object by interpreting the 'line'
+        parameter in the context of the preceding lines in the
+        SRM file."""
         self.lines_parsed += 1
         sline = line.lstrip()
         spaces = len(line) - len(sline)
@@ -303,6 +352,8 @@ class SRMFile:
             self.initialize(filepath)
 
     def initialize(self, filepath):
+        """Parses all lines contained in the file to create a
+        list of SRMLines."""
         self.lines_list = []
         with open(filepath) as fileobj:
             parser = SRMLineParser()
@@ -310,23 +361,58 @@ class SRMFile:
                 self.lines_list.append(parser.parse_line(line.rstrip()))
 
     def get_line_count(self):
+        """Returns number of lines in the list for creating a range."""
         return len(self.lines_list)
 
     def in_range(self, index):
-        return index >= 0 and index < len(self.lines_list)
+        """Boolean function that confirms or refutes that a index number
+        represents an existing line in the lines_list."""
+        return index >= 0 and index < self.get_line_count()
 
-    def level_at_index(self, index):
+    def level_at_index_inclusive(self, index):
+        """Returns the inferred tree level of an SRMLine at the index.
+        This method is used to compare the relationship of consecutive
+        lines to identify siblings and the end of a run of siblings.
+
+        Comments and empty lines are valid in this method and will
+        return an implied tree level according to normal rules."""
         if self.in_range(index):
             return self.lines_list[index].level
         else:
             return -1
 
+    def level_at_index(self, index):
+        """Returns the inferred tree level of an SRMLine at the index,
+        including only instruction lines.  That is, it will return -1
+        if the line is comment or is empty."""
+        if self.in_range(index):
+            line = self.lines_list[index]
+            if line.is_comment() or line.is_empty():
+                return -1
+            else:
+                return line.level
+        else:
+            return -1
+
+    def is_content_at_index(self, index):
+        """Returns is_content() result for SRMLine at index."""
+        return self.in_range(index) and self.lines_list[index].is_content()
+
+    def is_empty_at_index(self, index):
+        """Returns is_empty() result for SRMLine at index."""
+        return self.in_range(index) and self.lines_list[index].is_empty()
+
     def get_unchecked_line_at(self, index):
-        """Use this more efficient function if the index
-        has already been checked."""
+        """Unconditionally return an SRM line from the lines_list as
+        indicated by the index parameter.  Use this function instead
+        of the safer 'get_line_at' when the index has already been
+        confirmed."""
         return self.lines_list[index]
 
     def get_line_at(self, index):
+        """Return an SRM line from the lines_list as indicated by
+        the index parameter.  Returns None if the index is out of
+        range."""
         if self.in_range(index):
             return self.get_unchecked_line_at(index)
         else:
@@ -337,13 +423,13 @@ class SRMFile:
         if self.in_range(index):
             line = self.get_unchecked_line_at(index)
             level = line.level + 1
-            for ndx in range(index+1, len(self.lines_list)):
+            for ndx in range(index+1, self.get_line_count()):
                 line = self.get_unchecked_line_at(ndx)
                 if line.level > level:
                     continue
                 elif line.level < level:
                     break
-                elif not line.is_comment:
+                elif not line.is_comment():
                     return ndx
 
         return -1
@@ -354,37 +440,76 @@ class SRMFile:
         if self.in_range(index):
             line = self.get_unchecked_line_at(index)
             level = line.level + 1
-            for ndx in range(index+1, len(self.lines_list)):
+            for ndx in range(index+1, self.get_line_count()):
                 line = self.get_unchecked_line_at(ndx)
                 if line.level > level:
                     continue
                 elif line.level < level:
                     break
-                elif not line.is_comment:
+                elif not line.is_comment():
                     lastchild = ndx
 
         return lastchild
 
+    def get_last_offspring_index(self, index):
+        """Returns the line index of the last line whose ancestor
+        is the reference line."""
+        level = self.level_at_index(index)
+        limit = self.get_line_count()
 
-    def get_level_at(self, index):
-        line = self.get_line_at(index)
-        if line is not None:
-            return line.level
-        else:
-            return -1
+        for ndx in range(index+1, limit):
+            ilevel = self.level_at_index(ndx)
+            if ilevel < 0 or ilevel > level:
+                continue
+            if ilevel <= level:
+                break
+
+        # Back-off any space or comment lines:
+        while ndx > index:
+            if self.is_empty_at_index(ndx-1):
+                ndx -= 1
+            else:
+                break
+
+        return ndx
+
 
     def append_after_last_child(self, index, linestr):
-        lastchild = self.get_last_child_index(index)
+        """Splicing function to insert a new line at the indicated position.
+        The 'linestr' string will be parsed for tag and value, and the level
+        of the new SRMLine will match that of the last child."""
+        level = self.level_at_index(index)
         tag, value = parse_srm_line(linestr)
-        if lastchild >= 0:
-            line = self.get_unchecked_line_at(lastchild)
-            newline = SRMLine(line.level, tag, value)
-            if self.in_range(lastchild+1):
-                self.lines_list.insert(lastchild+1, newline)
+        ndx = 0
+
+        # Increment the parent level for the appropriate child level
+        newline = SRMLine(level+1, tag, value)
+
+        # Seek a line that follows the last child, which
+        # will be the first line that has the same or
+        # lower level than the parent.
+        for ndx in range(index+1, self.get_line_count()):
+            ilevel = self.level_at_index(ndx)
+            if ilevel < 0 or ilevel > level:
+                continue
+            if ilevel <= level:
+                break
+
+        # Back-off any space or comment lines:
+        while ndx > index:
+            if self.is_empty_at_index(ndx-1):
+                ndx -= 1
             else:
-                self.lines_list.append(newline)
+                break
+
+        if self.in_range(ndx):
+            self.lines_list.insert(ndx, newline)
+        else:
+            self.lines_list.append(newline)
 
     def insert_before_sibling(self, index, linestr):
+        """Insert a new SRMLine just before, and
+        at the same level as the indicated line."""
         if self.in_range(index):
             tag, value = parse_srm_line(linestr)
             line = self.get_unchecked_line_at(index)
@@ -392,6 +517,8 @@ class SRMFile:
                                    SRMLine(line.level, tag, value))
 
     def insert_after_sibling(self, index, linestr):
+        """Insert a new SRMLine just after, and
+        at the same level as the indicated line."""
         if self.in_range(index):
             tag, value = parse_srm_line(linestr)
             line = self.get_unchecked_line_at(index)
@@ -419,7 +546,7 @@ class SRMFile:
            for consideration of tag string lengths.
         """
 
-        limit = len(self.lines_list)
+        limit = self.get_line_count()
         max_tag_len = 0
         ref_line = self.lines_list[index]
         ref_level = ref_line.level
@@ -436,9 +563,15 @@ class SRMFile:
 
         return max_tag_len
 
-    def display(self):
-        limit = len(self.lines_list)
-        i = 0
+    def display(self, starts_at=0):
+        """Print out the contents of the SRMFile.  If a starting point
+        is indicated, only print the contents of that item."""
+        i = starts_at
+        if starts_at > 0:
+            # Use line following last offspring as non-inclusive limit
+            limit = 1 + self.get_last_offspring_index(starts_at)
+        else:
+            limit = self.get_line_count()
 
         last_line_level = 0
         group_max_tag_len = self.get_colon_alignment_value(0)
@@ -457,6 +590,18 @@ class SRMFile:
             i += 1
 
     def seek_line_index(self, pstep, index=-1):
+        """Seeks an SRMLine that matches the PStep specification,
+        returning the index of the match, or -1 if no match was found.
+
+        :param pstep: Is a PStep tree.
+        :param index: Is the index of the line the current search begins.
+        :return: Index of matching line, or -1 if no match exists.
+
+        This function recurses along with the steps of the PStep
+        tree.  The search procedes through each child if the indicated
+        parent, checking each child's children according to the next_step
+        data member of the current PStep.
+        """
         if index == -1:
             level = 0
         elif self.in_range(index):
@@ -467,7 +612,7 @@ class SRMFile:
         for ndx in range(index+1, self.get_line_count()):
             line = self.get_unchecked_line_at(ndx)
             # Ignore comments and sub-children:
-            if line.is_comment or line.level > level:
+            if line.is_comment() or line.level > level:
                 continue
             # Abandon search upon encountering earlier generation:
             elif line.level < level:
@@ -490,12 +635,17 @@ class SRMFile:
                     return ndx
 
     def confirm_line_index(self, pstep, index=-1):
+        """Shortcut function to confirm the existence of a matching line.
+        This method is used to test predicate expressions that must only
+        check for the existence of the line specified in the expression."""
         return self.seek_line_index(pstep, index) >= 0
 
 
 # The following functions are of the form "do_" plus an action name.
 # They can be called by execute_arglist()
 def do_last_child(srmfile, content_list=None):
+    """Command Line action that adds a line as the last
+    child of the branch indicated by the srm path string."""
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
         if pstep:
@@ -506,6 +656,8 @@ def do_last_child(srmfile, content_list=None):
                     index = index + 1
 
 def do_before_sibling(srmfile, content_list=None):
+    """Command Line action that adds a line just before and at
+    the same level as the branch indicate by the srm path string."""
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
         if pstep:
@@ -516,6 +668,8 @@ def do_before_sibling(srmfile, content_list=None):
                     index = index + 1
 
 def do_after_sibling(srmfile, content_list=None):
+    """Command Line action that adds a line just after and at
+    the same level as the branch indicate by the srm path string."""
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
         if pstep:
@@ -526,23 +680,52 @@ def do_after_sibling(srmfile, content_list=None):
                     index = index + 1
 
 def do_display(srmfile, content_list=None):
-    context = srmfile
+    """Command Line action that will display the implied SRMFile
+    tree ath the branch indicated by the srm path string.
+
+    Use this action to isolate output to illustrate or confirm
+    changes."""
+    index = 0
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
         if pstep:
             index = srmfile.seek_line_index(pstep)
-            if index >= 0:
-                context = srmfile.get_unchecked_line_at(index)
 
-    context.display()
+    srmfile.display(index)
 
 def show_usage():
+    """Show command usage upon request or after a mistake."""
+
+    do_functions = []
+
+    thismod = sys.modules[__name__]
+    for elname in dir(thismod):
+        obj = getattr(thismod, elname)
+        if isinstance(obj, types.FunctionType):
+            if elname.startswith("do_"):
+                do_functions.append((elname[3:],obj))
+
+    for tfunc in do_functions:
+        print("Action '%s':" % tfunc[0])
+        if tfunc[1].__doc__:
+            print(tfunc[1].__doc__)
+        else:
+            "Available but undocumented."
+
+        if tfunc[1].__annotations__:
+            print(tfunc[1].__annotations__)
+
+        print()
+            
+        
+
     msg = """
     gensfw_es <filename> 
 """
     print(msg)
 
 def execute_arglist(srmfile, arglist):
+    """Looks for suitable function to execute, executing it if found."""
     if len(arglist) > 0:
         cur_action = "do_" + arglist[0].replace("-", "_")
         cur_function = getattr(sys.modules[__name__], cur_action)
@@ -550,6 +733,9 @@ def execute_arglist(srmfile, arglist):
             cur_function(srmfile, arglist[1:])
 
 def process_args(srmfile):
+    """Iterate through command line arguments, collecting into groups
+    delimited by '--' arguments.  Each group is submitted to function
+    execute_arglist()."""
     arglist = []
     # skip argv[1], which was an SRM filepath
     for arg in sys.argv[2:]:
@@ -563,6 +749,7 @@ def process_args(srmfile):
         execute_arglist(srmfile, arglist)
 
 def main():
+    """Main program function."""
     srm_file = SRMFile()
     if len(sys.argv) < 2:
         show_usage()
@@ -574,8 +761,6 @@ def main():
         try:
             srm_file.initialize(sys.argv[1])
             process_args(srm_file)
-
-            srm_file.display()
         except PStepError as exception:
             print(exception)
         except SRMFileError as exception:
