@@ -696,8 +696,6 @@ def do_display(srmfile, content_list=None):
 
     srmfile.display(index)
 
-    print("----------")
-
 def show_usage():
     """Show command usage upon request or after a mistake."""
 
