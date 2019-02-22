@@ -47,6 +47,10 @@ def parse_srm_line(linestr):
 class PStep:
     """A linked class that identifies an acceptable match
     for a line in an SRM file."""
+
+    # Class variable to check for balanced braces.
+    brace_level = 0
+
     def __init__(self, phrase_generator, starts_with=None):
         self.starts_with = starts_with
         self.tag = None
@@ -55,6 +59,10 @@ class PStep:
         self.next_step = None
 
         self.parse(phrase_generator)
+
+    @staticmethod
+    def braces_balanced():
+        return PStep.brace_level == 0
 
     def node_test_set(self):
         """Boolean function returning initialization status."""
@@ -96,16 +104,15 @@ class PStep:
 
                 if token and token in "[]/":
                     if token == "[":
+                        PStep.brace_level += 1
                         self.predicates.append(
                             PStep(phrase_generator, token)
                         )
                     elif token == "/":
                         self.next_step = PStep(phrase_generator, token)
                     elif token == "]":
-                        if self.starts_with == "[":
-                            break
-                        else:
-                            raise PStepError("Mismatched braces.")
+                        PStep.brace_level -= 1
+                        break
         except StopIteration:
             pass
 
@@ -163,7 +170,10 @@ def read_path_string(path_string):
 
 def build_pstep(pathstr):
     """Global command to build a PStep tree from a pathstr."""
-    return PStep(read_path_string(pathstr))
+    pstep = PStep(read_path_string(pathstr))
+    if not PStep.braces_balanced():
+        raise PStepError("Unbalanced Braces ([1;31m%s[0m)" % pathstr)
+    return pstep
 
 class SRMLine:
     """Represents a single line of an SRM file that contains
@@ -515,15 +525,10 @@ class SRMFile:
             tag, value = parse_srm_line(linestr)
             line = self.get_unchecked_line_at(index)
 
-            # Since the lines are flat (not in a tree), the level of
-            # the next line doesn't matter. If it exists, we can just
-            # insert a line before it with the appropriate level.
-            if self.in_range(index+1):
-                self.lines_list.insert(index+1,
+            ndx = self.get_last_offspring_index(index)
+            if self.in_range(ndx+1):
+                self.lines_list.insert(ndx+1,
                                        SRMLine(line.level, tag, value))
-            # If the target line is the last line in the SRM file
-            # (highly unlikely), simply append the line at the end
-            # of the list, using the appropriate level, of course:
             else:
                 self.lines_list.append(SRMLine(line.level, tag, value))
 
@@ -644,7 +649,7 @@ def set_ansi_message_color(text=None):
     """Prints a line with ansi console code to change foreground color.
     If a text parameter is included, it will be added just after the color
     change as a separator from normal output."""
-    print("[32m", end="")
+    print("[1;32m", end="")
 
     if text is not None:
         print(text)
