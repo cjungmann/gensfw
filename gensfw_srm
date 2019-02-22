@@ -467,6 +467,8 @@ class SRMFile:
                 continue
             if ilevel <= level:
                 break
+        else:
+            return ndx
 
         # Back one to first line before first non-offspring line
         ndx -= 1
@@ -574,7 +576,7 @@ class SRMFile:
         last_line_level = 0
         group_max_tag_len = self.get_colon_alignment_value(0)
 
-        while i <= limit:
+        while i < limit:
             line = self.lines_list[i]
 
             if line.level > last_line_level:
@@ -789,7 +791,7 @@ def execute_arglist(srmfile, arglist):
     if len(arglist) > 0:
         cur_action = "do_" + arglist[0].replace("-", "_")
         cur_function = getattr(sys.modules[__name__], cur_action)
-        if cur_function and len(arglist) > 1:
+        if cur_function:
             cur_function(srmfile, arglist[1:])
 
 def process_args(srmfile):
