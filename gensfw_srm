@@ -62,6 +62,7 @@ class PStep:
 
     @staticmethod
     def braces_balanced():
+        """Returns True if number of close and open braces are equal."""
         return PStep.brace_level == 0
 
     def node_test_set(self):
@@ -664,6 +665,36 @@ def set_ansi_default_color(text=None):
 
     print("[0m", end="")
 
+def get_local_function(name):
+    """Seek for, and return if found, function indicated by 'name'."""
+
+    def missing_local_function():
+        """Closure function for return value alert missing function."""
+        print("Function '%s' is not defined." % name)
+
+    mainm = sys.modules["__main__"]
+    flist = dir(mainm)
+    if flist.count(name) == 1:
+        return getattr(mainm, name)
+    else:
+        return missing_local_function
+
+def msg_cmd_clrscr():
+    """Clear screen."""
+    print("[2J[1;1H")  # ^[[H is equivalent
+
+def process_message_cmd(line):
+    """Executes embedded commands in a message action.
+
+    The syntax is '<%xxx>' where the command is introduced by
+    '<%' and terminated by '>'.  The command must be the only
+    content of the parameter in the message action."""
+
+    command = line[2:-1]
+    print("Command is '%s' from line, '%s'" % (command, line))
+    fname = "msg_cmd_" + command
+    get_local_function(fname)()
+
 
 # The following functions are of the form "do_" plus an action name.
 # They can be called by execute_arglist()
@@ -729,6 +760,7 @@ def do_display(srmfile, content_list=None):
 # Must accept unused srmfile argument because the
 # call to this function is automatically generated.
 # pylint: disable=unused-argument
+#    ignoring unused srmfile parameter
 def do_pause(srmfile, content_list=None):
     """Pause, with optional message, until the user presses ENTER."""
     set_ansi_message_color(".")
@@ -744,27 +776,38 @@ def do_pause(srmfile, content_list=None):
 # Must accept unused srmfile argument because the
 # call to this function is automatically generated.
 # pylint: disable=unused-argument
+#    ignoring unused srmfile parameter
 def do_message(srmfile, content_list=None):
-    """Display a message in output.  Used for demonstration purposes."""
+    """Display a message in output.  Used for demonstration purposes.
+
+    The message command can be followed by any number of parameters
+    terminated, as usual, by either -- or the end of the gensfw_srm
+    parameter list.
+
+    Optional message commands can be included in the message parameters.
+    View the allowed message commands with gensfw_srm --show_message_cmds."""
     if content_list and len(content_list) > 0:
-        set_ansi_message_color(".")
+        set_ansi_message_color()
 
-        for msg in content_list:
-            print(msg)
+        for line in content_list:
+            if line.startswith("<%") and line.endswith(">"):
+                process_message_cmd(line)
+            else:
+                print(line)
 
-        set_ansi_default_color(".")
+        set_ansi_default_color()
 # pylint: enable=unused-argument
 
-def show_actions(with_docs=False):
-    """Reads module to find functions that start with 'do_'.
+def show_functions_by_prefix(prefix, with_docs=False):
+    """Reads module to find functions that start with the prefix.
     The functions list is displayed with or without documentation
     according to the setting of parameter 'with_docs'."""
-    thismod = sys.modules[__name__]
+    thismod = sys.modules["__main__"]
     for elname in dir(thismod):
         obj = getattr(thismod, elname)
         if isinstance(obj, types.FunctionType):
-            if elname.startswith("do_"):
-                print(elname[3:])
+            if elname.startswith(prefix):
+                print(elname[len(prefix):])
 
                 if with_docs:
                     set_ansi_message_color()
@@ -779,15 +822,19 @@ def show_usage():
     """Show command usage upon request or after a mistake."""
     msg = """
 Usage:
-    gensfw_srm <filename> [ <action> <argument>... ] [ -- <action> <argument>... ]
+    gensfw_srm <filename> [ <action> <argument>... ] [ -- <action> <argument>... ]...
+
     gensfw_srm --help
     gensfw_srm --show_actions
     gensfw_srm --show_action_docs
+    gensfw_srm --show_message_cmds
 
 Options:
-    --help, -h          This page
-    --show_actions      Display the list of available actions.
-    --show_action_docs  Display list of actions with explanations.
+    --help, -h              This page
+    --show_actions          Display the list of available actions.
+    --show_action_docs      Display list of actions with explanations.
+    --show_message_cmds     Display list of actions with explanations.
+    --show_message_cmd_docs Display list of actions with explanations.
 """
     print(msg)
 
@@ -795,7 +842,7 @@ def execute_arglist(srmfile, arglist):
     """Looks for suitable function to execute, executing it if found."""
     if len(arglist) > 0:
         cur_action = "do_" + arglist[0].replace("-", "_")
-        cur_function = getattr(sys.modules[__name__], cur_action)
+        cur_function = getattr(sys.modules["__main__"], cur_action)
         if cur_function:
             cur_function(srmfile, arglist[1:])
 
@@ -826,10 +873,14 @@ def main():
         if option == "-help" or option == "h":
             show_usage()
         elif option == "-show_actions":
-            show_actions()
+            show_functions_by_prefix("do_")
         elif option == "-show_action_docs":
-            show_actions(True)
-        sys.exit(0)
+            show_functions_by_prefix("do_", True)
+        elif option == "-show_command_msgs":
+            show_functions_by_prefix("msg_cmd_")
+        elif option == "-show_command_msg_docs":
+            show_functions_by_prefix("msg_cmd_", True)
+            sys.exit(0)
     else:
         try:
             srm_file.initialize(sys.argv[1])
