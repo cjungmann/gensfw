@@ -1,5 +1,10 @@
 #!/bin/bash
 
+### TEST ARRAYS SECTION
+
+# This first section of several arrays are designed to be
+# applied to the gensfw_srm command to test various actions.
+
 declare -a TEST_AFTER_SIBLING=(
     after_sibling "test_branch/branch/item:1" "result : 2" --
 )
@@ -13,7 +18,7 @@ declare -a TEST_LAST_CHILD=(
 )
 
 declare -a TEST_DELETE=(
-    delete "test_branch/branch[item:1/name:B1-I1]" --
+    delete "test_branch/branch[item:1/name:B1-I1][item:2/name:B1-I2]" --
 )
 
 # The following tests are not necessary because they are
@@ -25,20 +30,22 @@ declare -a TEST_PAUSE=()
 
 # Other, non action tests:
 declare -a TEST_PATH_EVALUATION=(
-    message
-    "<%CLRSCR>"
-    "Test SRM Path evaluation with complex path expressions."
-    "Specifically, testing 'test_branch/branch[item/name:B2-I1]'"
-    "which was (is) reporting Mismatched Braces."
-    --
+    after_sibling "test_branch/branch[item:1/name:B1-I1][item:2/name:B1-I2]" "Hi:honey"
+)
+    # message
+    # "<%CLRSCR>"
+    # "Test SRM Path evaluation with complex path expressions."
+    # "Specifically, testing 'test_branch/branch[item/name:B2-I1]'"
+    # "which was (is) reporting Mismatched Braces."
+    # --
 
-    display test_branch --
-    before_sibling "test_branch/branch[item/name:B2-I1]" "new:item" --
-    message "See changes" --
-    display test_branch --
-    pause --
+    # display test_branch --
+    # before_sibling "test_branch/branch[item/name:B2-I1]" "new:item" --
+    # message "See changes" --
+    # display test_branch --
+    # pause --
     
-    )
+    # )
 
 declare -a TEST_BLANK_LINES=(
     message
@@ -51,21 +58,23 @@ declare -a TEST_BLANK_LINES=(
     pause
     )
 
+### end of TEST ARRAYS SECTION
 
+# Test for existence and type (array) of $1
 name_is_array()
 {
     local obj_name="$1"
     local declr=$( declare -p "$obj_name" 2>/dev/null )
-    if [ $? -ne 0 ]; then
-        return 1
-    elif [ "${declr:0:10}" = "declare -a" ]; then
-        return 0
-    else
-        echo "name_is_array() logic error. comparing \"[45m${declr:0:10}[0m\" to \"declare -a\"" >&2
-        return 1
+    # obj_name must be both found AND declared with declare -a:
+    if [ $? -eq 0 ]; then
+        if [ "${declr:0:10}" == "declare -a" ]; then
+            return 0
+        fi
     fi
+    return 1
 }
 
+# Test for existence and type (function) of $1
 name_is_function()
 {
     local fname="%2"
@@ -73,6 +82,7 @@ name_is_function()
     [ "$type" == "function" ]
 }
 
+# Used by show_action_test() to parse a path string
 get_mode_from_path()
 {
     local path="$1"
@@ -82,6 +92,9 @@ get_mode_from_path()
     return 0
 }
 
+# Seeks an action test array and, if found and not empty,
+# prepares the array for use as a demonstration of its
+# signature action.
 show_action_test()
 {
     local name="$1"
@@ -122,16 +135,19 @@ show_action_test()
 
         fi
 
-        ./gensfw_srm srm_test.srm "${newarr[@]}"
+        ./gensfw_srm gensfw_srm_test.srm "${newarr[@]}"
     fi
 }
 
-test_actions()
+# Checks list of action words against test arrays demonstrations.
+# The names are collected of actions without test arrays and
+# an message is given to alert the user to their lack.
+announce_missing_action_tests()
 {
-    declare -a ACTIONS=( $( ./gensfw_srm --show_actions ) )
-    declare -a missing=()
-    declare action array_name
-    declare -i longest=0
+    local -a ACTIONS=( $( ./gensfw_srm --show_actions ) )
+    local -a missing=()
+    local action array_name
+    local -i longest=0
 
     for action in "${ACTIONS[@]}"; do
         array_name="TEST_${action^^}"
@@ -149,11 +165,25 @@ test_actions()
             printf "'%-${longest}s (%s)'\n" "${act}" "TEST_${act^^}"
         done
         echo
+
+        local bogus
         read -p "Continue with other test, y or n? " -i "n" bogus
         if [ "$bogus" == "n" ]; then
             exit 1
         fi
     fi
+
+}
+
+# Get list of action words from the gensfw_srm command and
+# runs a test of the action using a test array that should
+# be defined for the action.
+test_actions()
+{
+    announce_missing_action_tests
+    
+    local -a ACTIONS=( $( ./gensfw_srm --show_actions ) )
+    local action
 
     for action in "${ACTIONS[@]}"; do
         show_action_test "$action"
@@ -161,11 +191,12 @@ test_actions()
 }
 
 
-test_path()
+test_complicated_path()
 {
+    show_action_test "PATH_EVALUATION"
     ./gensfw_srm gensfw_srm_test.srm "${TEST_PATH_EVALUATION[@]}"
 }
 
 
 test_actions
-test_path
+test_complicated_path
