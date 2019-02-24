@@ -681,7 +681,7 @@ def get_local_function(name):
 
 def msg_cmd_clrscr():
     """Clear screen."""
-    print("[2J[1;1H")  # ^[[H is equivalent
+    print("[2J[1;1H", end="")
 
 def process_message_cmd(line):
     """Executes embedded commands in a message action.
@@ -690,7 +690,7 @@ def process_message_cmd(line):
     '<%' and terminated by '>'.  The command must be the only
     content of the parameter in the message action."""
 
-    command = line[2:-1]
+    command = line[2:-1].lower()
     print("Command is '%s' from line, '%s'" % (command, line))
     fname = "msg_cmd_" + command
     get_local_function(fname)()
@@ -763,14 +763,14 @@ def do_display(srmfile, content_list=None):
 #    ignoring unused srmfile parameter
 def do_pause(srmfile, content_list=None):
     """Pause, with optional message, until the user presses ENTER."""
-    set_ansi_message_color(".")
+    set_ansi_message_color()
 
     if content_list and len(content_list) > 0:
         for msg in content_list:
             print(msg)
 
     input("Press ENTER to continue.")
-    set_ansi_default_color(".")
+    set_ansi_default_color()
 # pylint: enable=unused-argument
 
 # Must accept unused srmfile argument because the
