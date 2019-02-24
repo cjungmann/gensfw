@@ -1,0 +1,171 @@
+#!/bin/bash
+
+declare -a TEST_AFTER_SIBLING=(
+    after_sibling "test_branch/branch/item:1" "result : 2" --
+)
+
+declare -a TEST_BEFORE_SIBLING=(
+    before_sibling "edit/schema/readOnly:true" "before:readOnly" --
+)
+
+declare -a TEST_LAST_CHILD=(
+    last_child "list/result" "last_child:following schema"
+)
+
+declare -a TEST_DELETE=(
+    delete "test_branch/branch[item:1/name:B1-I1]" --
+)
+
+# The following tests are not necessary because they are
+# used in several of the other tests.  
+# Empty arrays to defuse warning, but to skip the tests
+declare -a TEST_DISPLAY=()
+declare -a TEST_MESSAGE=()
+declare -a TEST_PAUSE=()
+
+# Other, non action tests:
+declare -a TEST_PATH_EVALUATION=(
+    message
+    "<%CLRSCR>"
+    "Test SRM Path evaluation with complex path expressions."
+    "Specifically, testing 'test_branch/branch[item/name:B2-I1]'"
+    "which was (is) reporting Mismatched Braces."
+    --
+
+    display test_branch --
+    before_sibling "test_branch/branch[item/name:B2-I1]" "new:item" --
+    message "See changes" --
+    display test_branch --
+    pause --
+    
+    )
+
+declare -a TEST_BLANK_LINES=(
+    message
+    "<%CLRSCR>"
+    "Test appropriate line inclusions with adjacent modes with no interveing blank lines."
+    display test_no_trailing_blank --
+    after_sibling "test_no_trailing_blank/result" "result : 2" --
+    message "See what happened after adding result:2 after result:" --
+    display test_no_trailing_blank --
+    pause
+    )
+
+
+name_is_array()
+{
+    local obj_name="$1"
+    local declr=$( declare -p "$obj_name" 2>/dev/null )
+    if [ $? -ne 0 ]; then
+        return 1
+    elif [ "${declr:0:10}" = "declare -a" ]; then
+        return 0
+    else
+        echo "name_is_array() logic error. comparing \"[45m${declr:0:10}[0m\" to \"declare -a\"" >&2
+        return 1
+    fi
+}
+
+name_is_function()
+{
+    local fname="%2"
+    local type=$( LC_ALL=C type -t "$fname" )
+    [ "$type" == "function" ]
+}
+
+get_mode_from_path()
+{
+    local path="$1"
+    local IFS="/"
+    local arr=( $( echo "$1" ) )
+    echo "${arr[0]}"
+    return 0
+}
+
+show_action_test()
+{
+    local name="$1"
+    local -a newarr
+    array_name="TEST_${name^^}"
+    if name_is_array "$array_name"; then
+        array_reference="${array_name}[@]"
+        local_array=( "${!array_reference}" )
+        if [ "${#local_array[@]}" -eq 0 ]; then
+            return 0
+        else
+            local action="${local_array[0]}"
+            local path="${local_array[1]}"
+            local mode=$( get_mode_from_path "$path" )
+
+            newarr=(
+                message
+                "<%CLRSCR>"
+                "(${array_name})"
+                "Testing the output of the '$action' action."
+                "Before the change is:"
+                --
+
+                display "$mode" --
+
+                message
+                " "
+                "The output after applying the following commands:"
+                "'${local_array[*]}',"
+                --
+
+                "${local_array[@]}" --
+
+                display "$mode" --
+
+                pause --
+            )
+
+        fi
+
+        ./gensfw_srm srm_test.srm "${newarr[@]}"
+    fi
+}
+
+test_actions()
+{
+    declare -a ACTIONS=( $( ./gensfw_srm --show_actions ) )
+    declare -a missing=()
+    declare action array_name
+    declare -i longest=0
+
+    for action in "${ACTIONS[@]}"; do
+        array_name="TEST_${action^^}"
+        if ! name_is_array "$array_name"; then
+            missing+=( "$action" )
+            if [ "${#action}" -gt "$longest" ]; then
+                longest="${#action}"
+            fi
+        fi
+    done
+
+    if [ "${#missing[@]}" -gt 0 ]; then
+        echo "The following actions are missing test arrays."
+        for act in "${missing[@]}"; do
+            printf "'%-${longest}s (%s)'\n" "${act}" "TEST_${act^^}"
+        done
+        echo
+        read -p "Continue with other test, y or n? " -i "n" bogus
+        if [ "$bogus" == "n" ]; then
+            exit 1
+        fi
+    fi
+
+    for action in "${ACTIONS[@]}"; do
+        show_action_test "$action"
+    done
+}
+
+
+test_path()
+{
+    ./gensfw_srm gensfw_srm_test.srm "${TEST_PATH_EVALUATION[@]}"
+}
+
+
+test_actions
+test_path

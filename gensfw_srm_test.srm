@@ -1,0 +1,54 @@
+$database       : SFW_Bogus
+$xml-stylesheet : default.xsl
+$default-mode   : list
+
+$session-type : none
+
+list
+   type : table
+   procedure : App_Item_List
+   on_line_click : ?edit&id={!id}
+   result
+      schema
+         field : id
+         readOnly : true
+         hidden : true
+
+edit
+   type : form-edit
+   schema-proc : App_Item_Update
+   procedure : App_Item_Value
+   form-action : ?edit_submit
+   schema
+      field : id
+      readOnly : true
+      hidden : true
+
+edit_submit
+   type : form-submit
+   procedure : App_Item_Update
+   result
+      type : update
+
+test_no_trailing_blank
+   type : table
+   procedure : App_Item_List
+   result
+      schema
+test_no_leading_blank
+   type : form-edit
+   schema-proc : App_Item_Update
+   procedure : App_Item_Value
+
+test_branch
+   branch
+      item : 1
+         name : B1-I1
+      item : 2
+         name : B1-I2
+   branch
+      item : 1
+         name : B2-I1
+      item : 2
+         name : B2-I2
+         last-line-of-file : To test inclusion logic
