@@ -40,6 +40,64 @@ test_no_leading_blank
    schema-proc : App_Item_Update
    procedure : App_Item_Value
 
+household
+   person
+      name   : Charles
+      lname  : Doe
+      dob    : 1970-02-02
+      gender : male
+      interests
+         running
+         biking
+         eating
+   person
+      name   : Diana
+      lname  : Doh
+      dob    : 1975-02-14
+      gender : female
+      interests
+         baking
+         writing
+         reading
+   person
+      name   : Esmerelda
+      lname  : Doe-Doh
+      dob    : 1990-03-17
+      gender : female
+      interests
+         painting
+         drawing
+         french
+   # # Shortened household to readability, but left the
+   # # extra persons in case having more is useful.
+   # person
+   #    name   : Harriet
+   #    lname  : Doe-Doh
+   #    dob    : 1995-07-04
+   #    gender : female
+   #    interests
+   #       figure skating
+   #       anime
+   #       graphic novels
+   # person
+   #    name   : Hilda
+   #    lname  : Doe-Doh
+   #    dob    : 2000-10-31
+   #    gender : female
+   #    interests
+   #       soccer
+   #       basketball
+   #       lacrosse
+   # person
+   #    name   : Roger
+   #    lname  : Doe-Doh
+   #    dob    : 2005-12-25
+   #    gender : male
+   #    interests
+   #       computers
+   #       gaming
+   #       skiing
+
 test_branch
    branch
       item : 1
