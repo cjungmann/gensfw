@@ -6,11 +6,26 @@
 # applied to the gensfw_srm command to test various actions.
 
 declare -a TEST_AFTER_SIBLING=(
-    after_sibling "test_branch/branch/item:1" "result : 2" --
+    after_sibling "test_branch/branch/item:1" "result : 2"
 )
 
 declare -a TEST_BEFORE_SIBLING=(
-    before_sibling "edit/schema/readOnly:true" "before:readOnly" --
+    before_sibling "edit/schema/readOnly:true" "before:readOnly"
+)
+
+declare -a TEST_DUMP_PATH=(
+    flag dump_path --
+    message
+    "<%CLRSCR>"
+    "(TEST_DUMP_PATH)"
+    "Dumping an evaluation of an SRMPath string."
+    "household/person[interests[writing]][gender:female]"
+    --
+    
+    dump_path "household/person[interests[writing]][gender:female]" --
+    message " " "household/person[interests[writing][gender:female]]" --
+    dump_path "household/person[interests[writing][gender:female]]" --
+    pause --
 )
 
 declare -a TEST_LAST_CHILD=(
@@ -18,7 +33,7 @@ declare -a TEST_LAST_CHILD=(
 )
 
 declare -a TEST_DELETE=(
-    delete "test_branch/branch[item:1/name:B1-I1][item:2/name:B1-I2]" --
+    delete "test_branch/branch[item:1/name:B1-I1][item:2/name:B1-I2]"
 )
 
 # The following tests are not necessary because they are
@@ -30,22 +45,38 @@ declare -a TEST_PAUSE=()
 
 # Other, non action tests:
 declare -a TEST_PATH_EVALUATION=(
-    after_sibling "test_branch/branch[item:1/name:B1-I1][item:2/name:B1-I2]" "Hi:honey"
-)
-    # message
-    # "<%CLRSCR>"
-    # "Test SRM Path evaluation with complex path expressions."
-    # "Specifically, testing 'test_branch/branch[item/name:B2-I1]'"
-    # "which was (is) reporting Mismatched Braces."
-    # --
+    message
+    "<%CLRSCR>"
+    "(TEST_PATH_EVALUATION)"
+    "Testing more complicate SRMPath expressions.  The path expression"
+    "is needlessly complicated to test/demonstrate nested predicates."
+    --
 
-    # display test_branch --
-    # before_sibling "test_branch/branch[item/name:B2-I1]" "new:item" --
-    # message "See changes" --
-    # display test_branch --
-    # pause --
-    
-    # )
+    display "<%SKIP_COMMENTS>" "household" --
+
+    message "execute:"
+    "   after_sibling \"household/person[interests[writing]][gender:female]/gender\" \"household_head : true\""
+    --
+
+    after_sibling "household/person[interests[writing]][gender:female]/gender" "household_head : true" --
+
+    message "execute:"
+    "   after_sibling \"household/person[interests[running]][gender:female]/gender\" \"household_head : true\""
+    --
+    after_sibling "household/person[interests[running]][gender:female]/gender" "household_head : true" --
+
+    pause " " --
+
+    message
+    " "
+    "This was a trick action: there is no person who is both"
+    "female and is interested in running.  Only one record was"
+    "changed to include the 'household_head' instruction."
+    " "
+    --
+
+    display "household/person[household_head]" --
+)
 
 declare -a TEST_BLANK_LINES=(
     message
@@ -105,6 +136,8 @@ show_action_test()
         local_array=( "${!array_reference}" )
         if [ "${#local_array[@]}" -eq 0 ]; then
             return 0
+        elif [ "${local_array[0]}" == "flag" ]; then
+            newarr=( "${local_array[@]:3}" )
         else
             local action="${local_array[0]}"
             local path="${local_array[1]}"
@@ -193,7 +226,6 @@ test_actions()
 
 test_complicated_path()
 {
-    show_action_test "PATH_EVALUATION"
     ./gensfw_srm gensfw_srm_test.srm "${TEST_PATH_EVALUATION[@]}"
 }
 
