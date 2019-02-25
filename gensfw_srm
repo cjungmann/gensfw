@@ -140,8 +140,11 @@ class PStep:
         indent = ('..' * level)
         print("%snode_test: %s" % (indent, self.node_test_str()))
         print("%s...tag: %s" % (indent, self.tag))
-        for pred in self.predicates:
-            print("%s...[%s]" % (indent, str(pred)))
+        if len(self.predicates):
+            print("%s[" % indent)
+            for pred in self.predicates:
+                print("%s---[%s]" % (indent, str(pred)))
+            print("%s]" % indent)
 
         if self.next_step is not None:
             self.next_step.dump(level+1)
@@ -160,7 +163,7 @@ def read_path_string(path_string):
 
     for char in path_string:
         if char in "[]/":
-            yield ("".join(buff), char)
+            yield("".join(buff), char)
             buff = []
         else:
             buff.append(char)
@@ -168,6 +171,65 @@ def read_path_string(path_string):
     # Flush the buffer (final step without terminating token)
     if len(buff):
         yield("".join(buff), None)
+
+def step_generator(pathstr):
+    """Break a path string into discrete steps."""
+    buffer = []
+    level = 0
+    for char in pathstr:
+        if char == '/' and level == 0:
+            yield("".join(buffer))
+            buffer = []
+        else:
+            buffer.append(char)
+            if char == '[':
+                level += 1
+            elif char == ']':
+                level -= 1
+                if level < 0:
+                    raise PBufferError("Unbalanced Braces "
+                                     "([1;31m%s[0m)"
+                                     % "".join(buffer))
+
+    yield("".join(buffer))
+
+def step_part_generator(stepstr):
+    """Break a step string into discrete parts.
+
+    We do not check for balanced braces here because the
+    stepstr, having come from the step_generator(), has
+    already been checked for balanced braces."""
+
+    buffer = []
+    node_test = False
+    level = 0
+    for char in stepstr:
+        if char == '[':
+            level += 1
+            if level == 1:  # entered at level == 0
+                if not node_test:
+                    node_test = True
+                    yield("".join(buffer), "nt")
+                    buffer = []
+                # Don't save predicate delimiters at step level
+                continue
+        elif char == ']':
+            level -= 1
+            if level == 0:
+                yield("".join(buffer), "pe")
+                buffer = []
+                # Don't save predicate delimiters at step level
+                continue
+
+        buffer.append(char)
+
+    if len(buffer) > 0:
+        if not node_test:
+            yield("".join(buffer), "nt")
+        else:
+            raise PStepError("Error parsing step string '%s'" % stepstr)
+            
+
 
 def build_pstep(pathstr):
     """Global command to build a PStep tree from a pathstr."""
@@ -796,6 +858,55 @@ def do_message(srmfile, content_list=None):
                 print(line)
 
         set_ansi_default_color()
+# pylint: enable=unused-argument
+
+# Must accept unused srmfile argument because the
+# call to this function is automatically generated.
+# pylint: disable=unused-argument
+#    ignoring unused srmfile parameter
+def do_dump_path(srmfile, content_list=None):
+    """Display the parsed evaluation of the SRM path."""
+    index = 0
+    if content_list and len(content_list) > 0:
+        def break_step(gen):
+            node_test = None
+            pred_exp_list = []
+            for pstr, ptype in gen:
+                print("Received a step part: (%s, %s)" % (pstr,ptype))
+                if node_test is None:
+                    node_test = pstr
+                    if ptype != "nt":
+                        raise PStepError("Confused step part, "
+                                         "we should be reading a "
+                                         "node_test string here "
+                                         "(%s)." % pstr)
+                else:
+                    pred_exp_list.append(pstr)
+                    if ptype != "pe":
+                        raise PStepError("Confused step part, "
+                                         "we should be reading a "
+                                         "predicate expression here "
+                                         "(%s)." % pstr)
+
+            print("node-test is '%s'" % node_test)
+            if len(pred_exp_list) > 0:
+                count = 1
+                for str in pred_exp_list:
+                    print("  predicate expression %d: '%s'"
+                          % (count, str));
+                    count += 1
+
+        def show_step(gen):
+            for step in gen:
+                print("Recieved a step: '%s'" % step)
+                break_step(step_part_generator(step))
+
+        show_step(step_generator(content_list[0]))
+
+        # pstep = build_pstep(content_list[0])
+        # if pstep:
+        #     pstep.dump()
+
 # pylint: enable=unused-argument
 
 def show_functions_by_prefix(prefix, with_docs=False):
