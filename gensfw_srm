@@ -51,14 +51,14 @@ class PStep:
     # Class variable to check for balanced braces.
     brace_level = 0
 
-    def __init__(self, phrase_generator, starts_with=None):
+    def __init__(self, stepstring, starts_with=None):
         self.starts_with = starts_with
         self.tag = None
         self.value = None
         self.predicates = []
         self.next_step = None
 
-        self.parse(phrase_generator)
+        self.initialize_step_parts(step_part_generator(stepstring))
 
     @staticmethod
     def braces_balanced():
@@ -75,6 +75,7 @@ class PStep:
 
     def node_test_str(self):
         """Builds a node_test string from the current state of the object."""
+
         if self.value:
             return "%s : %s" % (self.tag, self.value)
         elif self.tag:
@@ -82,40 +83,38 @@ class PStep:
         else:
             return "unassigned"
 
-    def parse(self, phrase_generator):
-        """Recursive function that parses node test, predicate expression,
-        and path step strings to build a linked PStep tree that can then
-        be used to search an SRM document.
+    def initialize_predicate_objects(self, parray):
+        """Populate the member array with PStep objects.
 
-        :param phrase_generator: Generator that, with each next() call,
-                                 returns a tuple with a string and the
-                                 token that signalled the end of the
-                                 string.
-        :return: No return value.
+        Create new PStep objects to install into the object's predicate
+        array from the array of predicate expressions."""
+
+        for pred_exp in parray:
+            self.predicates.append(build_pstep(pred_exp))
+
+    def initialize_step_parts(self, generator):
+        """Uses output from step_part_generator() to build PStep.
         """
-        try:
-            while True:
-                phrase, token = next(phrase_generator)
 
-                # Test to set required because each predicate expression
-                # passes through here, but only the first is preceded by
-                # the node test.
-                if not self.node_test_set() and len(phrase):
-                    self.set_node_test(phrase)
+        node_test_done = False
+        pred_exp_list = []
+        for pstr, ptype in generator:
+            if not node_test_done:
+                if ptype != "nt":
+                    raise PStepError("Confused step part, we should be "
+                                     "reading a node_test string here "
+                                     "(%s)." % pstr)
+                self.set_node_test(pstr)
+                node_test_done = True
+            else:
+                pred_exp_list.append(pstr)
+                if ptype != "pe":
+                    raise PStepError("Confused step part, we should be "
+                                     "reading a predicate expression "
+                                     "here (%s)." % pstr)
 
-                if token and token in "[]/":
-                    if token == "[":
-                        PStep.brace_level += 1
-                        self.predicates.append(
-                            PStep(phrase_generator, token)
-                        )
-                    elif token == "/":
-                        self.next_step = PStep(phrase_generator, token)
-                    elif token == "]":
-                        PStep.brace_level -= 1
-                        break
-        except StopIteration:
-            pass
+        if len(pred_exp_list) > 0:
+            self.initialize_predicate_objects(pred_exp_list)
 
     def has_predicate(self):
         """Boolean test for existence of predicates.  Used mostly
@@ -133,21 +132,23 @@ class PStep:
 
         return "".join(alist)
 
-    def dump(self, level=0):
+    def dump(self, stepnum=1, level=0):
         """Prints out a representation of the PStep with its links.
         It is meant to be used for debugging how a SRM path is
         evaluated."""
-        indent = ('..' * level)
-        print("%snode_test: %s" % (indent, self.node_test_str()))
-        print("%s...tag: %s" % (indent, self.tag))
+        indent = ('  ' * level)
+        print("%sstep %d, node_test: %s"
+              % (indent, stepnum, self.node_test_str()))
         if len(self.predicates):
-            print("%s[" % indent)
+            level += 1
+            indent = ("  " * level)
             for pred in self.predicates:
-                print("%s---[%s]" % (indent, str(pred)))
-            print("%s]" % indent)
+                print("%s[" % indent)
+                pred.dump(1, level+1)
+                print("%s]" % indent)
 
         if self.next_step is not None:
-            self.next_step.dump(level+1)
+            self.next_step.dump(stepnum+1, level)
 
 
 def read_path_string(path_string):
@@ -163,22 +164,26 @@ def read_path_string(path_string):
 
     for char in path_string:
         if char in "[]/":
-            yield("".join(buff), char)
+            yield ("".join(buff), char)
             buff = []
         else:
             buff.append(char)
 
     # Flush the buffer (final step without terminating token)
     if len(buff):
-        yield("".join(buff), None)
+        yield ("".join(buff), None)
 
 def step_generator(pathstr):
-    """Break a path string into discrete steps."""
+    """Break a path string into discrete steps.
+
+    The step generator returns each step of an SRM Path expression,
+    as marked by a '/' character, exclusive of the step contents of
+    predicates, if any."""
     buffer = []
     level = 0
     for char in pathstr:
         if char == '/' and level == 0:
-            yield("".join(buffer))
+            yield "".join(buffer)
             buffer = []
         else:
             buffer.append(char)
@@ -187,11 +192,11 @@ def step_generator(pathstr):
             elif char == ']':
                 level -= 1
                 if level < 0:
-                    raise PBufferError("Unbalanced Braces "
+                    raise PStepError("Unbalanced Braces "
                                      "([1;31m%s[0m)"
                                      % "".join(buffer))
 
-    yield("".join(buffer))
+    yield "".join(buffer)
 
 def step_part_generator(stepstr):
     """Break a step string into discrete parts.
@@ -209,14 +214,14 @@ def step_part_generator(stepstr):
             if level == 1:  # entered at level == 0
                 if not node_test:
                     node_test = True
-                    yield("".join(buffer), "nt")
+                    yield ("".join(buffer), "nt")
                     buffer = []
                 # Don't save predicate delimiters at step level
                 continue
         elif char == ']':
             level -= 1
             if level == 0:
-                yield("".join(buffer), "pe")
+                yield ("".join(buffer), "pe")
                 buffer = []
                 # Don't save predicate delimiters at step level
                 continue
@@ -225,18 +230,36 @@ def step_part_generator(stepstr):
 
     if len(buffer) > 0:
         if not node_test:
-            yield("".join(buffer), "nt")
+            yield ("".join(buffer), "nt")
         else:
             raise PStepError("Error parsing step string '%s'" % stepstr)
-            
-
 
 def build_pstep(pathstr):
     """Global command to build a PStep tree from a pathstr."""
-    pstep = PStep(read_path_string(pathstr))
-    if not PStep.braces_balanced():
-        raise PStepError("Unbalanced Braces ([1;31m%s[0m)" % pathstr)
-    return pstep
+
+    pstep_head = None
+    pstep_tail = None
+
+    def read_steps(gen):
+        """Process each generated step."""
+        for stepstr in gen:
+            nonlocal pstep_head
+            nonlocal pstep_tail
+
+            # Disable warning, pylint3 not recognizine nonlocal
+            # pylint: disable=used-before-assignment
+            new_pstep = PStep(stepstr)
+            if pstep_head is None:
+                pstep_head = pstep_tail = new_pstep
+            else:
+                pstep_tail.next_step = new_pstep
+                pstep_tail = new_pstep
+            # pylint: enable=used-before-assignment
+
+    read_steps(step_generator(pathstr))
+
+    return pstep_head
+
 
 class SRMLine:
     """Represents a single line of an SRM file that contains
@@ -560,9 +583,9 @@ class SRMFile:
         The 'linestr' string will be parsed for tag and value, and the level
         of the new SRMLine will match that of the last child."""
 
-        # Make new SRMLine with level of child of reference (ie 1 greater):
-        level = self.level_at_index(index)
         tag, value = parse_srm_line(linestr)
+        # Determine new item level as 1 greater than the parent node:
+        level = self.level_at_index(index)
         newline = SRMLine(level+1, tag, value)
 
         ndx = self.get_last_offspring_index(index)
@@ -753,7 +776,6 @@ def process_message_cmd(line):
     content of the parameter in the message action."""
 
     command = line[2:-1].lower()
-    print("Command is '%s' from line, '%s'" % (command, line))
     fname = "msg_cmd_" + command
     get_local_function(fname)()
 
@@ -866,47 +888,10 @@ def do_message(srmfile, content_list=None):
 #    ignoring unused srmfile parameter
 def do_dump_path(srmfile, content_list=None):
     """Display the parsed evaluation of the SRM path."""
-    index = 0
+
     if content_list and len(content_list) > 0:
-        def break_step(gen):
-            node_test = None
-            pred_exp_list = []
-            for pstr, ptype in gen:
-                print("Received a step part: (%s, %s)" % (pstr,ptype))
-                if node_test is None:
-                    node_test = pstr
-                    if ptype != "nt":
-                        raise PStepError("Confused step part, "
-                                         "we should be reading a "
-                                         "node_test string here "
-                                         "(%s)." % pstr)
-                else:
-                    pred_exp_list.append(pstr)
-                    if ptype != "pe":
-                        raise PStepError("Confused step part, "
-                                         "we should be reading a "
-                                         "predicate expression here "
-                                         "(%s)." % pstr)
-
-            print("node-test is '%s'" % node_test)
-            if len(pred_exp_list) > 0:
-                count = 1
-                for str in pred_exp_list:
-                    print("  predicate expression %d: '%s'"
-                          % (count, str));
-                    count += 1
-
-        def show_step(gen):
-            for step in gen:
-                print("Recieved a step: '%s'" % step)
-                break_step(step_part_generator(step))
-
-        show_step(step_generator(content_list[0]))
-
-        # pstep = build_pstep(content_list[0])
-        # if pstep:
-        #     pstep.dump()
-
+        pstep = build_pstep(content_list[0])
+        pstep.dump()
 # pylint: enable=unused-argument
 
 def show_functions_by_prefix(prefix, with_docs=False):
