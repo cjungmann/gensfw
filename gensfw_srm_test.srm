@@ -11,8 +11,8 @@ list
    result
       schema
          field : id
-         readOnly : true
-         hidden : true
+            readOnly : true
+            hidden : true
 
 edit
    type : form-edit
@@ -21,8 +21,8 @@ edit
    form-action : ?edit_submit
    schema
       field : id
-      readOnly : true
-      hidden : true
+         readOnly : true
+         hidden : true
 
 edit_submit
    type : form-submit
