@@ -9,11 +9,13 @@ install:
 	install -D --mode=755 ./gensfw_isotable_procs     /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs
 	install -D --mode=644 ./gensfw_isotable_procs.xsl /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs.xsl
 	install -D --mode=755 ./gensfw_srm                /usr/local/lib/SchemaServer/utilities/gensfw_srm
+	install -D --mode=755 ./gensfw_srm_from_proc      /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc
 	# Install to /usr/bin to make universally available:
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw               /usr/bin/gensfw
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_session_procs /usr/bin/gensfw_session_procs
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs /usr/bin/gensfw_isotable_procs
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_srm /usr/bin/gensfw_srm
+	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc /usr/bin/gensfw_srm_from_proc
 
 	# Install the man pages
 	cp *.1 /usr/share/man/man1
@@ -35,6 +37,7 @@ uninstall:
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_session_procs
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_srm
+	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc
 	# Remove documentation files
 	install-info --delete /usr/share/info/gensfw.info.gz /usr/share/info/dir
 	rm -f /usr/share/info/gensfw.info.gz
