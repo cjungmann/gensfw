@@ -27,6 +27,24 @@ MISSING_TABLE()
     [ $result -eq 0 ]
 }
 
+show_table_list()
+{
+    local -a table_array
+    local query=(
+        "SELECT TABLE_NAME"
+        "  FROM information_schema.TABLES"
+        " WHERE TABLE_SCHEMA='${database}'")
+
+    local IFS=$'\n'
+    table_array=( $(mysql -BN -e "${query[*]}" ) )
+    
+    if [ $? -eq 0 ]; then
+        echo "${#table_array[@]} available tables:" >&2
+        printf "   '%s'\n" "${table_array[@]}" >&2
+        echo >&2
+    fi
+}
+
 get_source_path()
 {
     # Must include both the colon AND the space to trim
@@ -37,41 +55,56 @@ get_source_path()
     zpath="${zpath%%gensfw_session_procs}"
 }
 
+write_table_procs()
+{
+    local -a aquery=(
+        "SELECT"
+        "COLUMN_NAME, DATA_TYPE, COLUMN_KEY, COLUMN_TYPE"
+        "FROM information_schema.COLUMNS"
+        "WHERE TABLE_SCHEMA='${database}'"
+        "AND TABLE_NAME='${table}'"
+    )
+
+    mysql -X -e "${aquery[*]}" | xsltproc "${xslpath}" -
+}
+
+show_usage()
+{
+    echo "Usage:" >&2
+    echo "$ gensfw_session_procs [database name] [session information table name]" >&2
+    echo >&2
+    echo "Calling the command with a valid database name and a missing" >&2
+    echo "or invalid table name will display the list of table in the" >&2
+    echo "database." >&2
+    echo >&2
+}
+
 get_source_path
 xslpath="${zpath}gensfw_session_procs.xsl"
 
-if [ $# -lt 2 ]; then
-    echo >&2
-    echo "Missing parameters." >&2
-    echo "Usage:" >&2
-    echo "$ gensfw_session_procs [database name] [session information table name]" >&2
-    echo "Script terminated" >&2
-    echo >&2
+if [ $# -lt 1 ]; then
+    show_usage
 else
-    database="${1}"
-    table="${2}"
+    database="$1"
 
     if MISSING_DATABASE; then
+        echo "Database '$database' does not exist on this server." >&2
         echo >&2
-        echo "Database '${database}' not found. Script terminated." >&2
-        echo >&2
-    elif MISSING_TABLE; then
-        echo >&2
-        echo "Table '${table}' not found.  Script terminated" >&2
-        echo >&2
+    elif [ $# -lt 2 ]; then
+        show_usage
+        echo "No table requested from database '$database'" >&2
+        show_table_list
     else
-        declare -a aquery=(
-            "SELECT"
-            "COLUMN_NAME, DATA_TYPE, COLUMN_KEY, COLUMN_TYPE"
-            "FROM information_schema.COLUMNS"
-            "WHERE TABLE_SCHEMA='${database}'"
-            "AND TABLE_NAME='${table}'"
-        )
-
-        mysql -X -e "${aquery[*]}" | xsltproc "${xslpath}" -
-        exit 0
+        table="$2"
+        if MISSING_TABLE; then
+            echo "Table '$table' does not exist in database '$database'" >&2
+            show_table_list
+        else
+            show_table_fields
+            write_table_procs
+            exit 0
+        fi
     fi
 fi
 
 exit 1
-
