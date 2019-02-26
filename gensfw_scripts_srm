@@ -191,11 +191,11 @@ gsf_write_schema_field()
         fi
     fi
 
-    if [ "${#props[@]}" -gt 0 ]; then
+    # if [ "${#props[@]}" -gt 0 ]; then
         $callback
         tabulate_array $gwsf_level "field : ${name}"
         tabulate_array $(( ++gwsf_level )) "${props[@]}"
-    fi
+    # fi
 }
 
 gsf_write_schema_delete_button()
