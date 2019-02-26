@@ -27,6 +27,11 @@ class SRMFileRangeError(SRMFileError):
     def __init__(self, message=None):
         super().__init__(message)
 
+class SRMFileBreak(SRMFileError):
+    """Raised when a 'break_if' action finds the SRM line."""
+    def __init__(self, message=None):
+        super().__init__(message)
+
 def parse_srm_line(linestr):
     """Returns a (tag, value) tuple from an SRM file line,
     in which the values are both trimmed of leading and
@@ -819,6 +824,20 @@ def do_after_sibling(srmfile, content_list=None):
                     srmfile.insert_after_sibling(index, line)
                     index = index + 1
 
+def do_break_if(srmfile, content_list=None):
+    """Action to terminate processing arguments if the SRMPath is found.
+
+    Use this action to confirm the state of an SRM file before performing
+    some other action."""
+
+    if content_list and len(content_list) > 0:
+        pstep = build_pstep(content_list[0])
+        if pstep:
+            index = srmfile.seek_line_index(pstep)
+            if index >= 0:
+                print("Breaking out of 'do_break_it'")
+                raise SRMFileBreak()
+
 def do_delete(srmfile, content_list=None):
     """Command line action that removes a branch from the SRMFile."""
     if content_list and len(content_list) > 0:
@@ -991,6 +1010,8 @@ def main():
         try:
             srm_file.initialize(sys.argv[1])
             process_args(srm_file)
+        except SRMFileBreak as exception:
+            pass
         except PStepError as exception:
             print(exception)
         except SRMFileError as exception:
