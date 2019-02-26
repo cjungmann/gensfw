@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Tool for creating an SRM file for a named procedure."""
+
+import sys
+import subprocess
+
+def show_usage():
+    """Notify user of proper syntax for calling this command."""
+    print("gensfw_srm_from_proc <database name> <table name>")
+
+def run_mysql_query(query_list, dbname="information_schema"):
+    """Returns a list of result lines from the query."""
+    parray = [
+        "mysql",
+        dbname,
+        "-BN",
+        "-e",
+        " ".join(query_list)
+    ]
+
+    try:
+        proc = subprocess.Popen(parray,
+                                universal_newlines=True,
+                                stderr=subprocess.PIPE,
+                                stdout=subprocess.PIPE)
+
+        output, error = proc.communicate()
+        if len(error) > 0:
+            print(error)
+
+        rlist = output.split('\n')
+        # Filter out blank lines (usually an empty line at the end):
+        return [x for x in rlist if len(x) > 0]
+
+    except subprocess.SubprocessError as error:
+        print("Error processing query, '%s'" % error, file=sys.stderr)
+
+    return []
+
+def confirm_database(dbase_name):
+    """Checks if named database is hosted on MySQL server."""
+
+    query = [
+        "SELECT COUNT(*)",
+        "FROM information_schema.SCHEMATA",
+        "WHERE SCHEMA_NAME='%s'" % dbase_name
+    ]
+
+    rlist = run_mysql_query(query)
+    return len(rlist) > 0 and rlist[0] == "1"
+
+def confirm_procedure(dbase_name, proc_name):
+    """Checks if named database is hosted on MySQL server."""
+
+    query = [
+        "SELECT COUNT(*)",
+        "FROM information_schema.ROUTINES",
+        "WHERE ROUTINE_SCHEMA='%s'" % dbase_name,
+        "AND ROUTINE_NAME='%s'" % proc_name
+    ]
+
+    rlist = run_mysql_query(query)
+    return len(rlist) > 0 and rlist[0] == "1"
+
+def print_list_of_procedures(dbase_name):
+    """Returns a list of procedure names in the named database."""
+
+    query = [
+        "SELECT ROUTINE_NAME",
+        "FROM information_schema.ROUTINES",
+        "WHERE ROUTINE_SCHEMA='%s'" % dbase_name
+        ]
+
+    rlist = run_mysql_query(query)
+    for pname in rlist:
+        print(pname)
+
+def get_procedure_params(dbname, procname):
+    """Checks the COLUMNS table to get procedure parameters info."""
+
+    columns = [
+        "PARAMETER_NAME",
+        "DATA_TYPE",
+        "CHARACTER_MAXIMUM_LENGTH",
+        "NUMERIC_PRECISION",
+        "NUMERIC_SCALE",
+        "DTD_IDENTIFIER"
+        ]
+
+    query = [
+        "SELECT",
+        ", ".join(columns),
+        "FROM PARAMETERS",
+        "WHERE SPECIFIC_SCHEMA='%s'" % dbname,
+        "   AND SPECIFIC_NAME='%s'" % procname
+        ]
+
+    return run_mysql_query(query)
+
+def process_procedure(dbname, procname, modename):
+    """Print the SRM output for the given database and procedure."""
+
+    params = get_procedure_params(dbname, procname)
+    if len(params) > 0:
+        print(modename)
+        print("   schema-proc : procname")
+        print("   type : form-edit")
+        print("   schema")
+        for param in params:
+            rowspecs = param.split('\t')
+            print("      field : %s" % rowspecs[0])
+
+def main():
+    """Main program function."""
+    if len(sys.argv) == 0:
+        show_usage()
+
+    dbname = None
+    procname = None
+    modename = "mode"
+
+    if len(sys.argv) > 1:
+        dbname = sys.argv[1]
+        if not confirm_database(dbname):
+            print("The MySQL server does not recognize database '%s'" %
+                  dbname, file=sys.stderr)
+            return 1
+
+    if len(sys.argv) > 2:
+        procname = sys.argv[2]
+
+    if len(sys.argv) > 3:
+        modename = sys.argv[3]
+
+    if procname:
+        if confirm_procedure(dbname, procname):
+            process_procedure(dbname, procname, modename)
+            return 0
+        else:
+            print("The procedure, '%s', is not found in database '%s'.")
+
+    print_list_of_procedures(dbname)
+    return 1
+
+if __name__ == "__main__":
+    main()
