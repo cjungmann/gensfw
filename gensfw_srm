@@ -298,28 +298,31 @@ class SRMLine:
         A content line is a non-comment line that has at least a tag value."""
         return not (self.is_comment() or self.is_empty())
 
-    def display(self, colon_align=None):
+    def display(self, colon_align=None, outfile=sys.stdout):
         """Prints the line according to its contents.
 
         :param colon_align: Setting this optional parameter
            will pad the printout of the *tag* value to align
            the colon for a more pleasing-to-read output.
+        :param output: A file opened for writing, to which the
+           output will be sent.  If this parameter is omitted,
+           the output will be sent to stdout.
 
         This method prints 3 spaces per level, then the
         tag.  If the line includes a value, a comma and the
         value string will be printed following the tag."""
 
         if self.level:
-            print("   " * self.level, end="")
+            print("   " * self.level, end="", file=outfile)
         if self.tag:
-            print(self.tag, end="")
+            print(self.tag, end="", file=outfile)
             if self.value:
                 if colon_align:
                     colon_spaces = " " * (colon_align - self.tag_len())
-                    print(colon_spaces, end="")
+                    print(colon_spaces, end="", file=outfile)
 
-                print(" : %s" % self.value, end="")
-        print()
+                print(" : %s" % self.value, end="", file=outfile)
+        print(file=outfile)
 
     def tag_len(self):
         """This method returns the length of the tag value,
@@ -644,24 +647,33 @@ class SRMFile:
 
         limit = self.get_line_count()
         max_tag_len = 0
-        ref_line = self.lines_list[index]
-        ref_level = ref_line.level
 
-        index += 1
-        while index < limit:
-            new_line = self.lines_list[index]
-            if new_line.level == ref_level:
-                max_tag_len = max(max_tag_len, new_line.tag_len())
-            else:
-                break
+        if index < limit:
+            ref_line = self.lines_list[index]
+            ref_level = ref_line.level
 
             index += 1
+            while index < limit:
+                new_line = self.lines_list[index]
+                if new_line.level == ref_level:
+                    max_tag_len = max(max_tag_len, new_line.tag_len())
+                else:
+                    break
+
+                index += 1
 
         return max_tag_len
 
-    def display(self, starts_at=0, skip_comments=False):
+    def display(self, starts_at=0, skip_comments=False, outfile=sys.stdout):
         """Print out the contents of the SRMFile.  If a starting point
-        is indicated, only print the contents of that item."""
+        is indicated, only print the contents of that item.
+
+        :param skip_comments: If this flag is set, comment lines will be
+           skipped.
+        :param outfile: If set, this parameter should be a file stream
+           opened for writing, and the output will be written to this
+           file stream."""
+
         i = starts_at
         if starts_at > 0:
             # Use line following last offspring as non-inclusive limit
@@ -681,7 +693,7 @@ class SRMFile:
                 group_max_tag_len = 0
 
             if skip_comments==False or not line.is_comment():
-                line.display(group_max_tag_len)
+                line.display(group_max_tag_len, outfile)
 
             last_line_level = line.level
             i += 1
@@ -699,6 +711,7 @@ class SRMFile:
         parent, checking each child's children according to the next_step
         data member of the current PStep.
         """
+
         if index == -1:
             level = 0
         elif self.in_range(index):
@@ -924,6 +937,36 @@ def do_dump_path(srmfile, content_list=None):
         pstep = build_pstep(content_list[0])
         pstep.dump()
 # pylint: enable=unused-argument
+
+def do_write_file(srmfile, content_list=None):
+    """Write the output to the file named in the first parameter.
+
+    In order to make the SRM path optional, the file path must
+    be the first parameter following the action.  The following parameters
+    must be either or both the <%SKIP_COMMENTS> token and an SRM path
+    expression.
+
+    if included, indicates the print starting point.  If there is no
+    second parameter, the entire contents will be written out.
+
+    The <%SKIP_COMMENTS> tag will be respected as with the display action."""
+
+    print("In do_write_file with %d content_list parameters." % len(content_list), file=sys.stderr)
+
+    if content_list and len(content_list) > 0:
+        filename = content_list[0]
+        skipping_comments = False
+        index = 0
+
+        for arg in content_list[1:]:
+            if arg == "<%SKIP_COMMENTS>":
+                skipping_comments = True
+            else:
+                pstep = build_pstep(arg)
+                index = srmfile.seek_line_index(pstep)
+            
+        targetfile = open(filename, mode='w')
+        srmfile.display(index, skipping_comments, targetfile)
 
 def show_functions_by_prefix(prefix, with_docs=False):
     """Reads module to find functions that start with the prefix.
