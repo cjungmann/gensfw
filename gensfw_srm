@@ -731,6 +731,8 @@ class SRMFile:
                 else:
                     return ndx
 
+        return -1
+
     def confirm_line_index(self, pstep, index=-1):
         """Shortcut function to confirm the existence of a matching line.
         This method is used to test predicate expressions that must only
@@ -1010,6 +1012,8 @@ def main():
         try:
             srm_file.initialize(sys.argv[1])
             process_args(srm_file)
+        except FileNotFoundError as exception:
+            print("Failed to load '%s': file not found." % sys.argv[1])
         except SRMFileBreak as exception:
             pass
         except PStepError as exception:
