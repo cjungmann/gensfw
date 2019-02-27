@@ -10,7 +10,11 @@ declare -a TEST_AFTER_SIBLING=(
 )
 
 declare -a TEST_BEFORE_SIBLING=(
-    before_sibling "edit/schema/readOnly:true" "before:readOnly"
+    before_sibling "edit/schema/field:id/readOnly:true" "before:readOnly"
+)
+
+declare -a TEST_BREAK_IF=(
+    break_if "edit/schema/field:id/readOnly:true"
 )
 
 declare -a TEST_DUMP_PATH=(
