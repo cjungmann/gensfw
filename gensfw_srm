@@ -10,7 +10,9 @@ gensfw_es <filename>
 import sys
 import types
 
-# disable_pylint: disable=missing-docstring
+# pylint: disable=too-many-lines
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-branches
 
 class PStepError(Exception):
     """Raised for any parsing path error."""
@@ -32,6 +34,16 @@ class SRMFileBreak(SRMFileError):
     def __init__(self, message=None):
         super().__init__(message)
 
+class SRMUnknownAction(Exception):
+    """Exception class to notify of unrecognized action."""
+    def __init__(self, message=None):
+        super().__init__(message)
+
+class SRMSkipToTarget(Exception):
+    """Raised by "skip" action, if SRMPath confirmed, to name target label."""
+    def __init__(self, message=None):
+        super().__init__(message)
+
 def parse_srm_line(linestr):
     """Returns a (tag, value) tuple from an SRM file line,
     in which the values are both trimmed of leading and
@@ -48,6 +60,27 @@ def parse_srm_line(linestr):
             value = parts[1].strip()
 
     return (tag, value)
+
+def find_named_label_action(name):
+    """Returns the sys.argv index of a label action, or -1 if not found.
+
+    This function is used in a "skip" action to locate the index of the
+    label referenced by the "skip" action."""
+
+    index = 2
+    limit = len(sys.argv)
+
+    for arg in sys.argv[2:]:
+        if arg == "label":
+            if (index+1 < limit
+                    and sys.argv[index+1] == name
+                    and (index == 2
+                         or sys.argv[index-1] == "--")):
+                return index
+
+        index += 1
+
+    return -1
 
 class PStep:
     """A linked class that identifies an acceptable match
@@ -599,6 +632,11 @@ class SRMFile:
 
         ndx = self.get_last_offspring_index(index)
 
+        if ndx < 0:
+            ndx = index + 1
+        else:
+            ndx += 1
+
         if self.in_range(ndx):
             self.lines_list.insert(ndx, newline)
         else:
@@ -607,25 +645,37 @@ class SRMFile:
     def insert_before_sibling(self, index, linestr):
         """Insert a new SRMLine just before, and
         at the same level as the indicated line."""
+
         if self.in_range(index):
             tag, value = parse_srm_line(linestr)
-            line = self.get_unchecked_line_at(index)
+            level = self.level_at_index(index)
             self.lines_list.insert(index,
-                                   SRMLine(line.level, tag, value))
+                                   SRMLine(level, tag, value))
 
     def insert_after_sibling(self, index, linestr):
         """Insert a new SRMLine just after, and
         at the same level as the indicated line."""
+
         if self.in_range(index):
             tag, value = parse_srm_line(linestr)
-            line = self.get_unchecked_line_at(index)
+            level = self.level_at_index(index)
 
             ndx = self.get_last_offspring_index(index)
+
+            if ndx < 0:
+                ndx = index
+
             if self.in_range(ndx+1):
                 self.lines_list.insert(ndx+1,
-                                       SRMLine(line.level, tag, value))
+                                       SRMLine(level, tag, value))
             else:
-                self.lines_list.append(SRMLine(line.level, tag, value))
+                self.lines_list.append(SRMLine(level, tag, value))
+
+    def append_mode(self, linestr):
+        """Create a mode line at the end of the srmfile."""
+
+        tag, value = parse_srm_line(linestr)
+        self.lines_list.append(SRMLine(0, tag, value))
 
     def delete_branch(self, index):
         """Delete branch (or line, if no children) at index."""
@@ -697,7 +747,7 @@ class SRMFile:
             elif line.level < last_line_level:
                 group_max_tag_len = 0
 
-            if skip_comments==False or not line.is_comment():
+            if not skip_comments or not line.is_comment():
                 line.display(group_max_tag_len, outfile)
 
             last_line_level = line.level
@@ -818,7 +868,6 @@ def do_last_child(srmfile, content_list=None):
             if index >= 0:
                 for line in content_list[1:]:
                     srmfile.append_after_last_child(index, line)
-                    index = index + 1
 
 def do_before_sibling(srmfile, content_list=None):
     """Command Line action that adds a line just before and at
@@ -843,6 +892,11 @@ def do_after_sibling(srmfile, content_list=None):
                 for line in content_list[1:]:
                     srmfile.insert_after_sibling(index, line)
                     index = index + 1
+
+def do_append_mode(srmfile, content_list=None):
+    """Add a mode (level-0 item) at the end of the srmfile."""
+    if content_list and len(content_list) > 0:
+        srmfile.append_mode(content_list[0])
 
 def do_break_if(srmfile, content_list=None):
     """Action to terminate processing arguments if the SRMPath is found.
@@ -878,7 +932,7 @@ def do_display(srmfile, content_list=None):
     srmline = 0
     array_index = 0
     skipping_comments = False
-    
+
     if content_list and len(content_list) > 0:
         if content_list[0] == "<%SKIP_COMMENTS>":
             skipping_comments = True
@@ -890,10 +944,41 @@ def do_display(srmfile, content_list=None):
 
     srmfile.display(srmline, skipping_comments)
 
-# Must accept unused srmfile argument because the
-# call to this function is automatically generated.
 # pylint: disable=unused-argument
-#    ignoring unused srmfile parameter
+def do_label(srmfile, content_list=None):
+    """A do-nothing action that is used as a target for the skip
+    action."""
+    pass
+# pylint: enable=unused-argument
+
+# pylint: disable=unused-argument
+def do_skip(srmfile, content_list=None):
+    """Skip to a target label if the SRMPath is True.
+
+    The first parameter is the name of a "label" action
+    to which execution will be shifted.
+
+    The second, optional parameter, is an SRMPath expression
+    that will be evaluated.  The absence of this parameter
+    means the skip will be unconditional.
+
+    An exception will be raised to signal the move if:
+    1. The target label can be located, and
+    2. The SRMPath expression is True."""
+
+    if content_list and len(content_list) > 0:
+        target = content_list[0]
+        index = find_named_label_action(target)
+        if index >= 0:
+            if len(content_list) > 1:
+                pstep = build_pstep(content_list[1])
+                if srmfile.confirm_line_index(pstep):
+                    raise SRMSkipToTarget(index)
+            else:
+                raise SRMSkipToTarget(index)
+# pylint: enable=unused-argument
+
+# pylint: disable=unused-argument
 def do_pause(srmfile, content_list=None):
     """Pause, with optional message, until the user presses ENTER."""
     set_ansi_message_color()
@@ -906,10 +991,7 @@ def do_pause(srmfile, content_list=None):
     set_ansi_default_color()
 # pylint: enable=unused-argument
 
-# Must accept unused srmfile argument because the
-# call to this function is automatically generated.
 # pylint: disable=unused-argument
-#    ignoring unused srmfile parameter
 def do_message(srmfile, content_list=None):
     """Display a message in output.  Used for demonstration purposes.
 
@@ -931,10 +1013,7 @@ def do_message(srmfile, content_list=None):
         set_ansi_default_color()
 # pylint: enable=unused-argument
 
-# Must accept unused srmfile argument because the
-# call to this function is automatically generated.
 # pylint: disable=unused-argument
-#    ignoring unused srmfile parameter
 def do_dump_path(srmfile, content_list=None):
     """Display the parsed evaluation of the SRM path."""
 
@@ -969,7 +1048,7 @@ def do_write_file(srmfile, content_list=None):
             else:
                 pstep = build_pstep(arg)
                 index = srmfile.seek_line_index(pstep)
-            
+
         targetfile = open(filename, mode='w')
         srmfile.display(index, skipping_comments, targetfile)
 
@@ -1020,22 +1099,39 @@ def execute_arglist(srmfile, arglist):
         cur_function = getattr(sys.modules["__main__"], cur_action)
         if cur_function:
             cur_function(srmfile, arglist[1:])
+        else:
+            raise SRMUnknownAction(arglist[0])
 
 def process_args(srmfile):
     """Iterate through command line arguments, collecting into groups
     delimited by '--' arguments.  Each group is submitted to function
     execute_arglist()."""
-    arglist = []
-    # skip argv[1], which was an SRM filepath
-    for arg in sys.argv[2:]:
-        if arg == "--":
-            execute_arglist(srmfile, arglist)
-            arglist = []
-        else:
-            arglist.append(arg)
 
-    if len(arglist):
-        execute_arglist(srmfile, arglist)
+    arglist = []   # Buffer for passing to actions a subset of arguments
+    startarg = 2   # Parameter index at which to start processing
+                   # This may be reset with a "skip" action to restart
+                   # the loop.
+
+    # skip argv[1], which was an SRM filepath
+    while True:
+        try:
+            for arg in sys.argv[startarg:]:
+                if arg == "--":
+                    execute_arglist(srmfile, arglist)
+                    arglist = []
+                else:
+                    arglist.append(arg)
+
+            if len(arglist):
+                execute_arglist(srmfile, arglist)
+
+        except SRMSkipToTarget as exception:
+            startarg = int(exception.__str__())
+            arglist = []
+            continue
+
+        # Break from "while True" after all arguments completed:
+        break
 
 def main():
     """Main program function."""
@@ -1062,6 +1158,10 @@ def main():
             process_args(srm_file)
         except FileNotFoundError as exception:
             print("Failed to load '%s': file not found." % sys.argv[1])
+        except SRMUnknownAction as exception:
+            print("Attempted to call unknown action '%s'" % exception)
+        except KeyboardInterrupt:
+            print("Terminated with keyboard interruption.")
         except SRMFileBreak as exception:
             pass
         except PStepError as exception:
