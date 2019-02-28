@@ -40,12 +40,140 @@ declare -a TEST_DELETE=(
     delete "test_branch/branch[item:1/name:B1-I1][item:2/name:B1-I2]"
 )
 
+declare -a TEST_APPEND_MODE=(
+    append_mode "last_mode" --
+)
+
 # The following tests are not necessary because they are
 # used in several of the other tests.  
 # Empty arrays to defuse warning, but to skip the tests
 declare -a TEST_DISPLAY=()
 declare -a TEST_MESSAGE=()
 declare -a TEST_PAUSE=()
+declare -a TEST_LABEL=()
+declare -a TEST_WRITE_FILE=()
+declare -a TEST_SKIP=()
+
+# The following are redefinitions of the test cases set above.
+# Comment-out tests that should still be run, leave the redefinitions
+# for tests that should be skipped.
+# TEST_AFTER_SIBLING=()
+# TEST_BEFORE_SIBLING=()
+# TEST_BREAK_IF=()
+# TEST_DUMP_PATH=()
+# TEST_LAST_CHILD=()
+# TEST_DELETE=()
+# TEST_APPEND_MODE=()
+
+# Action test for SKIP requires many steps to confirm proper
+# operation.  It is pulled from the regular action tests and
+# done its own way.
+declare -a TEST_SKIP_SET=(
+
+    # Add progress-tracking mode for "skip" action testing
+    after-sibling "test_branch" "skip_test" --
+    last-child "skip_test" "progress"       --
+
+    # Jump to start of execution
+    pause "About to jump to the start of the TEST_SKIP_SET test." --
+    skip begin                          --
+
+    # Each label will only be executed once
+    label first                                     --
+       skip second "skip_test/progress/did_first"   --
+       last-child "skip_test/progress" "did_first"  --
+       message "Just done with first"               --
+       skip begin                                   --
+
+    label second                                    --
+       skip third "skip_test/progress/did_second"   --
+       last-child "skip_test/progress" "did_second" --
+       message "Just done with second"              --
+       skip begin                                   --
+
+    label third                                     --
+       skip complete "skip_test/progress/did_third" --
+       last-child "skip_test/progress" "did_third"  --
+       message "Just done with third"               --
+       skip begin                                   --
+
+    label begin --
+       # Jump out if completed all steps:
+       skip complete "skip_test/progress[did_first][did_second][did_third]" --
+       # Otherwise, show message
+       message "BEGINNING" --
+       pause
+       " "
+       "Jumping first to the second label, and when returned"
+       "from that, start at the top.  The execution order should"
+       "be second, first, third."
+       --
+
+       skip first "skip_test/progress/did_second" --
+       skip second --
+
+    label complete --
+    display skip_test --
+    pause "All the steps should have been completed to get here." --
+
+    pause "Completed the SKIP test."
+)
+
+declare -a LAST_CHILD_BIG_TEST=(
+    message
+    "<%CLRSCR>"
+    "(LAST_CHILD_BIG_TEST)"
+    " "
+    "Create root mode in empty SRM file.  Then add children, each with"
+    "children 'first', 'second', and 'third' with last-child action."
+    "Then display results."
+    " "
+    --
+
+    # Skip if already a root element,
+    skip start_test "root" --
+    # add root if not skipped
+    append-mode "root" --
+
+    label start_test --
+
+    display --
+    pause " " "Look at starting position" --
+
+    after-sibling "root" "lctest" --
+    last-child "lctest" "first" --
+    last-child "lctest" "second" --
+    last-child "lctest" "third" --
+
+    message " " --
+    display --
+    pause " " "Did after-sibling with last-childs to populate" --
+    message " " --
+
+    before-sibling "lctest" "lcbefore"             --
+    last-child "lcbefore" "first" "second" "third" --
+
+    display --
+    message " " "Did before-sibling with last-childs to populate" --
+)
+
+declare -a SHORT_TEST_SKIP_SET=(
+    message "<%CLRSCR>" "(SHORT_TEST_SKIP_SET)" --
+
+    # Add progress-tracking mode for "skip" action testing
+    after-sibling "test_branch" "skip_test"                         --
+    last-child "skip_test" "progress"                               --
+
+    message "You should just ahead to see the last message." --
+
+    skip last "skip_test/progress" --
+
+    message "You shouldn't see this message" --
+
+    label last --
+
+    pause "This should be the only message you see." --
+)
 
 # Other, non action tests:
 declare -a TEST_PATH_EVALUATION=(
@@ -155,7 +283,7 @@ show_action_test()
                 "Before the change is:"
                 --
 
-                display "$mode" --
+                display "<%SKIP_COMMENTS>" "$mode" --
 
                 message
                 " "
@@ -165,7 +293,7 @@ show_action_test()
 
                 "${local_array[@]}" --
 
-                display "$mode" --
+                display "<%SKIP_COMMENTS>" "$mode" --
 
                 pause --
             )
@@ -227,6 +355,16 @@ test_actions()
     done
 }
 
+test_last_child_big_test()
+{
+    ./gensfw_srm gensfw_srm_test_empty.srm "${LAST_CHILD_BIG_TEST[@]}"
+}
+
+test_skip_set()
+{
+    ./gensfw_srm gensfw_srm_test.srm "${TEST_SKIP_SET[@]}"
+}
+
 
 test_complicated_path()
 {
@@ -235,4 +373,6 @@ test_complicated_path()
 
 
 test_actions
+test_last_child_big_test
+test_skip_set
 test_complicated_path
