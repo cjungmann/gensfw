@@ -558,11 +558,12 @@ class SRMFile:
     def get_last_offspring_index(self, index):
         """Returns the line index of the last line whose ancestor
         is the reference line."""
+
         level = self.level_at_index(index)
         limit = self.get_line_count()
 
-        # Predefine to preempt pylint3
-        ndx = 0
+        # Set appropriate failure value in case no items in range:
+        ndx = -1
 
         # Walk list to first non-offspring line
         for ndx in range(index+1, limit):
@@ -677,7 +678,11 @@ class SRMFile:
         i = starts_at
         if starts_at > 0:
             # Use line following last offspring as non-inclusive limit
-            limit = 1 + self.get_last_offspring_index(starts_at)
+            limit = self.get_last_offspring_index(starts_at)
+            if limit == -1:
+                limit = self.get_line_count()
+            else:
+                limit += 1
         else:
             limit = self.get_line_count()
 
