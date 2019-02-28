@@ -1076,12 +1076,20 @@ def show_usage():
     """Show command usage upon request or after a mistake."""
     msg = """
 Usage:
-    gensfw_srm <filename> [ <action> <argument>... ] [ -- <action> <argument>... ]...
-
+    gensfw_srm (<filename> | "<%NEWFILE>") [ <action> <argument>... ] [ -- <action> <argument>... ]...
     gensfw_srm --help
     gensfw_srm --show_actions
     gensfw_srm --show_action_docs
     gensfw_srm --show_message_cmds
+
+    The first parameter is either the path to an SRM file, or the
+    token "<%NEWFILE>".
+
+    Following the file parameter, sets of parameters follow,  beginning
+    with an "action", followed by 0 or more action parameters.  If more
+    than one action is being defined, actions should be terminated by
+    double-dashes (--).  The final action does not need does not need
+    to be terminated
 
 Options:
     --help, -h              This page
@@ -1154,7 +1162,8 @@ def main():
             sys.exit(0)
     else:
         try:
-            srm_file.initialize(sys.argv[1])
+            if sys.argv[1] != "<%NEWFILE>":
+                srm_file.initialize(sys.argv[1])
             process_args(srm_file)
         except FileNotFoundError as exception:
             print("Failed to load '%s': file not found." % sys.argv[1])
