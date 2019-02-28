@@ -357,7 +357,7 @@ test_actions()
 
 test_last_child_big_test()
 {
-    ./gensfw_srm gensfw_srm_test_empty.srm "${LAST_CHILD_BIG_TEST[@]}"
+    ./gensfw_srm "<%NEWFILE>" "${LAST_CHILD_BIG_TEST[@]}"
 }
 
 test_skip_set()
