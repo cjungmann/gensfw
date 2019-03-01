@@ -45,6 +45,45 @@ show_table_list()
     fi
 }
 
+show_table_fields()
+{
+    local table="$1"
+    local -a fields_array field_array
+    local -a query=(
+        "SELECT COLUMN_NAME, COLUMN_TYPE"
+        "  FROM information_schema.COLUMNS"
+        " WHERE TABLE_SCHEMA='${database}'"
+        "   AND TABLE_NAME='${table}'"
+    )
+
+    local IFS=$'\n'
+    fields_array=( $( mysql -BN -e "${query[*]}" ) )
+
+    echo >&2
+    echo "Fields of table '$table'" >&2
+
+    IFS=$'\t'
+
+    # get max length of field names:
+    local -i tflen flen=0
+    for field in "${fields_array[@]}"; do
+        field_array=( $field )
+        tflen="${#field_array[0]}"
+        if [ "${tflen}" -gt "$flen" ]; then
+            flen="${tflen}"
+        fi
+    done
+
+    local format="%-${flen}s : %s"
+
+    for field in "${fields_array[@]}"; do
+        field_array=( $field )
+        fname="${field_array[0]}"
+        ftype="${field_array[1]}"
+        printf "$format\n" "$fname" "$ftype" >&2
+    done
+}
+
 get_source_path()
 {
     # Must include both the colon AND the space to trim
@@ -100,7 +139,7 @@ else
             echo "Table '$table' does not exist in database '$database'" >&2
             show_table_list
         else
-            show_table_fields
+            show_table_fields "$table"
             write_table_procs
             exit 0
         fi
