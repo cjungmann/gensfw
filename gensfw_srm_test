@@ -17,6 +17,10 @@ declare -a TEST_BREAK_IF=(
     break_if "edit/schema/field:id/readOnly:true"
 )
 
+declare -a TEST_COPY_BEFORE_SIBLING=(
+    copy_before_sibling "edit/schema" "household/person[name:Charles]" -- 
+)
+
 declare -a TEST_DUMP_PATH=(
     flag dump_path --
     message
@@ -119,43 +123,6 @@ declare -a TEST_SKIP_SET=(
     pause "Completed the SKIP test."
 )
 
-declare -a LAST_CHILD_BIG_TEST=(
-    message
-    "<%CLRSCR>"
-    "(LAST_CHILD_BIG_TEST)"
-    " "
-    "Create root mode in empty SRM file.  Then add children, each with"
-    "children 'first', 'second', and 'third' with last-child action."
-    "Then display results."
-    " "
-    --
-
-    # Skip if already a root element,
-    skip start_test "root" --
-    # add root if not skipped
-    append-mode "root" --
-
-    label start_test --
-
-    display --
-    pause " " "Look at starting position" --
-
-    after-sibling "root" "lctest" --
-    last-child "lctest" "first" --
-    last-child "lctest" "second" --
-    last-child "lctest" "third" --
-
-    message " " --
-    display --
-    pause " " "Did after-sibling with last-childs to populate" --
-    message " " --
-
-    before-sibling "lctest" "lcbefore"             --
-    last-child "lcbefore" "first" "second" "third" --
-
-    display --
-    message " " "Did before-sibling with last-childs to populate" --
-)
 
 declare -a SHORT_TEST_SKIP_SET=(
     message "<%CLRSCR>" "(SHORT_TEST_SKIP_SET)" --
@@ -355,11 +322,6 @@ test_actions()
     done
 }
 
-test_last_child_big_test()
-{
-    ./gensfw_srm "<%NEWFILE>" "${LAST_CHILD_BIG_TEST[@]}"
-}
-
 test_skip_set()
 {
     ./gensfw_srm gensfw_srm_test.srm "${TEST_SKIP_SET[@]}"
@@ -372,7 +334,252 @@ test_complicated_path()
 }
 
 
-test_actions
-test_last_child_big_test
-test_skip_set
-test_complicated_path
+declare -a CARR_MAKE_FILE=(
+    append-mode
+       "root"
+       --
+
+    last-child
+       "root"
+       "child : first"
+       "child : second"
+       "child : third"
+       --
+
+    last-child
+       "root/child:first"
+       "name : Anne"
+       "age : 12"
+       --
+
+    last-child "root/child:second"
+       "name : Benjamin"
+       "age : 15"
+       --
+
+    last-child "root/child:third"
+       "name : Cassandra"
+       "age : 16"
+       --
+)
+
+declare -a CARR_ADD_ITEM=(
+    last-child "root"
+       "item : abstract"
+       --
+
+    last-child "root/item"
+       "weight : none"
+       "color : none"
+       --
+)
+
+create_child()
+{
+    local name="$1"
+    local age="$2"
+
+    last-child
+       "root"
+       
+
+    }
+
+bestow_gift()
+{
+    local recipient="$1"
+    local gift="${2=-ball}"
+    local color="${3=-red}"
+    local weight="${4=-200gm}"
+
+    local person_path="root/child[name:${recipient}]"
+    local item_path="root/item"
+    local gift_path="$person_path/possessions/gift:$gift"
+
+    local -a ARR=(
+       skip
+          Has_Possessions
+          "${person_path}/possessions"
+          --
+
+       last-child
+          "${person_path}"
+          "possessions"
+          --
+
+       label
+          Has_Possessions
+          --
+
+       skip
+          Has_Gift
+          "${person_path}/possessions/gift:${gift}" --
+
+       copy-as-last-child
+          "${person_path}/possessions"
+          "$item_path"
+          "<%SET_TAG>"
+          "gift"
+          "<%SET_VALUE>"
+          "$gift"
+          --
+
+       set-line
+          "$gift_path/weight"
+          "<%SET_VALUE>"
+          "$weight"
+          --
+
+       set-line
+          "$gift_path/color"
+          "<%SET_VALUE>"
+          "$color"
+          --
+
+       label
+          Has_Gift
+          --
+    )
+
+    local IFS=$'\n'
+    echo "${ARR[*]}"
+}
+
+add_before_test()
+{
+    local -a make_file=(
+        "${CARR_MAKE_FILE[@]}" 
+        "${CARR_ADD_ITEM[@]}"
+    )
+
+    local -a args=(
+        message
+           "Conducting a test of before-sibling and copy-before-sibling"
+           --
+
+        "${make_file[@]}"
+
+        display
+           --
+
+        message
+           "^_starting"
+           " "
+           --
+
+        before-sibling
+           "root"
+           "newnode : BEFORE-SIBLING for root"
+           --
+
+        before-sibling
+           "root/child[name:Benjamin]"
+           "newnode : BEFORE-SIBLING for Benjamin"
+           --
+
+        display
+           --
+
+        message
+           "^_After using before-sibling to add lines."
+           " "
+           --
+
+        copy-before-sibling
+           "root/child[name:Benjamin]"
+           "root/child[name:Benjamin]"
+           "<%SET_VALUE>"
+           "twin"
+           --
+
+        set_line
+           "root/child:twin/name"
+           "<%SET_VALUE>"
+           "Bartholomew"
+           --
+
+        display --
+
+        message
+           "^ After copy-before-sibling to create a twin,"
+           "  changing the child value to \"twin\", then"
+           "  changing the name using the path root/child:twin"
+           --
+        )
+
+    # pdb \
+    ./gensfw_srm "<%NEWFILE>" "${args[@]}"
+}
+
+add_after_test()
+{
+    local -a make_file=(
+        "${CARR_MAKE_FILE[@]}" 
+        "${CARR_ADD_ITEM[@]}"
+    )
+
+    local -a anne_ball=( $( bestow_gift "Anne" "ball" "red" "500gm" ) )
+    local -a cass_box=( $( bestow_gift "Cassandra" "box" "blue" "1kg" ) )
+    local -a ben_coal=( $( bestow_gift "Benjamin" "coal" "black" "2kg" ) )
+
+    local -a args=(
+        message
+           "Conducting a test of after-sibling and copy-after-sibling"
+           --
+
+        "${make_file[@]}"
+
+        display
+           --
+
+        message
+           "^_starting"
+           " "
+           --
+
+        "${anne_ball[@]}"
+        "${cass_box[@]}"
+        "${ben_coal[@]}"
+
+        display 
+           --
+
+        message
+           "^_after_giving_gifts"
+           " "
+           --
+
+        after-sibling
+           "root"
+           "newnode: AFTER SIBLING for root"
+           --
+
+        after-sibling
+           "root/child[name:Cassandra]"
+           "newmode : AFTER_SIBLING to make new child of root."
+           --
+
+        after-sibling
+           "root/child[name:Cassandra]/possessions"
+           "newmode : AFTER_SIBLING to make new attribute Cassandra.."
+           --
+
+        display --
+
+        message
+           "^_after after-sibling actions."
+           _ _
+           --
+    )
+
+    # pdb \
+    ./gensfw_srm "<%NEWFILE>" "${args[@]}"
+}
+
+
+add_before_test
+# add_after_test
+
+# test_actions
+# test_skip_set
+# test_complicated_path
