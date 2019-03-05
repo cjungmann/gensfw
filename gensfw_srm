@@ -1333,10 +1333,14 @@ Options:
 def execute_arglist(srmfile, arglist):
     """Looks for suitable function to execute, executing it if found."""
     if len(arglist) > 0:
+        mmod = sys.modules["__main__"]
         cur_action = "do_" + arglist[0].replace("-", "_")
-        cur_function = getattr(sys.modules["__main__"], cur_action)
-        if cur_function:
-            cur_function(srmfile, arglist[1:])
+        if cur_action in dir(mmod):
+            cur_function = getattr(mmod, cur_action)
+            if cur_function:
+                cur_function(srmfile, arglist[1:])
+            else:
+                raise SRMUnknownAction(arglist[0])
         else:
             raise SRMUnknownAction(arglist[0])
 
