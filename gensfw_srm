@@ -305,8 +305,8 @@ class SRMLine:
     and value parts of the SRM line."""
     def __init__(self, level=0, tag=None, value=None):
         self.level = level
-        self.value = value
         self.tag = tag
+        self.value = value
 
     def __str__(self):
         """Override default __str__ function."""
@@ -318,9 +318,20 @@ class SRMLine:
         else:
             return ""
 
+    @staticmethod
+    def make_copy(srmline):
+        """Make copy (since we can't have a copy constructor in Python."""
+        return SRMLine(srmline.level, srmline.tag, srmline.value)
+
+    def copy_from(self, srmline):
+        """Concession to python's lack of support of a copy constructor."""
+        self.level = srmline.level
+        self.tag = srmline.tag
+        self.value = srmline.value
+
     def is_comment(self):
         """Returns True if the line is a comment, False otherwise."""
-        return self.tag and self.tag[0] == "#"
+        return self.tag and len(self.tag) > 0 and self.tag[0] == "#"
 
     def is_empty(self):
         """Returns True for an empty line, False otherwise."""
@@ -579,10 +590,10 @@ class SRMFile:
             level = line.level + 1
             for ndx in range(index+1, self.get_line_count()):
                 line = self.get_unchecked_line_at(ndx)
-                if line.level > level:
-                    continue
-                elif line.level < level:
+                if line.level < level:
                     break
+                elif line.level > level:
+                    continue
                 elif not line.is_comment():
                     lastchild = ndx
 
@@ -619,6 +630,76 @@ class SRMFile:
                 break
 
         return ndx
+
+    def get_copy_at_pstep(self, pstep):
+        """Returns new list of SRMLine elements of the specified branch."""
+
+        index = self.seek_line_index(pstep)
+        newlist = []
+        if index >= 0:
+            srmline = self.get_line_at(index)
+            base_level = srmline.level
+            newline = SRMLine.make_copy(srmline)
+            newline.level -= base_level
+            newlist.append(newline)
+
+            def gen(levlimit, start):
+                """quick-and-dirty srmline generator."""
+                for srmline in self.lines_list[start:]:
+                    if srmline.level > levlimit:
+                        yield srmline
+                    else:
+                        break
+
+            for srmline in gen(base_level, index+1):
+                newline = SRMLine.make_copy(srmline)
+                newline.level -= base_level
+                newlist.append(newline)
+
+        return newlist
+
+    def insert_srmline_list_at(self,
+                               srmline_list,
+                               position=0,
+                               level=None,
+                               contents_only=False):
+        """Copies contents of srmline_list into SRMFile.
+
+        The new lines will be inserted before the SRMLine referenced by
+        the position parameter (or at the end if position < 0).  The level
+        value of the new lines will be increased by the value in the
+        level parameter.
+        """
+
+        if level is None:
+            level = self.level_at_index(position) + 1
+
+        def app(line):
+            """closure function"""
+            self.lines_list.append(line)
+
+        def ins(line):
+            """closure function"""
+            nonlocal position
+            self.lines_list.insert(position, line)
+            position += 1
+
+        if position < 0:
+            adder = app
+        else:
+            adder = ins
+
+        start = 0
+
+        # If we're skipping the head, we need to adjust the starting
+        # index and the promote the level of the contents by one level.
+        if contents_only:
+            start = 1
+            level -= 1
+
+        for line in srmline_list[start:]:
+            line.level += level
+            adder(line)
 
     def append_after_last_child(self, index, linestr):
         """Splicing function to insert a new line at the indicated position.
@@ -776,11 +857,12 @@ class SRMFile:
 
         for ndx in range(index+1, self.get_line_count()):
             line = self.get_unchecked_line_at(ndx)
-            # Ignore comments and sub-children:
+
             if line.is_comment() or line.level > level:
+                # Ignore comments and sub-children:
                 continue
-            # Abandon search upon encountering earlier generation:
             elif line.level < level:
+                # Abandon search upon encountering earlier generation:
                 return -1
             elif line.matches_pstep(pstep):
                 # Confirm predicates, if any, by recursion
@@ -806,6 +888,8 @@ class SRMFile:
         This method is used to test predicate expressions that must only
         check for the existence of the line specified in the expression."""
         return self.seek_line_index(pstep, index) >= 0
+
+    # end of class SRMFile
 
 def set_ansi_message_color(text=None):
     """Prints a line with ansi console code to change foreground color.
@@ -855,6 +939,48 @@ def process_message_cmd(line):
     fname = "msg_cmd_" + command
     get_local_function(fname)()
 
+def tweak_srmline_list(srmline_list, list_args):
+    """Modify the list of srmline according to list_args.
+
+    This function is called by several do_ actions:
+       do_set_line
+       do_copy_as_last_child
+       do_copy_after_sibling
+       do_copy_before_sibling
+
+    For the first element of the srmline_list, <%SET_TAG> and
+    <%SET_VALUE> changes the tag or value, respectively, to
+    the string in the following argument.
+
+    <%CONTENTS_ONLY> only makes sense for the do_copy_ functions,
+    but it does remove the first line of srmline_list, even if it
+    has only a single member, as would be the case for do_set_line.
+
+    <%CONTENTS_ONLY> eliminates the first line, so changes attempted
+    by <%SET_TAG> or <%SET_VALUE> will be lost.
+"""
+
+    setting_value = False
+    setting_tag = False
+    for arg in list_args:
+        if setting_tag:
+            srmline_list[0].tag = arg
+            setting_tag = False
+        elif setting_value:
+            srmline_list[0].value = arg
+            setting_value = False
+        elif arg == "<%SET_TAG>":
+            setting_tag = True
+        elif arg == "<%SET_VALUE>":
+            setting_value = True
+        elif arg == "<%CONTENTS_ONLY>":
+            newlist = srmline_list[1:]
+            for line in newlist:
+                line.level -= 1
+            return newlist
+
+    return srmline_list
+
 
 # The following functions are of the form "do_" plus an action name.
 # They can be called by execute_arglist()
@@ -898,6 +1024,28 @@ def do_append_mode(srmfile, content_list=None):
     if content_list and len(content_list) > 0:
         srmfile.append_mode(content_list[0])
 
+def do_set_line(srmfile, content_list=None):
+    """Modify line with options.
+
+    There are three recognized tags:
+    <%CONTENTS_ONLY>
+       Deletes the first item in the the list, so only the offspring
+       of the branch will be later copied.
+    <%SET_TAG>
+       Changes the tag of the root branch.  Ignored if <%CONTENTS_ONLY> used.
+    <%SET_VALUE>
+       Changes the value of the root branch.  Ignored if <%CONTENTS_ONLY> used.
+    """
+
+    if content_list and len(content_list) > 1:
+        pstep = build_pstep(content_list[0])
+        index = srmfile.seek_line_index(pstep)
+        if index >= 0:
+            srmline = srmfile.get_unchecked_line_at(index)
+            newlist = tweak_srmline_list([srmline], content_list[1:])
+            if len(newlist) > 0:
+                srmline.copy_from(newlist[0])
+
 def do_break_if(srmfile, content_list=None):
     """Action to terminate processing arguments if the SRMPath is found.
 
@@ -911,6 +1059,90 @@ def do_break_if(srmfile, content_list=None):
             if index >= 0:
                 print("Breaking out of 'do_break_it'")
                 raise SRMFileBreak()
+
+def do_copy_as_last_child(srmfile, content_list=None):
+    """Copy a branch as a child after the last child of the target.
+
+    Syntax:
+    copy_as_last_child <target_loction> <branch_to_copy> [options]
+
+    See also \"do_set_line\" for an explanation of the options.
+"""
+
+    if content_list and len(content_list) > 1:
+
+        pstep_left = build_pstep(content_list[0])
+        left_index = srmfile.seek_line_index(pstep_left)
+        left_line = srmfile.get_line_at(left_index)
+
+        target_index = srmfile.get_last_offspring_index(left_index)
+        if target_index <= 0:
+            target_index = left_index + 1
+        else:
+            target_index += 1
+
+        pstep_right = build_pstep(content_list[1])
+
+        copy_of_right = srmfile.get_copy_at_pstep(pstep_right)
+        copy_of_right = tweak_srmline_list(copy_of_right, content_list[2:])
+
+        srmfile.insert_srmline_list_at(copy_of_right,
+                                       target_index,
+                                       left_line.level+1)
+
+def do_copy_after_sibling(srmfile, content_list=None):
+    """Copy a branch as sibling after target location.
+
+    Syntax:
+    copy_after_sibling <target_loction> <branch_to_copy> [options]
+
+    See also \"do_set_line\" for an explanation of the options.
+"""
+
+    if content_list and len(content_list) > 1:
+
+        pstep_left = build_pstep(content_list[0])
+        left_index = srmfile.seek_line_index(pstep_left)
+        left_line = srmfile.get_line_at(left_index)
+
+        target_index = srmfile.get_last_offspring_index(left_index) + 1
+        if target_index <= 0:
+            target_index = left_index + 1
+        else:
+            target_index += 1
+
+        pstep_right = build_pstep(content_list[1])
+
+        copy_of_right = srmfile.get_copy_at_pstep(pstep_right)
+        copy_of_right = tweak_srmline_list(copy_of_right, content_list[2:])
+
+        srmfile.insert_srmline_list_at(copy_of_right,
+                                       target_index,
+                                       left_line.level)
+
+def do_copy_before_sibling(srmfile, content_list=None):
+    """Copy a branch as sibling before target location.
+
+    Syntax:
+    copy_before_sibling <target_loction> <branch_to_copy> [options]
+
+    See also \"do_set_line\" for an explanation of the options.
+"""
+
+    if content_list and len(content_list) > 1:
+
+        pstep_left = build_pstep(content_list[0])
+        left_index = srmfile.seek_line_index(pstep_left)
+
+        left_line = srmfile.get_line_at(left_index)
+        pstep_right = build_pstep(content_list[1])
+
+        copy_of_right = srmfile.get_copy_at_pstep(pstep_right)
+        copy_of_right = tweak_srmline_list(copy_of_right, content_list[2:])
+
+        srmfile.insert_srmline_list_at(copy_of_right,
+                                       left_index,
+                                       left_line.level)
 
 def do_delete(srmfile, content_list=None):
     """Command line action that removes a branch from the SRMFile."""
@@ -1034,8 +1266,6 @@ def do_write_file(srmfile, content_list=None):
     second parameter, the entire contents will be written out.
 
     The <%SKIP_COMMENTS> tag will be respected as with the display action."""
-
-    print("In do_write_file with %d content_list parameters." % len(content_list), file=sys.stderr)
 
     if content_list and len(content_list) > 0:
         filename = content_list[0]
