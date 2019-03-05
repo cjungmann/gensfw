@@ -350,16 +350,19 @@ declare -a CARR_MAKE_FILE=(
        "root/child:first"
        "name : Anne"
        "age : 12"
+       "possessions"
        --
 
     last-child "root/child:second"
        "name : Benjamin"
        "age : 15"
+       "possessions"
        --
 
     last-child "root/child:third"
        "name : Cassandra"
        "age : 16"
+       "possessions"
        --
 )
 
@@ -373,17 +376,6 @@ declare -a CARR_ADD_ITEM=(
        "color : none"
        --
 )
-
-create_child()
-{
-    local name="$1"
-    local age="$2"
-
-    last-child
-       "root"
-       
-
-    }
 
 bestow_gift()
 {
@@ -511,6 +503,68 @@ add_before_test()
     ./gensfw_srm "<%NEWFILE>" "${args[@]}"
 }
 
+add_last_child_test()
+{
+    local -a make_file=(
+        "${CARR_MAKE_FILE[@]}" 
+        "${CARR_ADD_ITEM[@]}"
+    )
+
+    local -a cass_box=( $( bestow_gift "Cassandra" "box" "blue" "1kg" ) )
+
+    local -a args=(
+        message
+           "Conducting a test of last-child and copy-as_last-child"
+           --
+
+        "${make_file[@]}"
+        "${cass_box[@]}"
+
+        display
+           --
+
+        message
+           "^_starting, notice only Cassandra has a possession."
+           " "
+           --
+
+        last-child
+           "root"
+           "newnode : LAST-CHILD for root"
+           --
+
+        last-child
+           "root/child[name:Benjamin]"
+           "newnode : LAST-CHILD attribute for Benjamin"
+           --
+
+        display
+           --
+
+        message
+           "^_After using last-child to add lines."
+           " "
+           --
+
+        copy-as-last-child
+           "root/child[name:Benjamin]/possessions"
+           "root/child[name:Cassandra]/possessions/gift"
+           "<%SET_TAG>"
+           "BRIBE"
+           --
+
+        display --
+
+        message
+           "^ After copy-as-last-child, giving Benjamin what"
+           "  Cassandra has to make him stop complaining."
+           --
+        )
+
+    # pdb \
+    ./gensfw_srm "<%NEWFILE>" "${args[@]}"
+}
+
 add_after_test()
 {
     local -a make_file=(
@@ -577,7 +631,8 @@ add_after_test()
 }
 
 
-add_before_test
+# add_before_test
+add_last_child_test
 # add_after_test
 
 # test_actions
