@@ -342,7 +342,10 @@ class SRMLine:
         A content line is a non-comment line that has at least a tag value."""
         return not (self.is_comment() or self.is_empty())
 
-    def display(self, colon_align=None, outfile=sys.stdout):
+    def display(self,
+                colon_align=None,
+                outfile=sys.stdout,
+                level_offset=0):
         """Prints the line according to its contents.
 
         :param colon_align: Setting this optional parameter
@@ -351,13 +354,17 @@ class SRMLine:
         :param output: A file opened for writing, to which the
            output will be sent.  If this parameter is omitted,
            the output will be sent to stdout.
+        :param level_offset: The indentation level will be
+           decreased by this number when printing sub-branches.
 
         This method prints 3 spaces per level, then the
         tag.  If the line includes a value, a comma and the
         value string will be printed following the tag."""
 
-        if self.level:
-            print("   " * self.level, end="", file=outfile)
+        lev = self.level - level_offset
+        if lev > 0:
+            print("   " * lev, end="", file=outfile)
+
         if self.tag:
             print(self.tag, end="", file=outfile)
             if self.value:
@@ -366,6 +373,7 @@ class SRMLine:
                     print(colon_spaces, end="", file=outfile)
 
                 print(" : %s" % self.value, end="", file=outfile)
+
         print(file=outfile)
 
     def tag_len(self):
@@ -606,9 +614,11 @@ class SRMFile:
                 line = self.get_unchecked_line_at(ndx)
                 if line.level < level:
                     break
-                elif line.level > level:
+                elif (line.level > level
+                      or line.is_comment()
+                      or line.is_empty()):
                     continue
-                elif not line.is_comment():
+                else: # line.level == level
                     lastchild = ndx
 
         return lastchild
@@ -638,7 +648,7 @@ class SRMFile:
 
         # Back-off any space or comment lines:
         while ndx > index:
-            if self.is_empty_at_index(ndx-1):
+            if self.is_empty_at_index(ndx):
                 ndx -= 1
             else:
                 break
@@ -820,8 +830,12 @@ class SRMFile:
            opened for writing, and the output will be written to this
            file stream."""
 
+        loffset = 0
+
         i = starts_at
         if starts_at > 0:
+            loffset = self.level_at_index(starts_at)
+
             # Use line following last offspring as non-inclusive limit
             limit = self.get_last_offspring_index(starts_at)
             if limit == -1:
@@ -843,7 +857,9 @@ class SRMFile:
                 group_max_tag_len = 0
 
             if not skip_comments or not line.is_comment():
-                line.display(group_max_tag_len, outfile)
+                line.display(group_max_tag_len,
+                             outfile,
+                             level_offset=loffset)
 
             last_line_level = line.level
             i += 1
@@ -1182,7 +1198,7 @@ def do_display(srmfile, content_list=None):
        - <%SINGLE_LINE> to display the line without its children.
     """
 
-    srmline_index = None
+    srmline_index = 0
     skipping_comments = False
     single_line = False
 
@@ -1196,12 +1212,11 @@ def do_display(srmfile, content_list=None):
                 pstep = build_pstep(arg)
                 srmline_index = srmfile.seek_line_index(pstep)
 
-        if srmline_index is not None:
-            if single_line:
-                srmline = srmfile.get_unchecked_line_at(srmline_index)
-                print(srmline)
-            else:
-                srmfile.display(srmline_index, skipping_comments)
+    if single_line:
+        srmline = srmfile.get_unchecked_line_at(srmline_index)
+        print(srmline)
+    else:
+        srmfile.display(srmline_index, skipping_comments)
 
 # pylint: disable=unused-argument
 def do_label(srmfile, content_list=None):
