@@ -889,7 +889,6 @@ class SRMFile:
             line = self.get_unchecked_line_at(ndx)
 
             if line.is_comment() or line.is_empty() or line.level > level:
-                # Ignore comments and sub-children:
                 continue
             elif line.level < level:
                 # Abandon search upon encountering earlier generation:
@@ -910,8 +909,11 @@ class SRMFile:
                 if pred_failed:
                     continue
                 elif pstep.next_step is not None:
-                    # Recurse for following steps
-                    return self.seek_line_index(pstep.next_step, ndx)
+                    index = self.seek_line_index(pstep.next_step, ndx)
+                    if index >= 0:
+                        return index
+                    else:
+                        continue
                 else:
                     return ndx
 
