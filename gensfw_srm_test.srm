@@ -68,35 +68,6 @@ household
          painting
          drawing
          french
-   # # Shortened household to readability, but left the
-   # # extra persons in case having more is useful.
-   # person
-   #    name   : Harriet
-   #    lname  : Doe-Doh
-   #    dob    : 1995-07-04
-   #    gender : female
-   #    interests
-   #       figure skating
-   #       anime
-   #       graphic novels
-   # person
-   #    name   : Hilda
-   #    lname  : Doe-Doh
-   #    dob    : 2000-10-31
-   #    gender : female
-   #    interests
-   #       soccer
-   #       basketball
-   #       lacrosse
-   # person
-   #    name   : Roger
-   #    lname  : Doe-Doh
-   #    dob    : 2005-12-25
-   #    gender : male
-   #    interests
-   #       computers
-   #       gaming
-   #       skiing
 
 test_branch
    branch

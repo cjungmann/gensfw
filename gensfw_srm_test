@@ -630,10 +630,102 @@ add_after_test()
     ./gensfw_srm "<%NEWFILE>" "${args[@]}"
 }
 
+test_wildcard_path()
+{
+    local -a cmd=(
+        "${CARR_MAKE_FILE[@]}" 
+        "${CARR_ADD_ITEM[@]}"
+
+        skip found "root/*/name:Benjamin" --
+
+        message "Didn't find Benjamin" --
+        skip end --
+
+        label found --
+        message "Found Benjamin" --
+
+        label end
+    )
+
+    # pdb3 \
+    ./gensfw_srm "<%NEWFILE>" "${cmd[@]}"
+
+}
+
+test_negative_predicate()
+{
+    local -a cmd=(
+        skip found_charles "household/person[name:Charles]" --
+
+        message "Failed to find Charles" --
+
+        skip test2 --
+
+        label found_charles --
+        message "Found Charles:" --
+        display "<%SINGLE_LINE>" "household/person[name:Charles]/name" --
+
+        label test2 --
+
+        skip found_not_charles "household/person[!name:Charles]" --
+
+        message "Failed to find not Charles" --
+        skip end --
+
+        label found_not_charles --
+
+        message "Found first not Charles, whose name attribute is:" --
+        display
+           "<%SINGLE_LINE>"
+           "household/person[!name:Charles]/name"
+           --
+
+        message " " --
+
+        last-child "household/person[!name:Charles]" "BOGUS:bogus" --
+        display
+           "household/person[!name:Charles]"
+           --
+        message "^ updated non-Charles person with added new line." --
+
+
+        label end --
+    )
+
+    ./gensfw_srm gensfw_srm_test.srm "${cmd[@]}"
+}
+
+test_loop_until()
+{
+    local -a cmd=(
+        label start --
+
+        display "<%SINGLE_LINE>" "*/result[!tagged]" --
+
+        last-child "*/result[!tagged]" "tagged : true" --
+
+        skip start "*/result[!tagged]" --
+
+        pause
+           " "
+           "Tags applied. The result follows:"
+           --
+
+        # display --
+    )
+
+    # pdb3 \
+    ./gensfw_srm gensfw_srm_test.srm "${cmd[@]}"
+}
+
 
 # add_before_test
-add_last_child_test
+# add_last_child_test
 # add_after_test
+
+# test_wildcard_path
+# test_negative_predicate
+test_loop_until
 
 # test_actions
 # test_skip_set
