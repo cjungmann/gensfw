@@ -380,14 +380,28 @@ class SRMLine:
             return 0
 
     def matches_pstep(self, pstep):
-        """Returns equivalence value of a node test comparison
-        between this line and a given PStep object.
+        """Returns True if the line matches the pstep specs.
 
-        Comments cannot be matched and always return False."""
-        if self.is_comment():
+        Comments cannot be matched and always return False.
+
+        IMPORTANT NOTE:
+        The existence of a '!' prefix will be ignored.  If found,
+        the comparison will be with the tag with the '!' prefix
+        removed.
+
+        The '!' prefix will be considered when processing a
+        predicate expression, where the '!' will toggle the
+        boolean value.
+        """
+
+        if self.is_comment() or pstep.tag is None:
             return False
 
-        if pstep.tag and pstep.tag == self.tag:
+        tag = pstep.tag
+        if tag[0] == '!':
+            tag = tag[1:]
+
+        if tag == self.tag or tag == "*":
             return pstep.value is None or pstep.value == self.value
         else:
             return False
@@ -858,7 +872,7 @@ class SRMFile:
         for ndx in range(index+1, self.get_line_count()):
             line = self.get_unchecked_line_at(ndx)
 
-            if line.is_comment() or line.level > level:
+            if line.is_comment() or line.is_empty() or line.level > level:
                 # Ignore comments and sub-children:
                 continue
             elif line.level < level:
@@ -868,7 +882,11 @@ class SRMFile:
                 # Confirm predicates, if any, by recursion
                 pred_failed = False
                 for predicate in pstep.predicates:
-                    pred_failed = not self.confirm_line_index(predicate, ndx)
+                    if predicate.tag[0] == '!':
+                        pred_failed = self.confirm_line_index(predicate, ndx)
+                    else:
+                        pred_failed = not self.confirm_line_index(predicate, ndx)
+
                     if pred_failed:
                         break
 
@@ -1154,27 +1172,36 @@ def do_delete(srmfile, content_list=None):
                 srmfile.delete_branch(index)
 
 def do_display(srmfile, content_list=None):
-    """Command Line action that will display the implied SRMFile
-    tree ath the branch indicated by the srm path string.
+    """Shows line or branch at indicate SRMPath.
 
     Use this action to isolate output to illustrate or confirm
     changes.
 
-    Use token <%SKIP_COMMENTS> to omit comment lines from display."""
-    srmline = 0
-    array_index = 0
+    There are two flag tokens for this action:
+       - <%SKIP_COMMENTS> to omit comment lines from display.
+       - <%SINGLE_LINE> to display the line without its children.
+    """
+
+    srmline_index = None
     skipping_comments = False
+    single_line = False
 
     if content_list and len(content_list) > 0:
-        if content_list[0] == "<%SKIP_COMMENTS>":
-            skipping_comments = True
-            array_index = 1
+        for arg in content_list:
+            if arg == "<%SKIP_COMMENTS>":
+                skipping_comments = True
+            elif arg == "<%SINGLE_LINE>":
+                single_line = True
+            else:
+                pstep = build_pstep(arg)
+                srmline_index = srmfile.seek_line_index(pstep)
 
-        if len(content_list) > array_index:
-            pstep = build_pstep(content_list[array_index])
-            srmline = srmfile.seek_line_index(pstep)
-
-    srmfile.display(srmline, skipping_comments)
+        if srmline_index is not None:
+            if single_line:
+                srmline = srmfile.get_unchecked_line_at(srmline_index)
+                print(srmline)
+            else:
+                srmfile.display(srmline_index, skipping_comments)
 
 # pylint: disable=unused-argument
 def do_label(srmfile, content_list=None):
@@ -1209,6 +1236,23 @@ def do_skip(srmfile, content_list=None):
             else:
                 raise SRMSkipToTarget(index)
 # pylint: enable=unused-argument
+
+def do_skip_if_not(srmfile, content_list=None):
+    """Skip to a target label if the SRMPath is False.
+
+    Syntax: skip-if-not <target-if-path-doesn't-exist> <path>
+
+    Unlike 'skip', 'skip_if_not' requires two parameters:
+    1. The target label
+    2. The SRMPath that should not exist
+    """
+    if content_list and len(content_list) > 1:
+        pstep = build_pstep(content_list[1])
+        if not srmfile.confirm_line_index(pstep):
+            target = content_list[0]
+            index = find_named_label_action(target)
+            if index >= 0:
+                raise SRMSkipToTarget(index)
 
 # pylint: disable=unused-argument
 def do_pause(srmfile, content_list=None):
