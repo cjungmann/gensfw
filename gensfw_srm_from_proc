@@ -97,26 +97,33 @@ def get_procedure_params(dbname, procname):
 
     return run_mysql_query(query)
 
-def process_procedure(dbname, procname, modename):
+def process_procedure(dbname, procname, modename, info_only=False):
     """Print the SRM output for the given database and procedure."""
 
     params = get_procedure_params(dbname, procname)
-    if len(params) > 0:
-        print(modename)
-        print("   type : form-new")
-        print("   schema-proc : %s" % procname)
-        print("   form-action : ?%s_submit" % modename)
-        print("   schema")
-        for param in params:
-            rowspecs = param.split('\t')
-            print("      field : %s" % rowspecs[0])
+    submit_name = None
 
-        print()
-        print("%s_submit" % modename)
+    if len(params) > 0:
+        if info_only:
+            submit_name = "info"
+        else:
+            submit_name = "submit"
+            print(modename)
+            print("   type : form-new")
+            print("   schema-proc : %s" % procname)
+            print("   form-action : ?%s_submit" % modename)
+            print("   schema")
+            for param in params:
+                rowspecs = param.split('\t')
+                print("      field : %s" % rowspecs[0])
+            print()
+
+        print("%s_%s" % (modename, submit_name))
         print("   type : form-submit")
         print("   procedure : %s" % procname)
         print("   result")
         print("      type : update")
+        print()
 
 def main():
     """Main program function."""
@@ -126,12 +133,14 @@ def main():
     dbname = None
     procname = None
     modename = "mode"
+    info_only = False
 
     if len(sys.argv) > 1:
         dbname = sys.argv[1]
         if not confirm_database(dbname):
             print("The MySQL server does not recognize database '%s'" %
-                  dbname, file=sys.stderr)
+                  dbname,
+                  file=sys.stderr)
             return 1
 
     if len(sys.argv) > 2:
@@ -140,12 +149,17 @@ def main():
     if len(sys.argv) > 3:
         modename = sys.argv[3]
 
+    if len(sys.argv) > 4 and sys.argv[4] == "info":
+        info_only = True
+
     if procname:
         if confirm_procedure(dbname, procname):
-            process_procedure(dbname, procname, modename)
+            process_procedure(dbname, procname, modename, info_only)
             return 0
         else:
-            print("The procedure, '%s', is not found in database '%s'.")
+            print("The procedure, '%s', is not found in database '%s'."
+                  % (procname, dbname),
+                  file=sys.stderr)
 
     print_list_of_procedures(dbname)
     return 1
