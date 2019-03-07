@@ -56,7 +56,7 @@ declare -a TEST_MESSAGE=()
 declare -a TEST_PAUSE=()
 declare -a TEST_LABEL=()
 declare -a TEST_WRITE_FILE=()
-declare -a TEST_SKIP=()
+declare -a TEST_GOTO=()
 
 # The following are redefinitions of the test cases set above.
 # Comment-out tests that should still be run, leave the redefinitions
@@ -69,41 +69,41 @@ declare -a TEST_SKIP=()
 # TEST_DELETE=()
 # TEST_APPEND_MODE=()
 
-# Action test for SKIP requires many steps to confirm proper
+# Action test for GOTO requires many steps to confirm proper
 # operation.  It is pulled from the regular action tests and
 # done its own way.
-declare -a TEST_SKIP_SET=(
+declare -a TEST_GOTO_SET=(
 
-    # Add progress-tracking mode for "skip" action testing
-    after-sibling "test_branch" "skip_test" --
-    last-child "skip_test" "progress"       --
+    # Add progress-tracking mode for "goto" action testing
+    after-sibling "test_branch" "goto_test" --
+    last-child "goto_test" "progress"       --
 
     # Jump to start of execution
-    pause "About to jump to the start of the TEST_SKIP_SET test." --
-    skip begin                          --
+    pause "About to jump to the start of the TEST_GOTO_SET test." --
+    goto begin                          --
 
     # Each label will only be executed once
     label first                                     --
-       skip second "skip_test/progress/did_first"   --
-       last-child "skip_test/progress" "did_first"  --
+       goto second "goto_test/progress/did_first"   --
+       last-child "goto_test/progress" "did_first"  --
        message "Just done with first"               --
-       skip begin                                   --
+       goto begin                                   --
 
     label second                                    --
-       skip third "skip_test/progress/did_second"   --
-       last-child "skip_test/progress" "did_second" --
+       goto third "goto_test/progress/did_second"   --
+       last-child "goto_test/progress" "did_second" --
        message "Just done with second"              --
-       skip begin                                   --
+       goto begin                                   --
 
     label third                                     --
-       skip complete "skip_test/progress/did_third" --
-       last-child "skip_test/progress" "did_third"  --
+       goto complete "goto_test/progress/did_third" --
+       last-child "goto_test/progress" "did_third"  --
        message "Just done with third"               --
-       skip begin                                   --
+       goto begin                                   --
 
     label begin --
        # Jump out if completed all steps:
-       skip complete "skip_test/progress[did_first][did_second][did_third]" --
+       goto complete "goto_test/progress[did_first][did_second][did_third]" --
        # Otherwise, show message
        message "BEGINNING" --
        pause
@@ -113,27 +113,27 @@ declare -a TEST_SKIP_SET=(
        "be second, first, third."
        --
 
-       skip first "skip_test/progress/did_second" --
-       skip second --
+       goto first "goto_test/progress/did_second" --
+       goto second --
 
     label complete --
-    display skip_test --
+    display goto_test --
     pause "All the steps should have been completed to get here." --
 
-    pause "Completed the SKIP test."
+    pause "Completed the GOTO test."
 )
 
 
-declare -a SHORT_TEST_SKIP_SET=(
-    message "<%CLRSCR>" "(SHORT_TEST_SKIP_SET)" --
+declare -a SHORT_TEST_GOTO_SET=(
+    message "<%CLRSCR>" "(SHORT_TEST_GOTO_SET)" --
 
-    # Add progress-tracking mode for "skip" action testing
-    after-sibling "test_branch" "skip_test"                         --
-    last-child "skip_test" "progress"                               --
+    # Add progress-tracking mode for "goto" action testing
+    after-sibling "test_branch" "goto_test"                         --
+    last-child "goto_test" "progress"                               --
 
-    message "You should just ahead to see the last message." --
+    message "You should jump ahead to see the last message." --
 
-    skip last "skip_test/progress" --
+    goto last "goto_test/progress" --
 
     message "You shouldn't see this message" --
 
@@ -322,9 +322,9 @@ test_actions()
     done
 }
 
-test_skip_set()
+test_goto_set()
 {
-    ./gensfw_srm gensfw_srm_test.srm "${TEST_SKIP_SET[@]}"
+    ./gensfw_srm gensfw_srm_test.srm "${TEST_GOTO_SET[@]}"
 }
 
 
@@ -389,7 +389,7 @@ bestow_gift()
     local gift_path="$person_path/possessions/gift:$gift"
 
     local -a ARR=(
-       skip
+       goto
           Has_Possessions
           "${person_path}/possessions"
           --
@@ -403,7 +403,7 @@ bestow_gift()
           Has_Possessions
           --
 
-       skip
+       goto
           Has_Gift
           "${person_path}/possessions/gift:${gift}" --
 
@@ -636,10 +636,10 @@ test_wildcard_path()
         "${CARR_MAKE_FILE[@]}" 
         "${CARR_ADD_ITEM[@]}"
 
-        skip found "root/*/name:Benjamin" --
+        goto found "root/*/name:Benjamin" --
 
         message "Didn't find Benjamin" --
-        skip end --
+        goto end --
 
         label found --
         message "Found Benjamin" --
@@ -655,11 +655,11 @@ test_wildcard_path()
 test_negative_predicate()
 {
     local -a cmd=(
-        skip found_charles "household/person[name:Charles]" --
+        goto found_charles "household/person[name:Charles]" --
 
         message "Failed to find Charles" --
 
-        skip test2 --
+        goto test2 --
 
         label found_charles --
         message "Found Charles:" --
@@ -667,10 +667,10 @@ test_negative_predicate()
 
         label test2 --
 
-        skip found_not_charles "household/person[!name:Charles]" --
+        goto found_not_charles "household/person[!name:Charles]" --
 
         message "Failed to find not Charles" --
-        skip end --
+        goto end --
 
         label found_not_charles --
 
@@ -704,7 +704,7 @@ test_loop_until()
 
         last-child "*/result[!tagged]" "tagged : true" --
 
-        skip start "*/result[!tagged]" --
+        goto start "*/result[!tagged]" --
 
         pause
            " "
@@ -728,5 +728,5 @@ test_loop_until()
 test_loop_until
 
 # test_actions
-# test_skip_set
+# test_goto_set
 # test_complicated_path
