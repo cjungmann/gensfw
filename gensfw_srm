@@ -39,8 +39,8 @@ class SRMUnknownAction(Exception):
     def __init__(self, message=None):
         super().__init__(message)
 
-class SRMSkipToTarget(Exception):
-    """Raised by "skip" action, if SRMPath confirmed, to name target label."""
+class SRMGotoTarget(Exception):
+    """Raised by "goto" action, if SRMPath confirmed, to name target label."""
     def __init__(self, message=None):
         super().__init__(message)
 
@@ -64,8 +64,8 @@ def parse_srm_line(linestr):
 def find_named_label_action(name):
     """Returns the sys.argv index of a label action, or -1 if not found.
 
-    This function is used in a "skip" action to locate the index of the
-    label referenced by the "skip" action."""
+    This function is used in a "goto" action to locate the index of the
+    label referenced by the "goto" action."""
 
     index = 2
     limit = len(sys.argv)
@@ -715,7 +715,7 @@ class SRMFile:
 
         start = 0
 
-        # If we're skipping the head, we need to adjust the starting
+        # If we're GOing TO the head, we need to adjust the starting
         # index and the promote the level of the contents by one level.
         if contents_only:
             start = 1
@@ -1222,21 +1222,21 @@ def do_display(srmfile, content_list=None):
 
 # pylint: disable=unused-argument
 def do_label(srmfile, content_list=None):
-    """A do-nothing action that is used as a target for the skip
+    """A do-nothing action that is used as a target for the 'goto'
     action."""
     pass
 # pylint: enable=unused-argument
 
 # pylint: disable=unused-argument
-def do_skip(srmfile, content_list=None):
-    """Skip to a target label if the SRMPath is True.
+def do_goto(srmfile, content_list=None):
+    """Goto to a target label if the SRMPath is True.
 
     The first parameter is the name of a "label" action
     to which execution will be shifted.
 
     The second, optional parameter, is an SRMPath expression
     that will be evaluated.  The absence of this parameter
-    means the skip will be unconditional.
+    means the goto will be unconditional.
 
     An exception will be raised to signal the move if:
     1. The target label can be located, and
@@ -1249,17 +1249,17 @@ def do_skip(srmfile, content_list=None):
             if len(content_list) > 1:
                 pstep = build_pstep(content_list[1])
                 if srmfile.confirm_line_index(pstep):
-                    raise SRMSkipToTarget(index)
+                    raise SRMGotoTarget(index)
             else:
-                raise SRMSkipToTarget(index)
+                raise SRMGotoTarget(index)
 # pylint: enable=unused-argument
 
-def do_skip_if_not(srmfile, content_list=None):
-    """Skip to a target label if the SRMPath is False.
+def do_goto_if_not(srmfile, content_list=None):
+    """Goto a target label if the SRMPath is False.
 
-    Syntax: skip-if-not <target-if-path-doesn't-exist> <path>
+    Syntax: goto-if-not <target-if-path-doesn't-exist> <path>
 
-    Unlike 'skip', 'skip_if_not' requires two parameters:
+    Unlike 'goto', 'goto_if_not' requires two parameters:
     1. The target label
     2. The SRMPath that should not exist
     """
@@ -1269,7 +1269,7 @@ def do_skip_if_not(srmfile, content_list=None):
             target = content_list[0]
             index = find_named_label_action(target)
             if index >= 0:
-                raise SRMSkipToTarget(index)
+                raise SRMGotoTarget(index)
 
 # pylint: disable=unused-argument
 def do_pause(srmfile, content_list=None):
@@ -1412,10 +1412,10 @@ def process_args(srmfile):
 
     arglist = []   # Buffer for passing to actions a subset of arguments
     startarg = 2   # Parameter index at which to start processing
-                   # This may be reset with a "skip" action to restart
+                   # This may be reset with a "goto" action to restart
                    # the loop.
 
-    # skip argv[1], which was an SRM filepath
+    # Skip argv[1], which is required to be an SRM filepath.
     while True:
         try:
             for arg in sys.argv[startarg:]:
@@ -1428,7 +1428,7 @@ def process_args(srmfile):
             if len(arglist):
                 execute_arglist(srmfile, arglist)
 
-        except SRMSkipToTarget as exception:
+        except SRMGotoTarget as exception:
             startarg = int(exception.__str__())
             arglist = []
             continue
