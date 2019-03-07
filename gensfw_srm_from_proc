@@ -6,7 +6,7 @@ import subprocess
 
 def show_usage():
     """Notify user of proper syntax for calling this command."""
-    print("gensfw_srm_from_proc <database name> <table name>")
+    print("gensfw_srm_from_proc <database name> <procedure name> [mode name]")
 
 def run_mysql_query(query_list, dbname="information_schema"):
     """Returns a list of result lines from the query."""
@@ -103,12 +103,20 @@ def process_procedure(dbname, procname, modename):
     params = get_procedure_params(dbname, procname)
     if len(params) > 0:
         print(modename)
-        print("   schema-proc : procname")
-        print("   type : form-edit")
+        print("   type : form-new")
+        print("   schema-proc : %s" % procname)
+        print("   form-action : ?%s_submit" % modename)
         print("   schema")
         for param in params:
             rowspecs = param.split('\t')
             print("      field : %s" % rowspecs[0])
+
+        print()
+        print("%s_submit" % modename)
+        print("   type : form-submit")
+        print("   procedure : %s" % procname)
+        print("   result")
+        print("      type : update")
 
 def main():
     """Main program function."""
