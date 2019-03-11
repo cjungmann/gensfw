@@ -333,6 +333,10 @@ class SRMLine:
         """Returns True if the line is a comment, False otherwise."""
         return self.tag and len(self.tag) > 0 and self.tag[0] == "#"
 
+    def has_value(self):
+        """Returns True if value property is not None."""
+        return self.value is not None
+
     def is_empty(self):
         """Returns True for an empty line, False otherwise."""
         return self.tag is None
@@ -919,11 +923,66 @@ class SRMFile:
 
         return -1
 
+    def get_matching_lines(self, pstep, index=-1):
+        """Returns list of lines matching the pstep argument."""
+
+        return_list = []
+
+        if index == -1:
+            level = 0
+        elif self.in_range(index):
+            level = self.get_unchecked_line_at(index).level + 1
+        else:
+            raise SRMFileRangeError("seek_line_index out of range.")
+
+        for ndx in range(index+1, self.get_line_count()):
+            line = self.get_unchecked_line_at(ndx)
+
+            if line.is_comment() or line.is_empty() or line.level > level:
+                continue
+            elif line.level < level:
+                # Abandon search upon encountering earlier generation:
+                break
+            elif line.matches_pstep(pstep):
+                # Confirm predicates, if any, by recursion
+                pred_failed = False
+                for predicate in pstep.predicates:
+                    if predicate.tag[0] == '!':
+                        pred_failed = self.confirm_line_index(predicate, ndx)
+                    else:
+                        pred_failed = not self.confirm_line_index(predicate, ndx)
+
+                    if pred_failed:
+                        break
+
+                # Try next sibling
+                if pred_failed:
+                    continue
+                elif pstep.next_step is None:
+                    return_list.append(ndx)
+                else:
+                    sub_list = self.get_matching_lines(pstep.next_step, ndx)
+                    if len(sub_list) > 0:
+                        return_list.extend(sub_list)
+                        continue
+
+        return return_list
+
     def confirm_line_index(self, pstep, index=-1):
         """Shortcut function to confirm the existence of a matching line.
         This method is used to test predicate expressions that must only
         check for the existence of the line specified in the expression."""
         return self.seek_line_index(pstep, index) >= 0
+
+    def seek_line_at_path(self, srmpath):
+        """Shortcut function to return line at path, or None."""
+
+        pstep = build_pstep(srmpath)
+        index = self.seek_line_index(pstep)
+        if index:
+            return self.get_unchecked_line_at(index)
+        else:
+            return None
 
     # end of class SRMFile
 
@@ -960,20 +1019,96 @@ def get_local_function(name):
     else:
         return missing_local_function
 
-def msg_cmd_clrscr():
+# pylint: disable=unused-argument
+def msg_cmd_clrscr(srmfile, data):
     """Clear screen."""
     print("[2J[1;1H", end="")
+# pylint: enable=unused-argument
 
-def process_message_cmd(line):
+def msg_cmd_show(srmfile, data):
+    """Write out indicated lines, whole or in part.
+
+    The message syntax is:
+    <%show:SRMPath   to be determined."""
+
+    specs = data.split('|')
+    output = []
+    for spec in specs:
+        parts = spec.split('^', 1)
+        path = parts[0]
+        flag = None if len(path) == 1 else path[1]
+
+        srmline = srmfile.seek_line_at_path(path)
+        if srmline:
+            if flag == 't':
+                output.append(srmline.tag)
+            elif flag == 'v':
+                output.append(srmline.value)
+            elif not srmline.is_empty():
+                value = "" if not srmline.has_value() else ":"+srmline.value
+                output.append("%s%s" % (srmline.tag, value))
+
+    if len(output) > 0:
+        print("|".join(output))
+    else:
+        print("N/A")
+
+# pylint: disable=unused-argument
+def msg_cmd_color(srmfile, data):
+    """Set ANSI color value for subsequent output.
+
+    syntax:
+    <%color:COLOR>
+    where COLOR can be one of the following:
+       red
+       green
+       brown
+       blue
+       magenta
+       cyan
+       white
+       reset   (return to default color)
+
+    If you use colors, make sure you use <%color:reset> if you've
+    previously set another color.
+"""
+
+    val = None
+    if data == "red":
+        val = 31
+    elif data == "green":
+        val = 32
+    elif data == "brown":
+        val = 33
+    elif data == "blue":
+        val = 34
+    elif data == "magenta":
+        val = 35
+    elif data == "cyan":
+        val = 36
+    elif data == "white":
+        val = 37
+    elif data == "reset":
+        val = 0
+
+    if val is not None:
+        print("[1;%dm" % val, end="")
+
+# pylint: enable=unused-argument
+
+def process_message_cmd(srmfile, line):
     """Executes embedded commands in a message action.
 
     The syntax is '<%xxx>' where the command is introduced by
     '<%' and terminated by '>'.  The command must be the only
     content of the parameter in the message action."""
 
-    command = line[2:-1].lower()
+    content = line[2:-1]
+    parts = content.split(":", 1)
+    command = parts[0].lower()
+    data = None if len(parts) == 1 else parts[1]
     fname = "msg_cmd_" + command
-    get_local_function(fname)()
+    get_local_function(fname)(srmfile, data)
 
 def tweak_srmline_list(srmline_list, list_args):
     """Modify the list of srmline according to list_args.
@@ -1220,6 +1355,15 @@ def do_display(srmfile, content_list=None):
     else:
         srmfile.display(srmline_index, skipping_comments)
 
+def do_list_matches(srmfile, content_list=None):
+    """Returns newline-separated list of lines matching path."""
+
+    if content_list and len(content_list) > 0:
+        pstep = build_pstep(content_list[0])
+        list_matches = srmfile.get_matching_lines(pstep)
+        for line in list_matches:
+            print(line)
+
 # pylint: disable=unused-argument
 def do_label(srmfile, content_list=None):
     """A do-nothing action that is used as a target for the 'goto'
@@ -1227,7 +1371,6 @@ def do_label(srmfile, content_list=None):
     pass
 # pylint: enable=unused-argument
 
-# pylint: disable=unused-argument
 def do_goto(srmfile, content_list=None):
     """Goto to a target label if the SRMPath is True.
 
@@ -1252,7 +1395,6 @@ def do_goto(srmfile, content_list=None):
                     raise SRMGotoTarget(index)
             else:
                 raise SRMGotoTarget(index)
-# pylint: enable=unused-argument
 
 def do_goto_if_not(srmfile, content_list=None):
     """Goto a target label if the SRMPath is False.
@@ -1271,20 +1413,6 @@ def do_goto_if_not(srmfile, content_list=None):
             if index >= 0:
                 raise SRMGotoTarget(index)
 
-# pylint: disable=unused-argument
-def do_pause(srmfile, content_list=None):
-    """Pause, with optional message, until the user presses ENTER."""
-    set_ansi_message_color()
-
-    if content_list and len(content_list) > 0:
-        for msg in content_list:
-            print(msg)
-
-    input("Press ENTER to continue.")
-    set_ansi_default_color()
-# pylint: enable=unused-argument
-
-# pylint: disable=unused-argument
 def do_message(srmfile, content_list=None):
     """Display a message in output.  Used for demonstration purposes.
 
@@ -1295,16 +1423,37 @@ def do_message(srmfile, content_list=None):
     Optional message commands can be included in the message parameters.
     View the allowed message commands with gensfw_srm --show_message_cmds."""
     if content_list and len(content_list) > 0:
-        set_ansi_message_color()
-
         for line in content_list:
             if line.startswith("<%") and line.endswith(">"):
-                process_message_cmd(line)
+                process_message_cmd(srmfile, line)
             else:
                 print(line)
 
-        set_ansi_default_color()
-# pylint: enable=unused-argument
+def do_hilite_message(srmfile, content_list=None):
+    """Like 'message', but in a highlighted color."""
+
+    set_ansi_message_color()
+    do_message(srmfile, content_list)
+    set_ansi_default_color()
+
+def do_pause(srmfile, content_list=None):
+    """Pause, with optional message, until the user presses ENTER."""
+
+    if content_list and len(content_list) > 0:
+        do_message(srmfile, content_list)
+
+    input("Press ENTER to continue.")
+
+def do_hilite_pause(srmfile, content_list=None):
+    """Like 'pause' but in a highlighted color."""
+
+    set_ansi_message_color()
+
+    if content_list and len(content_list) > 0:
+        do_message(srmfile, content_list)
+
+    input("Press ENTER to continue.")
+    set_ansi_default_color()
 
 # pylint: disable=unused-argument
 def do_dump_path(srmfile, content_list=None):
@@ -1371,7 +1520,8 @@ Usage:
     gensfw_srm --help
     gensfw_srm --show_actions
     gensfw_srm --show_action_docs
-    gensfw_srm --show_message_cmds
+    gensfw_srm --show_command_msgs
+    gensfw_srm --show_command_msg_docs
 
     The first parameter is either the path to an SRM file, or the
     token "<%NEWFILE>".
@@ -1386,8 +1536,8 @@ Options:
     --help, -h              This page
     --show_actions          Display the list of available actions.
     --show_action_docs      Display list of actions with explanations.
-    --show_message_cmds     Display list of actions with explanations.
-    --show_message_cmd_docs Display list of actions with explanations.
+    --show_command_msgs     Display list of actions with explanations.
+    --show_command_msg_docs Display list of actions with explanations.
 """
     print(msg)
 
