@@ -75,6 +75,18 @@ def print_list_of_procedures(dbase_name):
     for pname in rlist:
         print(pname)
 
+def get_procedure_comment(dbname, procname):
+    """Returns the contents of the procedures comment attribute."""
+    
+    query = [
+        "SELECT ROUTINE_COMMENT",
+        "  FROM ROUTINES",
+        " WHERE ROUTINE_SCHEMA='%s'" % dbname,
+        "   AND ROUTINE_NAME='%s'" % procname
+        ]
+
+    return run_mysql_query(query)
+
 def get_procedure_params(dbname, procname):
     """Checks the COLUMNS table to get procedure parameters info."""
 
@@ -101,10 +113,12 @@ def process_procedure(dbname, procname, modename, view_only=False):
     """Print the SRM output for the given database and procedure."""
 
     params = get_procedure_params(dbname, procname)
+    comment = get_procedure_comment(dbname, procname)
     submit_name = None
     submit_mode_type = None
 
     if len(params) > 0:
+
         if view_only:
             submit_name = "view"
             submit_mode_type = "form-view"
@@ -115,6 +129,8 @@ def process_procedure(dbname, procname, modename, view_only=False):
             print("   type : form-new")
             print("   schema-proc : %s" % procname)
             print("   form-action : ?%s_submit" % modename)
+            if len(comment) > 0:
+                print("   autoload_tag : %s" % comment[0] )
             print("   schema")
             for param in params:
                 rowspecs = param.split('\t')
@@ -125,6 +141,8 @@ def process_procedure(dbname, procname, modename, view_only=False):
         print("   type : %s" % submit_mode_type)
         print("   procedure : %s" % procname)
         if view_only:
+            if len(comment) > 0:
+                print("   autoload_tag : %s" % comment[0] )
             print("   schema")
         else:
             print("   result")
