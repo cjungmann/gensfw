@@ -48,13 +48,18 @@ declare -a TEST_APPEND_MODE=(
     append_mode "last_mode" --
 )
 
+declare -a TEST_LIST_MATCHES=(
+    # list_matches "household/person" --
+    list_matches "*[result]" --
+)
+
 # The following tests are not necessary because they are
 # used in several of the other tests.  
 # Empty arrays to defuse warning, but to skip the tests
 declare -a TEST_DISPLAY=()
-declare -a TEST_MESSAGE=()
 declare -a TEST_PAUSE=()
 declare -a TEST_LABEL=()
+declare -a TEST_MESSAGE=()
 declare -a TEST_WRITE_FILE=()
 declare -a TEST_GOTO=()
 
@@ -312,14 +317,18 @@ announce_missing_action_tests()
 # be defined for the action.
 test_actions()
 {
-    announce_missing_action_tests
-    
-    local -a ACTIONS=( $( ./gensfw_srm --show_actions ) )
-    local action
+    if [ $# > 0 ]; then
+        show_action_test "$1"
+    else
+        announce_missing_action_tests
 
-    for action in "${ACTIONS[@]}"; do
-        show_action_test "$action"
-    done
+        local -a ACTIONS=( $( ./gensfw_srm --show_actions ) )
+        local action
+
+        for action in "${ACTIONS[@]}"; do
+            show_action_test "$action"
+        done
+    fi
 }
 
 test_goto_set()
@@ -719,14 +728,90 @@ test_loop_until()
 }
 
 
+test_message_tokens()
+{
+    local -a cmd=(
+        message "<%show:edit|edit/type|household/person[name:Charles]/name>" --
+        )
+
+    ./gensfw_srm gensfw_srm_test.srm "${cmd[@]}"
+}
+
+test_pause_and_message_actions()
+{
+    local -a bigshow_array=(
+        "*/person[name:Charles]/dob"
+        "*/person[name:Charles]/dob^v"
+        "*/person[name:Charles]/dob^t"
+        )
+
+    local OIFS="$IFS"
+    IFS='|'
+    local bigshow="${bigshow_array[*]}"
+    IFS="$OIFS"
+
+    local -a cmd=(
+        message "This is a default-colored message." --
+        hilite_message "This is a highlighted message." --
+        
+        hilite_message
+           "This is a highlighed message,"
+           "<%color:red>"
+           "where the color changes from"
+           "<%color:green>"
+           "to line, but returning to default upon exit."
+           --
+
+        message
+           "This message includes a line using <%show:path>"
+           "<%color:green>"
+           "<%show:*/person[name:Charles]/dob>"
+           "<%color:reset>"
+           "This follow up is a multiple show <%show:path1|path2|path3>"
+           "${bigshow}"
+           "<%color:green>"
+           "<%show:${bigshow}>"
+           "<%color:reset>"
+           "Substitute with a ^ delimiter:"
+           "<%color:green>"
+           "<%show:^|${bigshow}>"
+           "<%color:reset>"
+           "Substitute with a newline delimiter.  You must insert an actual ENTER press:"
+           "<%color:green>"
+           "<%show:
+|${bigshow}>"
+           "<%color:reset>"
+           " "
+           --
+
+        pause "This is a default-colored pause." --
+        hilite_pause "This is a highlighted pause." --
+
+        hilite_pause
+           "This is a highlighted pause,"
+           "<%color:red>"
+           "where the color changes from"
+           "<%color:green>"
+           "to line, but returning to default upon exit."
+           --
+    )
+
+    ./gensfw_srm gensfw_srm_test.srm "${cmd[@]}"
+}
+
+
+
 # add_before_test
 # add_last_child_test
 # add_after_test
 
 # test_wildcard_path
 # test_negative_predicate
-test_loop_until
+# test_loop_until
 
-# test_actions
+# test_actions  # could have included single test parameter
+test_message_tokens
+test_pause_and_message_actions
+
 # test_goto_set
 # test_complicated_path
