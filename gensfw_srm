@@ -1028,28 +1028,43 @@ def msg_cmd_clrscr(srmfile, data):
 def msg_cmd_show(srmfile, data):
     """Write out indicated lines, whole or in part.
 
-    The message syntax is:
-    <%show:SRMPath   to be determined."""
+    The message syntax, described by example:
+    <%show:path>      show the first line matching the path
+    <%show:path^t)    show the tag of the first line matching the path
+    <%show:path^v)    show the value of the first line matching the path
+    <%show:path1|path2|path3>  show the lines of each of the three paths
+
+    The default output delimiter is '|', but it can be changed by
+    including a single character before the first '|' input delimiter.
+    For example, to use a # delimiter:
+    <%show:#|path1|path2|path3>
+"""
 
     specs = data.split('|')
+    delimiter = '|'
+
+    if len(specs) > 0 and len(specs[0]) < 2 and specs[0] != '*':
+        delimiter = specs[0]
+        specs = specs[1:]
+
     output = []
     for spec in specs:
         parts = spec.split('^', 1)
         path = parts[0]
-        flag = None if len(path) == 1 else path[1]
+        flag = None if len(parts) == 1 else parts[1]
 
         srmline = srmfile.seek_line_at_path(path)
-        if srmline:
+        if srmline and not srmline.is_empty():
             if flag == 't':
                 output.append(srmline.tag)
             elif flag == 'v':
                 output.append(srmline.value)
-            elif not srmline.is_empty():
+            else:
                 value = "" if not srmline.has_value() else ":"+srmline.value
                 output.append("%s%s" % (srmline.tag, value))
 
     if len(output) > 0:
-        print("|".join(output))
+        print(delimiter.join(output))
     else:
         print("N/A")
 
