@@ -36,16 +36,16 @@ is now referenced by another project of mine,
 
 ## Usage
 
-**gensfw2** is the new command name, and there are several options for
+**gensfw** is the new command name, and there are several options for
 opening the program.
 
-- `gensfw2` alone will guide the user through selecting a database and
+- `gensfw` alone will guide the user through selecting a database and
   table for processing.
-- `gensfw2 CaseStudy` will begin running from the table selection
+- `gensfw CaseStudy` will begin running from the table selection
   dialog of database *CaseStudy*.
-- `gensfw2 CaseStudy Person` will begin at the table processing dialog,
+- `gensfw CaseStudy Person` will begin at the table processing dialog,
   using table *Person* from database *CaseStudy*.
-- `gensfw2 CaseStudy_Person.gsf` will open a file that records the
+- `gensfw CaseStudy_Person.gsf` will open a file that records the
   preferences in place when the file was created/updated.
 
 ## Requirements
@@ -67,7 +67,7 @@ merely the intended consumer of the output of *gensfw*.
 
 This utility is a capable tool for generating a graphical user interface
 for a BASH program.  While it includes many more features than the project
-from which is is derived (zenity), some interactions in *gensfw2* are somewhat
+from which is is derived (zenity), some interactions in *gensfw* are somewhat
 awkward.  This is not a criticism of YAD, but only an attempt to temper
 expectations of user-friendliness.
 
