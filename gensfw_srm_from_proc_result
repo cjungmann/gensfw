@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+
+declare DBName="${1}"
+declare ProcName="${2}"
+declare ModeName="${3}"
+declare Params="${@:4}"
+
+declare delim_name='|'
+
+show_usage()
+{
+    echo "[1;32mgensfw_srm_from_proc_result[0m <database> <procedure> <mode name> [parameter values...]"
+    echo
+    echo "This function requires at least three parameters,"
+    echo "- database name"
+    echo "- procedure name"
+    echo "- mode name (name of mode that will be written out)"
+    echo
+    echo "The parameter values are a space-separated list of values"
+    echo "that will be applied to the procedure parameters.  Include"
+    echo "as many as needed, or none if the procedure has no parameters."
+    echo
+}
+
+colorize_line()
+{
+    echo -n "[1;31m"
+    echo -n "$1"
+    echo "[0m"
+}
+
+confirm_database()
+{
+    local IFS=$'\n'
+    local -a arr_query=(
+        "SELECT COUNT(*)"
+        "FROM SCHEMATA"
+        "WHERE SCHEMA_NAME='$DBName'"
+        )
+
+    IFS=' '
+    local query="${arr_query[*]}"
+
+    local -i count=$( mysql information_schema -BN -e "${query}" )
+
+    [ "$count" -eq 1 ]
+}
+
+confirm_procedure()
+{
+    local IFS=$'\n'
+    local -a arr_query=(
+        "SELECT COUNT(*)"
+        "FROM ROUTINES"
+        "WHERE ROUTINE_SCHEMA='$DBName'"
+        "AND ROUTINE_NAME='$ProcName'"
+        )
+
+    IFS=' '
+    local query="${arr_query[*]}"
+
+    local -i count=$( mysql information_schema -BN -e "${query}" )
+
+    [ "$count" -eq 1 ]
+}
+
+confirm_params()
+{
+    if [ "${#BASH_ARGV[@]}" -gt 2 ]; then
+        if confirm_database; then
+            if confirm_procedure; then
+                return 0
+            else
+                echo
+                colorize_line "'$ProcName' is not a recognized procedure in '$DBName'"
+                return 1
+            fi
+        else
+            echo
+            colorize_line "'$DBName' is not a recognized database name."
+            return 1
+        fi
+    else
+        echo
+        colorize_line "Not enough parameters."
+        return 1
+    fi
+}
+
+
+get_raw_result_columns()
+{
+    local IFS=','
+    local params="${Params[*]}"
+
+    local proc_call="CALL ${ProcName}($params)"
+
+    # Leave off ' ' (space) from IFS to prevent breaking procedure call on spaces:
+    local IFS=$'\n'
+
+    local -a args=(
+        "${DBName}"
+        -t
+        -N
+        --column-type-info
+        -e
+        "${proc_call}"
+    )
+
+    mysql "${args[@]}"
+}
+
+extract_value()
+{
+    raw_val="$1"
+    if [[ "${raw_val}" =~ [[:space:]]*\`?([^\`]+)\`*[[:space:]]* ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo "Failed regular expression match" >&2
+    fi
+}
+
+get_result_columns()
+{
+    local -n array_alias="$1"
+    local -a fnames=()
+    local IFS=$'\n'
+    local -a infolines
+    local line value
+    local -a lparts
+    local -i fieldnumber
+    if infolines=( $( get_raw_result_columns ) ); then
+        for line in "${infolines[@]}"; do
+            IFS=':'
+            lparts=( $line )
+            if [ "${#lparts[@]}" -gt 1 ]; then
+                if [[ "${lparts[0]}" =~ Field[[:space:]]+([[:digit:]]+) ]]; then
+                    fieldnumber="${BASH_REMATCH[1]}"
+                    if [ "$fieldnumber" -eq 1 ]; then
+                        if [ "${#fnames[@]}" -gt 0 ]; then
+                            IFS="$delim_name"
+                            array_alias+=( "${fnames[*]}" )
+                        fi
+                        fnames=()
+                    fi
+                    value=$( extract_value "${lparts[1]}" )
+                    fnames+=( "$value" )
+                fi
+            fi
+        done
+
+        # Finish up the unfinished result
+        if [ "${#fnames[@]}" -gt 0 ]; then
+            IFS="$delim_name"
+            array_alias+=( "${fnames[*]}" )
+        fi
+
+        return 0
+    fi
+
+    return 1
+}
+
+build_response_mode()
+{
+    declare result name
+    declare -i result_number=0
+    declare -a results=()
+    declare -a field_names
+    local IFS
+    if get_result_columns "results"; then
+        echo "$ModeName"
+        echo "   type : *CHANGE OR DELETE*"
+        echo "   procedure : ${ProcName}"
+
+        for result in "${results[@]}"; do
+            echo "      result : $(( ++result_number ))"
+            echo "         name : *CHANGE OR DELETE*"
+            echo "         schema"
+            IFS="$delim_name"
+            field_names=( $result )
+            for name in "${field_names[@]}"; do
+                echo "            field : $name"
+            done
+        done
+    fi
+}
+
+if confirm_params; then
+    build_response_mode
+else
+    echo
+    show_usage
+fi
