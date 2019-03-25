@@ -6,8 +6,16 @@ This project is an excuse to practice BASH application programming using
 The other purpose for this project is to aid in the creation of
 [Schema Framework](https://github.com/cjungmann/schemafw) scripts.
 
-There is second script in this project [gensfw_session_procs](README_gensfw_session_procs.md)
-that writes an SQL script file for session procedures.
+Other scripts available in the project are:
+- [gensfw_session_procs](README_gensfw_session_procs.md) generates
+  an SQL script implmenting several session procedures.
+- [gensfw_srm_from_proc](README_gensfw_srm_from_proc.md) generates
+  response modes based on the parameters of a stored procedure.
+- [gensfw_srm_from_proc_result](README_gensfw_srm_from_proc_result.md)
+  generates a response mode for the output of a stored procedure.
+- [gensfw_srm](README_gensfw_srm.md) provides a means to edit an SRM
+  file by use of rudimentary-XPATH-like syntax for selecting lines
+  to add, remove, or change the value.
 
 ## Unsuitablily of XSLT
 I started with the idea that I would use XSLT stylesheets to build
