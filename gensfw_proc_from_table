@@ -18,12 +18,29 @@ color_echo()
 show_usage()
 {
     echo
-    echo "[1;32mgensfw_procs_from_table[0m <database> <table> <mode name>"
+    echo "[1;32mgensfw_procs_from_table[0m <database> <table> <mode name> [options]"
     echo
-    echo "This function requires at least two parameters:"
-    echo "- database name   (required)"
-    echo "- procedure name  (required)"
-    echo "- mode name       (optional)"
+    echo "This procedure needs to know the database and table and what kind"
+    echo "of interaction to generate."
+    echo
+    echo "The first two untagged parameters will be assigned to the database and table"
+    echo "names (unless already explicitely defined with a tag)."
+    echo
+    echo "The optional arguments change some details."
+    echo "Normally, the procedure will be named [1;34mApp_<table_name>_<action>[0m"
+    echo "with 'action' being replaced with Update or Add, according to the specified"
+    echo "proc type (option -y).  Using -r <procedure_name> will the parameter value instead."
+    echo
+    echo "-u <update proc> informs the generator what procedure to call to return the new"
+    echo "to the client."
+    echo
+    echo "Here are the parameter options:"
+    echo
+    echo "-d <database name>"
+    echo "-t <table name>"
+    echo "-y <proc type> (add or update for now)"
+    echo "-r <procedure name>"
+    echo "-u <update proc>"
     echo
 }
 
@@ -395,11 +412,14 @@ declare -a Fields_Info
 
 if confirm_database; then
     if confirm_table; then
-        color_echo "About to get_fields_info"
-        get_fields_info "Fields_Info"
+        if [ -n "$Proc_Type" ]; then
+            color_echo "About to get_fields_info"
+            get_fields_info "Fields_Info"
 
-        use_fields_info
-
+            use_fields_info
+        else
+            color_echo "No procedure type entered (-y argument)"
+        fi
     else
         color_echo "Table '$TableName' is not recognized in Database '$DBName'."
     fi
