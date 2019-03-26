@@ -8,6 +8,7 @@ install:
 	install -D --mode=644 ./gensfw_session_procs.xsl /usr/local/lib/SchemaServer/utilities/gensfw_session_procs.xsl
 	install -D --mode=755 ./gensfw_isotable_procs     /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs
 	install -D --mode=644 ./gensfw_isotable_procs.xsl /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs.xsl
+	install -D --mode=755 ./gensfw_proc_from_table    /usr/local/lib/SchemaServer/utilities/gensfw_proc_from_table
 	install -D --mode=755 ./gensfw_srm                /usr/local/lib/SchemaServer/utilities/gensfw_srm
 	install -D --mode=755 ./gensfw_srm_from_proc      /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc
 	install -D --mode=755 ./gensfw_srm_from_proc_result      /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc_result
@@ -15,6 +16,7 @@ install:
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw               /usr/bin/gensfw
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_session_procs /usr/bin/gensfw_session_procs
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs /usr/bin/gensfw_isotable_procs
+	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_proc_from_table /usr/bin/gensfw_proc_from_table
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_srm /usr/bin/gensfw_srm
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc /usr/bin/gensfw_srm_from_proc
 	cp -sf /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc_result /usr/bin/gensfw_srm_from_proc_result
@@ -38,6 +40,7 @@ uninstall:
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_scripts_srm
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_session_procs
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_isotable_procs
+	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_proc_from_table
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_srm
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc
 	rm -f /usr/local/lib/SchemaServer/utilities/gensfw_srm_from_proc_result
