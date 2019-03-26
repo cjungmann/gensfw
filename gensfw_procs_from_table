@@ -1,0 +1,409 @@
+#!/usr/bin/env bash
+
+declare DBName
+declare TableName
+declare Proc_Name_Root
+declare Update_Proc
+declare Proc_Type
+
+declare delim_parm=$'|'
+
+color_echo()
+{
+    echo -n "[1;36m"
+    echo -n "$1"
+    echo  "[0m"
+}
+
+show_usage()
+{
+    echo
+    echo "[1;32mgensfw_procs_from_table[0m <database> <table> <mode name>"
+    echo
+    echo "This function requires at least two parameters:"
+    echo "- database name   (required)"
+    echo "- procedure name  (required)"
+    echo "- mode name       (optional)"
+    echo
+}
+
+process_cli_args()
+{
+    local arg flag
+    for arg in "$@"; do
+        if [ "${arg:0:1}" == "-" ]; then
+            flag="${arg:1}"
+            continue
+        fi
+        if [ -n "$flag" ]; then
+            case "$flag" in
+                d) DBName="$arg" ;;
+                r) Proc_Name_Root="$arg" ;;
+                t) TableName="$arg" ;;
+                u) Update_Proc="$arg" ;;
+                y) Proc_Type="$arg" ;;
+                *) echo "Unrecognized flag '-$flag'" ;;
+            esac
+            flag=
+        elif [ -z "$DBName" ]; then
+            DBName="$arg"
+        elif [ -z "$TableName" ]; then
+            TableName="$arg"
+        fi
+    done
+}
+
+confirm_database()
+{
+    local IFS=$'\n'
+    local -a arr_query=(
+        "SELECT COUNT(*)"
+        "FROM SCHEMATA"
+        "WHERE SCHEMA_NAME='$DBName'"
+        )
+
+    IFS=' '
+    local query="${arr_query[*]}"
+
+    local -i count=$( mysql information_schema -BN -e "${query}" )
+
+    [ "$count" -eq 1 ]
+}
+
+confirm_table()
+{
+    local IFS=$'\n'
+    local -a arr_query=(
+        "SELECT COUNT(*)"
+        "FROM TABLES"
+        "WHERE TABLE_SCHEMA='$DBName'"
+        "AND TABLE_NAME='$TableName'"
+        )
+
+    IFS=' '
+    local query="${arr_query[*]}"
+
+    local -i count=$( mysql information_schema -BN -e "${query}" )
+
+    [ "$count" -eq 1 ]
+}
+
+declare -i NdxNdx=0
+declare -i Ndx_Name=$((       NdxNdx++ ))
+declare -i Ndx_DataType=$((   NdxNdx++ ))
+declare -i Ndx_ColumnType=$(( NdxNdx++ ))
+declare -i Ndx_MaxLen=$((     NdxNdx++ ))
+declare -i Ndx_NumPrec=$((    NdxNdx++ ))
+declare -i Ndx_NumScale=$((   NdxNdx++ ))
+declare -i Ndx_Nullable=$((   NdxNdx++ ))
+declare -i Ndx_AutoIncr=$((   NdxNdx++ ))
+declare -i Ndx_PriKey=$((     NdxNdx++ ))
+
+get_name() { echo "${ColRec[$Ndx_Name]}"; return 0; }
+get_dtype() { echo "${ColRec[$Ndx_DataType]}"; return 0; }
+get_maxlen() { echo "${ColRec[$Ndx_MaxLen]}"; return 0; }
+get_numprec() { echo "${ColRec[$Ndx_NumPrec]}"; return 0; }
+get_numscale() { echo "${ColRec[$Ndx_NumScale]}"; return 0; }
+is_nullable() { [ "${ColRec[$Ndx_Nullable]}" == "YES" ]; }
+is_autoinc() { [ "${ColRec[$Ndx_AutoIncr]}" == "YES" ]; }
+is_prikey() { [ "${ColRec[$Ndx_PriKey]}" == "YES" ]; }
+
+get_ctype()
+{
+    local val="${ColRec[$Ndx_ColumnType]}"
+    if [[ "$val" =~ (.*int)\( ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo "$val"
+    fi
+    return 0
+}
+
+get_fields_info()
+{
+    local -n array_alias="$1"
+
+    local IFS=$'\n'
+
+    local -a arr_cols=(
+        "COLUMN_NAME"
+        "DATA_TYPE"
+        "COLUMN_TYPE"
+        "CHARACTER_MAXIMUM_LENGTH"
+        "NUMERIC_PRECISION"
+        "NUMERIC_SCALE"
+        "CASE WHEN IS_NULLABLE='NO' THEN NULL ELSE 'YES' END NULLABLE"
+        "CASE WHEN INSTR(EXTRA,'auto_increment') THEN 'YES' ELSE NULL END AS AUTO_INCREMENT"
+        "CASE WHEN INSTR(COLUMN_KEY,'PRI') THEN 'YES' ELSE NULL END AS PRIMARY_KEY"
+        )
+
+    # Assemble the comma-delimited field names
+    IFS=','
+    local cols="${arr_cols[*]}"
+
+    IFS=$'\n'
+    local -a arr_query=(
+        "SELECT"
+        # Use comma-delimited field names
+        "${cols}"
+        "FROM COLUMNS"
+        "WHERE TABLE_SCHEMA='$DBName'"
+        "  AND TABLE_NAME='$TableName'"
+    )
+
+    # Assemble the query with space separators
+    IFS=' '
+    local query="${arr_query[*]}"
+
+    # Revert to newline IFS so each line is an array element
+    IFS=$'\n'
+    # Note use of 'tr' command to convert tabs all at once:
+    array_alias=( $( mysql information_schema -BN -e "$query" | tr $'\t' "$delim_parm" ) )
+}
+
+Filter_None()         { return 0; }
+Filter_New_Params()   { ! is_prikey; }
+Filter_Update_Sets()  { ! is_prikey; }
+Filter_Update_Where() { is_prikey; }
+
+get_prikey_name()
+{
+    local prikey_name fieldstr
+    local -a ColRec
+    local IFS="$delim_parm"
+    for fieldstr in "${Fields_Info[@]}"; do
+        ColRec=( $fieldstr )
+        if is_prikey; then
+            get_name
+            return 0
+        fi
+    done
+    return 1
+}
+
+make_indent_string() { printf ' %.0s' $( seq 1 "$1" ); }
+
+add_procedure_params()
+{
+    local -i indent="$1"
+    local indentstr=$( make_indent_string "$indent" )
+
+    local -n filter="${2:-Filter_None}"
+    local IFS
+    local fieldstr name type
+
+    # Use name "ColRec" because it's recognized by several
+    # functions that extract column information
+    local -a ColRec
+    local -i count=0
+    for fieldstr in "${Fields_Info[@]}"; do
+        IFS="$delim_parm"
+        ColRec=( $fieldstr )
+
+        if "${!filter}"; then
+            name=$( get_name )
+            type=$( get_ctype )
+
+            if [ $(( count++ )) -gt 0 ]; then
+                echo ","
+                echo -n "$indentstr"
+            fi
+
+            echo -n "$name ${type^^}"
+        fi
+    done
+
+    echo ")"
+}
+
+add_insert_fields()
+{
+    local -i indent="$1"
+    local indentstr=$( make_indent_string "$indent" )
+    local fieldstr
+    local -a ColRec
+    local IFS="$delim_parm"
+    local -i count=0
+
+    for fieldstr in "${Fields_Info[@]}"; do
+        ColRec=( $fieldstr )
+        if ! is_prikey; then
+            if [ $(( count++ )) -gt 0 ]; then
+                echo ","
+                echo -n "$indentstr"
+            fi
+            echo -n "$( get_name )"
+        fi
+    done
+}
+
+
+add_update_sets()
+{
+    local -i indent="$1"
+    local indentstr=$( make_indent_string "$indent" )
+
+    local -n filter="${2:-Filter_Update_Sets}"
+    local IFS
+    local fieldstr name type
+
+    # Use name "ColRec" because it's recognized by several
+    # functions that extract column information
+    local -a ColRec
+    local -i count=0
+    for fieldstr in "${Fields_Info[@]}"; do
+        IFS="$delim_parm"
+        ColRec=( $fieldstr )
+
+        if "${!filter}" ; then
+            name=$( get_name )
+
+            if [ $(( count++ )) -gt 0 ]; then
+                echo ","
+                echo -n "$indentstr"
+            fi
+
+            echo -n "\`$name\` = $name"
+        fi
+    done
+
+    # Add newline after final set pair
+    echo
+}
+
+add_update_wheres()
+{
+    local -n filter="${1:-Filter_Update_Where}"
+    local -a ColRec
+    local name fieldstr
+    local -i count=0
+
+    for fieldstr in "${Fields_Info[@]}"; do
+        IFS="$delim_parm"
+        ColRec=( $fieldstr )
+        if "${!filter}"; then
+            name=$( get_name )
+            if [ $(( count++ )) -eq 0 ]; then
+                echo -n "    WHERE \`$name\` = $name"
+            else
+                echo
+                echo -n " AND \`$name\` = $name"
+            fi
+        fi
+    done
+}
+
+make_add_procedure()
+{
+    local proc_name
+    if [ -z "$ProcNameRoot" ]; then
+        proc_name="App_${TableName}_Add"
+    else
+        proc_name="$ProcNameRoot_Add"
+    fi
+
+    echo "DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    local stmt_start="CREATE PROCEDURE ${proc_name}("
+    echo -n "$stmt_start"
+
+    add_procedure_params "${#stmt_start}" "Filter_New_Params"
+
+    echo "BEGIN"
+
+    if [ -n "$Update_Proc" ]; then
+        echo "   DECLARE newid INT UNSIGNED;"
+        echo "   DECLARE rcount INT UNSIGNED;"
+        echo
+    fi
+
+    echo "   INSERT INTO ${TableName}"
+    local paren_line="          ("
+
+    echo -n "$paren_line"
+    add_insert_fields "${#paren_line}"
+    echo ")"
+    paren_line="   VALUES ("
+    echo -n "$paren_line"
+    add_insert_fields "${#paren_line}"
+    echo ");"
+
+    if [ -n "$Update_Proc" ]; then
+        echo
+        echo "   SELECT ROW_COUNT() INTO rcount;"
+        echo "   IF rcount > 0 THEN"
+        echo "      SELECT LAST_INSERT_ID() INTO newid;"
+        echo "      CALL ${Update_Proc}(newid);"
+        echo "   END IF;"
+    fi
+
+    echo "END \$\$"
+}
+
+make_update_procedure()
+{
+    local proc_name prikey_name
+    if [ -z "$ProcNameRoot" ]; then
+        proc_name="App_${TableName}_Update"
+    else
+        proc_name="$ProcNameRoot_Update"
+    fi
+
+    echo "DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    local stmt_start="CREATE PROCEDURE ${proc_name}("
+    echo -n "$stmt_start"
+
+    add_procedure_params "${#stmt_start}"
+    echo "BEGIN"
+
+    if [ -n "$Update_Proc" ]; then
+        prikey_name=$( get_prikey_name )
+        echo "   DECLARE rcount INT UNSIGNED;"
+        echo
+    fi
+
+    echo "   UPDATE ${TableName}"
+    local set_line="      SET "
+    echo -n "$set_line"
+    add_update_sets "${#set_line}"
+    add_update_wheres
+    echo ";"
+
+    if [ -n "$Update_Proc" -a -n "$prikey_name" ]; then
+        echo
+        echo "   SELECT ROW_COUNT() INTO rcount;"
+        echo "   IF rcount > 0 THEN"
+        echo "      CALL ${Update_Proc}($prikey_name);"
+        echo "   END IF;"
+    fi
+        
+
+    echo "END \$\$"
+}
+
+use_fields_info()
+{
+    case "$Proc_Type" in
+        add)    make_add_procedure ;;
+        update) make_update_procedure ;;
+        *)      echo "Unrecognized or missing -y parameter."
+    esac
+}
+
+process_cli_args "$@"
+
+declare -a Fields_Info
+
+if confirm_database; then
+    if confirm_table; then
+        color_echo "About to get_fields_info"
+        get_fields_info "Fields_Info"
+
+        use_fields_info
+
+    else
+        color_echo "Table '$TableName' is not recognized in Database '$DBName'."
+    fi
+else
+    color_echo "Database '$DBName' is not recognized."
+fi
+
