@@ -16,6 +16,9 @@ Other scripts available in the project are:
 - [gensfw_srm](README_gensfw_srm.md) provides a means to edit an SRM
   file by use of rudimentary-XPATH-like syntax for selecting lines
   to add, remove, or change the value.
+- [gensfw_proc_from_table](README_gensfw_proc_from_table.md) is a
+  more easily batchable creator of stored procedures from table
+  definitions.
 
 ## Unsuitablily of XSLT
 I started with the idea that I would use XSLT stylesheets to build
