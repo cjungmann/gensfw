@@ -6,13 +6,51 @@ declare Proc_Name_Root
 declare Update_Proc
 declare Proc_Type
 
+declare -a Fields_to_Omit=()
+
 declare delim_parm=$'|'
 
-color_echo()
+# Colorize entire line
+color_echo() { echo "[1;36m${1}[0m"; }
+
+# Echo a string, with substrings between two delimiters color-hilited
+# The default hilited delimiter is an underscore (_), but if that's
+# not convenient (ie it's included in the message), it can be replaced
+# with a single character parameter before the string.
+#
+# See 'echoing' file in https://github.com/cjungmann/bash_ideas
+hilite_echo()
 {
-    echo -n "[1;36m"
-    echo -n "$1"
-    echo  "[0m"
+    local delimiter=$'_'
+    local msg="$1"
+
+    if [ "${#msg}" -eq 1 ]; then
+        delimiter="$1"
+        msg="$2"
+    fi
+
+    local IFS=$'\n'
+    local -a input=( $( echo "$msg" | sed -e 's|\(.\)|\1\n|g' ) )
+
+    local -a output=()
+    local -i in_hilite=0
+    local cch
+    for cch in "${input[@]}"; do
+        if [ "$cch" == "$delimiter" ]; then
+            if [ "$in_hilite" -eq 0 ]; then
+                in_hilite=1
+                output+=( '[1;36m' )
+            else
+                in_hilite=0
+                output+=( '[0m' )
+            fi
+        else
+            output+=( "$cch" )
+        fi
+    done
+
+    IFS=
+    echo "${output[*]}"
 }
 
 show_usage()
@@ -27,7 +65,7 @@ show_usage()
     echo "names (unless already explicitely defined with a tag)."
     echo
     echo "The optional arguments change some details."
-    echo "Normally, the procedure will be named [1;34mApp_<table_name>_<action>[0m"
+    hilite_echo "#" "Normally, the procedure will be named #App_<table_name>_<action>#"
     echo "with 'action' being replaced with Update or Add, according to the specified"
     echo "proc type (option -y).  Using -r <procedure_name> will the parameter value instead."
     echo
@@ -36,12 +74,27 @@ show_usage()
     echo
     echo "Here are the parameter options:"
     echo
-    echo "-d <database name>"
-    echo "-t <table name>"
-    echo "-y <proc type> (add or update for now)"
-    echo "-r <procedure name>"
-    echo "-u <update proc>"
+    hilite_echo "-d <_d_atabase name>"
+    hilite_echo "-o <field name to _o_mit>    Can be used multiple times to omit fields."
+    hilite_echo "-t <_t_able name>"
+    hilite_echo "-y <proc t_y_pe> (add or update for now)"
+    hilite_echo "-r <p_r_ocedure name>"
+    hilite_echo "-u <_u_pdate proc>"
     echo
+}
+
+in_array()
+{
+    local needle="${1}"
+    local straw
+    shift
+    for straw in "$@"; do
+        if [ "$straw" == "$needle" ]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 process_cli_args()
@@ -55,6 +108,7 @@ process_cli_args()
         if [ -n "$flag" ]; then
             case "$flag" in
                 d) DBName="$arg" ;;
+                o) Fields_to_Omit+=( "$arg" ) ;;
                 r) Proc_Name_Root="$arg" ;;
                 t) TableName="$arg" ;;
                 u) Update_Proc="$arg" ;;
@@ -69,6 +123,9 @@ process_cli_args()
         fi
     done
 }
+
+push_omit() { Fields_to_Omit+=( "$1" );  }
+is_omitted() { in_array "$1" "${Fields_to_Omit[@]}"; }
 
 confirm_database()
 {
@@ -178,10 +235,12 @@ get_fields_info()
     array_alias=( $( mysql information_schema -BN -e "$query" | tr $'\t' "$delim_parm" ) )
 }
 
-Filter_None()         { return 0; }
-Filter_New_Params()   { ! is_prikey; }
-Filter_Update_Sets()  { ! is_prikey; }
-Filter_Update_Where() { is_prikey; }
+Filter_Basic()        { ! is_omitted $( get_name ); }
+
+Filter_None()         { Filter_Basic; }
+Filter_New_Params()   { Filter_Basic && ! is_prikey; }
+Filter_Update_Sets()  { Filter_Basic && ! is_prikey; }
+Filter_Update_Where() { Filter_Basic && is_prikey; }
 
 get_prikey_name()
 {
@@ -399,11 +458,15 @@ make_update_procedure()
 
 use_fields_info()
 {
-    case "$Proc_Type" in
-        add)    make_add_procedure ;;
-        update) make_update_procedure ;;
-        *)      echo "Unrecognized or missing -y parameter."
-    esac
+    if [ -z "$Proc_Type" ]; then
+        color_echo "Missing the -y parameter."
+    else
+        case "$Proc_Type" in
+            add)    make_add_procedure ;;
+            update) make_update_procedure ;;
+            *)      color_echo "'${Proc_Type} is an unrecognized -y parameter." >&2
+        esac
+    fi
 }
 
 process_cli_args "$@"
@@ -413,17 +476,18 @@ declare -a Fields_Info
 if confirm_database; then
     if confirm_table; then
         if [ -n "$Proc_Type" ]; then
-            color_echo "About to get_fields_info"
             get_fields_info "Fields_Info"
-
             use_fields_info
         else
-            color_echo "No procedure type entered (-y argument)"
+            color_echo "No procedure type entered (-y argument)" >&2
+            show_usage
         fi
     else
-        color_echo "Table '$TableName' is not recognized in Database '$DBName'."
+        color_echo "Table '$TableName' is not recognized in Database '$DBName'." >&2
+        show_usage
     fi
 else
-    color_echo "Database '$DBName' is not recognized."
+    color_echo "Database '$DBName' is not recognized." >&2
+    show_usage
 fi
 
