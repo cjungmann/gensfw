@@ -1,0 +1,64 @@
+.TH gensfw 1 "March 2019"
+.SH NAME
+gensfw_proc_from_table \- Generate Schema Framework Files
+.SH SYNOPSIS
+.B gensfw_proc_from_table
+.RB [ DATABASE ] " " [ TABLE ] " " [ OPTIONS ] "" ...
+.br
+.B gensfw_proc_from_table
+.BI "-d " DATABASE " -t " TABLE " -y " update
+.RB [ OPTIONS ] "" ...
+
+.SH DESCRIPTION
+Create a MySQL procedure declaration from the fields of a MySQL table.
+.br
+The command must provide
+.IR DATABASE " and " TABLE " names, which can be passed with " -d " and " -t " options.  "
+Alternatively, the first two parameters passed without an option prefix will be
+taken to be the
+.IR DATABASE " and " TABLE " names, respectively.  "
+Other options can come before, after, or between the
+.IR DATABASE " and " TABLE " parameters."
+
+.SH OPTIONS
+.TP
+.BI "-d " "DATABASE"
+Open the named database.
+
+.TP
+.BI "-t " "TABLE"
+Open the named table.  Results in error if table not in named database.
+
+.TP
+.BI "-y " "PROCEDURE TYPE"
+Indicate the type of procedure to create.  Currently, the options are
+.IR add ", " update ", and " read "."
+
+.TP
+.BI "-r " "PROCEDURE NAME"
+Optional. Override default procedure name (which is \(lqApp_\(lq plus
+the table name, plus the procedure type.
+
+.TP
+.BI "-u " "UPDATE PROCEDURE"
+Track the new or existing record ID, then call the named procedure,
+passing the record ID as the sole parameter.  Used for updating the
+table from which the dialog was initiated.
+
+.TP
+.BI "-o " "FIELD TO OMIT"
+This option can be used multiple times to flag fields that should
+\fBnot\fR be included in the generated procedure.
+
+.SH EXAMPLES
+.TP
+.br
+.I gensfw_proc_from_table SFW_Simple Person -y update
+.br
+.RI "Use the table " "Person" " in  database " "SFW_Simple" " to create an " "update" " procedure."
+
+.SH AUTHOR
+Charles P. Jungmann
+
+.SH SEE ALSO
+gensfw(1)
