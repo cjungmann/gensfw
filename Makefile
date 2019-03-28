@@ -23,8 +23,7 @@ install:
 
 	# Install the man pages
 	cp *.1 /usr/share/man/man1
-	gzip -f /usr/share/man/man1/gensfw.1
-	gzip -f /usr/share/man/man1/gensfw_isotable_procs.1
+	gzip -f /usr/share/man/man1/gensfw*.1
 	# Install the info files
 	makeinfo gensfw.info.txi --paragraph-indent=0 -o /usr/share/info
 	gzip -f      /usr/share/info/gensfw.info
