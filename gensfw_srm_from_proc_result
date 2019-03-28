@@ -174,13 +174,13 @@ build_response_mode()
         echo "   procedure : ${ProcName}"
 
         for result in "${results[@]}"; do
-            echo "      result : $(( ++result_number ))"
-            echo "         name : *CHANGE OR DELETE*"
-            echo "         schema"
+            echo "   result : $(( ++result_number ))"
+            echo "      name : *CHANGE OR DELETE*"
+            echo "      schema"
             IFS="$delim_name"
             field_names=( $result )
             for name in "${field_names[@]}"; do
-                echo "            field : $name"
+                echo "         field : $name"
             done
         done
     fi
