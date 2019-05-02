@@ -1148,6 +1148,7 @@ def tweak_srmline_list(srmline_list, list_args):
 
     This function is called by several do_ actions:
        do_set_line
+       do_copy_as_first_child
        do_copy_as_last_child
        do_copy_after_sibling
        do_copy_before_sibling
@@ -1265,6 +1266,12 @@ def do_set_line(srmfile, content_list=None):
        Changes the tag of the root branch.  Ignored if <%CONTENTS_ONLY> used.
     <%SET_VALUE>
        Changes the value of the root branch.  Ignored if <%CONTENTS_ONLY> used.
+
+    Syntax:
+    set_line <target_location> <tag> <setting>
+
+    Example:
+    set_line "login/schema/button/label" "<%SET_VALUE>" "Register New User"
     """
 
     if content_list and len(content_list) > 1:
