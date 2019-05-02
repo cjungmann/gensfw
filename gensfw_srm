@@ -1377,6 +1377,30 @@ def do_copy_before_sibling(srmfile, content_list=None):
                                        left_index,
                                        left_line.level)
 
+def do_copy_as_first_child(srmfile, content_list=None):
+    """Copy a branch as first child of target location.
+
+    Syntax:
+    copy_as_first_child <target_location> <branch_to_copy> [options]
+
+    See also \"do_set_line\" for an explanation of the options.
+"""
+
+    if content_list and len(content_list) > 1:
+
+        pstep_left = build_pstep(content_list[0])
+        left_index = srmfile.seek_line_index(pstep_left)
+
+        left_line = srmfile.get_line_at(left_index)
+        pstep_right = build_pstep(content_list[1])
+
+        copy_of_right = srmfile.get_copy_at_pstep(pstep_right)
+        copy_of_right = tweak_srmline_list(copy_of_right, content_list[2:])
+
+        srmfile.insert_srmline_list_at(copy_of_right,
+                                       left_index+1,
+                                       left_line.level+1)
+
 def do_delete(srmfile, content_list=None):
     """Command line action that removes a branch from the SRMFile."""
     if content_list and len(content_list) > 0:
