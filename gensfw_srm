@@ -1190,7 +1190,10 @@ def tweak_srmline_list(srmline_list, list_args):
 # They can be called by execute_arglist()
 def do_first_child(srmfile, content_list=None):
     """Command Line action that adds a line as the first
-    child of the branch indicated by the srm path string."""
+    child of the branch indicated by the srm path string.
+
+    Syntax:
+    first_child <target_location> <new line>"""
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
         if pstep:
@@ -1201,7 +1204,11 @@ def do_first_child(srmfile, content_list=None):
 
 def do_last_child(srmfile, content_list=None):
     """Command Line action that adds a line as the last
-    child of the branch indicated by the srm path string."""
+    child of the branch indicated by the srm path string.
+
+    Syntax:
+    last_child <target_location> <new line>"""
+
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
         if pstep:
@@ -1212,7 +1219,11 @@ def do_last_child(srmfile, content_list=None):
 
 def do_before_sibling(srmfile, content_list=None):
     """Command Line action that adds a line just before and at
-    the same level as the branch indicate by the srm path string."""
+    the same level as the branch indicate by the srm path string.
+
+    Syntax:
+    before_sibling <target_location> <new line>"""
+
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
         if pstep:
@@ -1224,7 +1235,11 @@ def do_before_sibling(srmfile, content_list=None):
 
 def do_after_sibling(srmfile, content_list=None):
     """Command Line action that adds a line just after and at
-    the same level as the branch indicate by the srm path string."""
+    the same level as the branch indicate by the srm path string.
+
+    Syntax:
+    after_sibling <target_location> <new line>"""
+
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
         if pstep:
@@ -1265,7 +1280,10 @@ def do_break_if(srmfile, content_list=None):
     """Action to terminate processing arguments if the SRMPath is found.
 
     Use this action to confirm the state of an SRM file before performing
-    some other action."""
+    some other action.
+
+    Syntax:
+    break_if <target-line-the-existance-of-which-triggers-action>"""
 
     if content_list and len(content_list) > 0:
         pstep = build_pstep(content_list[0])
@@ -1279,7 +1297,7 @@ def do_copy_as_last_child(srmfile, content_list=None):
     """Copy a branch as a child after the last child of the target.
 
     Syntax:
-    copy_as_last_child <target_loction> <branch_to_copy> [options]
+    copy_as_last_child <target_location> <branch_to_copy> [options]
 
     See also \"do_set_line\" for an explanation of the options.
 """
@@ -1309,7 +1327,7 @@ def do_copy_after_sibling(srmfile, content_list=None):
     """Copy a branch as sibling after target location.
 
     Syntax:
-    copy_after_sibling <target_loction> <branch_to_copy> [options]
+    copy_after_sibling <target_location> <branch_to_copy> [options]
 
     See also \"do_set_line\" for an explanation of the options.
 """
@@ -1339,7 +1357,7 @@ def do_copy_before_sibling(srmfile, content_list=None):
     """Copy a branch as sibling before target location.
 
     Syntax:
-    copy_before_sibling <target_loction> <branch_to_copy> [options]
+    copy_before_sibling <target_location> <branch_to_copy> [options]
 
     See also \"do_set_line\" for an explanation of the options.
 """
