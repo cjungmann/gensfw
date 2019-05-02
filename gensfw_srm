@@ -729,6 +729,24 @@ class SRMFile:
             line.level += level
             adder(line)
 
+    def insert_as_first_child(self, index, linestr):
+        """Splicing function to insert a new line as a child immediately after
+        the line at the indicated position.  The 'linestr' string will be
+        parsed for tag and value, and the level of the new SRMLine will match
+        that of the last child."""
+
+        tag, value = parse_srm_line(linestr)
+        # Determine new item level as 1 greater than the parent node:
+        level = self.level_at_index(index)
+        newline = SRMLine(level+1, tag, value)
+
+        index += 1
+
+        if self.in_range(index):
+            self.lines_list.insert(index, newline)
+        else:
+            self.lines_list.append(newline)
+
     def append_after_last_child(self, index, linestr):
         """Splicing function to insert a new line at the indicated position.
         The 'linestr' string will be parsed for tag and value, and the level
@@ -1170,6 +1188,17 @@ def tweak_srmline_list(srmline_list, list_args):
 
 # The following functions are of the form "do_" plus an action name.
 # They can be called by execute_arglist()
+def do_first_child(srmfile, content_list=None):
+    """Command Line action that adds a line as the first
+    child of the branch indicated by the srm path string."""
+    if content_list and len(content_list) > 0:
+        pstep = build_pstep(content_list[0])
+        if pstep:
+            index = srmfile.seek_line_index(pstep)
+            if index >= 0:
+                for line in content_list[1:]:
+                    srmfile.insert_as_first_child(index, line)
+
 def do_last_child(srmfile, content_list=None):
     """Command Line action that adds a line as the last
     child of the branch indicated by the srm path string."""
