@@ -200,6 +200,8 @@ END $$
       <xsl:apply-templates select="." mode="get_data_type" />
     </xsl:variable>
 -- ------------------------<xsl:value-of select="translate($pspaced,' ','-')" />
+-- Sets the persistent &apos;<xsl:value-of select="$cname" />&apos; session value.
+-- ------------------------<xsl:value-of select="translate($pspaced,' ','-')" />
 DROP PROCEDURE IF EXISTS <xsl:value-of select="$pname" /> $$
 CREATE PROCEDURE <xsl:value-of select="$pname" />(val <xsl:value-of select="$ptype" />)
 BEGIN
@@ -226,7 +228,9 @@ END $$
         <xsl:with-param name="str" select="$set_str" />
       </xsl:call-template>
     </xsl:variable>
--- -----------------------------------------------    
+-- -----------------------------------------------
+-- Call this procedure at a successful login
+-- -----------------------------------------------
 DROP PROCEDURE IF EXISTS App_Session_Initialize $$
 <xsl:value-of select="$create_string" /><xsl:apply-templates select="$rows" mode="add_parameter">
 <xsl:with-param name="indent" select="$param_indent" />
