@@ -152,7 +152,7 @@ def process_procedure(dbname, procname, modename, view_only=False):
 
 def main():
     """Main program function."""
-    if len(sys.argv) == 0:
+    if len(sys.argv) == 1:
         show_usage()
 
     dbname = None
