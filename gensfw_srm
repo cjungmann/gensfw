@@ -636,33 +636,23 @@ class SRMFile:
         """Returns the line index of the last line whose ancestor
         is the reference line."""
 
-        level = self.level_at_index(index)
-        limit = self.get_line_count()
+        lastoffspring = -1
+        origin_level = self.level_at_index(index)
+        last_line = self.get_line_count()
 
-        # Set appropriate failure value in case no items in range:
-        ndx = -1
+        if self.in_range(index):
+            line = self.get_unchecked_line_at(index)
+            level = line.level + 1
+            for ndx in range(index+1, last_line):
+                line = self.get_unchecked_line_at(ndx)
+                if line.level <= origin_level:
+                    break
+                elif (line.is_comment() or line.is_empty()):
+                    continue
+                elif (line.level > origin_level):
+                    lastoffspring = ndx
 
-        # Walk list to first non-offspring line
-        for ndx in range(index+1, limit):
-            ilevel = self.level_at_index(ndx)
-            if ilevel < 0 or ilevel > level:
-                continue
-            if ilevel <= level:
-                break
-        else:
-            return ndx
-
-        # Back one to first line before first non-offspring line
-        ndx -= 1
-
-        # Back-off any space or comment lines:
-        while ndx > index:
-            if self.is_empty_at_index(ndx):
-                ndx -= 1
-            else:
-                break
-
-        return ndx
+        return lastoffspring
 
     def get_copy_at_pstep(self, pstep):
         """Returns new list of SRMLine elements of the specified branch."""
