@@ -29,6 +29,11 @@ class SRMFileRangeError(SRMFileError):
     def __init__(self, message=None):
         super().__init__(message)
 
+class SRMFilePathNotFound(SRMFileError):
+    """Raised when a required SRMPath is not found."""
+    def __init__(self, message=None):
+        super().__init__(message)
+
 class SRMFileBreak(SRMFileError):
     """Raised when a 'break_if' action finds the SRM line."""
     def __init__(self, message=None):
@@ -1313,6 +1318,10 @@ def do_copy_as_last_child(srmfile, content_list=None):
 
         pstep_left = build_pstep(content_list[0])
         left_index = srmfile.seek_line_index(pstep_left)
+
+        if left_index < 0:
+            raise SRMFilePathNotFound(content_list[0])
+
         left_line = srmfile.get_line_at(left_index)
 
         target_index = srmfile.get_last_offspring_index(left_index)
@@ -1343,6 +1352,10 @@ def do_copy_after_sibling(srmfile, content_list=None):
 
         pstep_left = build_pstep(content_list[0])
         left_index = srmfile.seek_line_index(pstep_left)
+
+        if left_index < 0:
+            raise SRMFilePathNotFound(content_list[0])
+
         left_line = srmfile.get_line_at(left_index)
 
         target_index = srmfile.get_last_offspring_index(left_index) + 1
@@ -1374,6 +1387,9 @@ def do_copy_before_sibling(srmfile, content_list=None):
         pstep_left = build_pstep(content_list[0])
         left_index = srmfile.seek_line_index(pstep_left)
 
+        if left_index < 0:
+            raise SRMFilePathNotFound(content_list[0])
+
         left_line = srmfile.get_line_at(left_index)
         pstep_right = build_pstep(content_list[1])
 
@@ -1397,6 +1413,9 @@ def do_copy_as_first_child(srmfile, content_list=None):
 
         pstep_left = build_pstep(content_list[0])
         left_index = srmfile.seek_line_index(pstep_left)
+
+        if left_index < 0:
+            raise SRMFilePathNotFound(content_list[0])
 
         left_line = srmfile.get_line_at(left_index)
         pstep_right = build_pstep(content_list[1])
@@ -1713,6 +1732,8 @@ def main():
             pass
         except PStepError as exception:
             print(exception)
+        except SRMFilePathNotFound as exception:
+            print("SRMPath '%s' not found." % exception)
         except SRMFileError as exception:
             print("The first parameter must be a path to a valid SRM file (%s)" % exception)
 
