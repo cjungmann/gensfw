@@ -117,6 +117,10 @@
   <xsl:template match="row" mode="set_sessions">
   </xsl:template>
 
+  <xsl:template match="row" mode="and_is_not_null">
+    <xsl:param name="indent" select="''" />
+    <xsl:value-of select="concat($nl,$indent,'AND ', field[@name='COLUMN_NAME'], ' IS NOT NULL')" />
+  </xsl:template>
 
 
   <xsl:template match="resultset" mode="cleanup">
@@ -135,7 +139,6 @@ BEGIN
      INTO <xsl:apply-templates select="$rows" mode="sessionize">
    <xsl:with-param name="indent" select="$indent" />
  </xsl:apply-templates>;
-
 END $$
   </xsl:template>
 
@@ -187,6 +190,22 @@ BEGIN
 END $$
   </xsl:template>
 
+  <xsl:template match="resultset" mode="confirm">
+-- --------------------------------------------
+-- Procedure to check for existing session.
+-- --------------------------------------------
+DROP PROCEDURE IF EXISTS App_Session_Confirm $$
+CREATE PROCEDURE App_Session_Confirm(session_id INT UNSIGNED)
+BEGIN
+   SELECT COUNT(*)
+     FROM <xsl:value-of select="$table_name" />
+    WHERE <xsl:value-of select="$index_column_name" />
+    <xsl:text> = session_id</xsl:text>
+    <xsl:apply-templates select="$rows" mode="and_is_not_null">
+      <xsl:with-param name="indent" select="'      '" />
+    </xsl:apply-templates>;
+END $$
+  </xsl:template>
 
   <xsl:template match="row" mode="set_function">
     <xsl:variable name="cname" select="field[@name='COLUMN_NAME']" />
@@ -255,6 +274,7 @@ DELIMITER $$
     <xsl:apply-templates select="resultset" mode="abandon" />
 
     <xsl:apply-templates select="resultset" mode="initialize_session" />
+    <xsl:apply-templates select="resultset" mode="confirm" />
 
     <xsl:apply-templates select="$rows" mode="set_function" />
 DELIMITER ;
