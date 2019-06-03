@@ -1337,6 +1337,9 @@ def do_copy_after_sibling(srmfile, content_list=None):
     Syntax:
     copy_after_sibling <target_location> <branch_to_copy> [options]
 
+    Example:
+    copy_after_sibling login login <%SET_TAG> logout
+
     See also \"do_set_line\" for an explanation of the options.
 """
 
@@ -1370,6 +1373,9 @@ def do_copy_before_sibling(srmfile, content_list=None):
 
     Syntax:
     copy_before_sibling <target_location> <branch_to_copy> [options]
+
+    Example:
+    copy_before_sibling login login <%SET_TAG> logout
 
     See also \"do_set_line\" for an explanation of the options.
 """
