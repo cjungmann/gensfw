@@ -56,13 +56,15 @@ def parse_srm_line(linestr):
     linestr = linestr.strip()
     tag = None
     value = None
-    if linestr[0] == "#":
-        tag = linestr
-    else:
-        parts = linestr.split(":", 1)
-        tag = parts[0].strip()
-        if len(parts) > 1:
-            value = parts[1].strip()
+
+    if len(linestr) > 0:
+        if linestr[0] == "#":
+            tag = linestr
+        else:
+            parts = linestr.split(":", 1)
+            tag = parts[0].strip()
+            if len(parts) > 1:
+                value = parts[1].strip()
 
     return (tag, value)
 
