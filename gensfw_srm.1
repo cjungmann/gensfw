@@ -4,7 +4,7 @@
 gensfw_srm \- Modify an SRM file through command line arguments
 
 .SH SYNOPSIS
-Yet to be entered
+gensfw_srm [srm file name] options
 
 .SH DESCRIPTION
 .B gensfw_srm
@@ -13,7 +13,15 @@ SRM file can be deleted or added with various options.  The location that these
 actions take place are determined by selecting an existing line in the SRM file
 by use of a rudimentary XPATH-like selection syntax.
 
+The use of this command usually dictates passing a large number of arguments.
+In practice, it may be easiest to call this command from a script where the
+arguments can be formatted for clarity and maintainability.
+
+
 .SH OPTIONS
+There are very many options, but they are not (yet) documented here. Use
+the help option to see how to access a list of action types with their
+parameters and syntax.
 .TP
 .BR "--help" ", " "-h"
 Show help options.  This command is self-documenting, so the most current
@@ -21,7 +29,46 @@ documentation will be found by using the \fBhelp\fI option and following the
 instructions therein.
 
 .SH EXAMPLES
-Yet to be entered
+
+.TP
+.BI gensfw_srm " --help"
+.br
+See the help options:
+.TP
+.BI gensfw_srm " --show_action_docs"
+.br
+See the list of actions with explanaion:
+.TP
+.BI gensfw_srm " login.srm" " first_child" " login 'session-type:establish'" " " "--" " display"
+.br
+Add an instruction to the login mode:
+.TP
+.BI gensfw_srm " login.srm" " first_child" " '*[type][!session-type]' 'session-type:establish'" " " "--" " display"
+.br
+Add a session-type instruction to the first mode that lacks a session-type instruction:
+
+.SH NOTES
+
+Most actions take several arguments, mostly with a 
+.B action
+followed by an
+.B SRM path
+to indicate where the action takes place.
+For actions that add or change content, further arguments will be required.
+
+.B SRM paths
+are similar to XPath expressions, but with fewer options and a simpler syntax.
+
+Special care must be taken for the wildcard step,
+.B *
+because it may be replaced with a list of the directory's contents.  Either
+escape the
+.B *
+or enclose the argument with apostrophes.
+
+Multiple actions can be chained together in a single invocation of
+.B gensfw_srm
+by separating actions with a double-dash.
 
 .SH AUTHOR
 Charles P. Jungmann
