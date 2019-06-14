@@ -117,12 +117,6 @@
   <xsl:template match="row" mode="set_sessions">
   </xsl:template>
 
-  <xsl:template match="row" mode="and_is_not_null">
-    <xsl:param name="indent" select="''" />
-    <xsl:value-of select="concat($nl,$indent,'AND ', field[@name='COLUMN_NAME'], ' IS NOT NULL')" />
-  </xsl:template>
-
-
   <xsl:template match="resultset" mode="cleanup">
     <xsl:variable name="indent">
       <xsl:call-template name="spacify">
@@ -200,10 +194,7 @@ BEGIN
    SELECT COUNT(*)
      FROM <xsl:value-of select="$table_name" />
     WHERE <xsl:value-of select="$index_column_name" />
-    <xsl:text> = session_id</xsl:text>
-    <xsl:apply-templates select="$rows" mode="and_is_not_null">
-      <xsl:with-param name="indent" select="'      '" />
-    </xsl:apply-templates>;
+    <xsl:text> = session_id;</xsl:text>
 END $$
   </xsl:template>
 
