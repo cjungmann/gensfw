@@ -332,14 +332,17 @@ gsf_srm_mode_List()
     echo "list"
     tabulate_array 1 "${cmds[@]}"
 
+    tabulate_array 1 "result" "1"
+
+
     if gsf_IACT_included "Add"; then
         local -a a_button=(
             type add
             label "Create ${GF_TNAME}"
             task ?add
         )
-        tabulate_array 1 "button"
-        tabulate_array 2 "${a_button[@]}"
+        tabulate_array 2 "button"
+        tabulate_array 3 "${a_button[@]}"
     fi
 
     if gsf_IACT_included "Import"; then
@@ -348,8 +351,8 @@ gsf_srm_mode_List()
             label "Import"
             url ?import_"${GF_TNAME}"
         )
-        tabulate_array 1 "button"
-        tabulate_array 2 "${a_button[@]}"
+        tabulate_array 2 "button"
+        tabulate_array 3 "${a_button[@]}"
     fi
 
     if gsf_IACT_included "Export"; then
@@ -358,11 +361,10 @@ gsf_srm_mode_List()
             label "Export"
             url ?export
         )
-        tabulate_array 1 "button"
-        tabulate_array 2 "${a_button[@]}"
+        tabulate_array 2 "button"
+        tabulate_array 3 "${a_button[@]}"
     fi
 
-    tabulate_array 1 "result" "1"
     gsf_write_schema "List" 2
 
     local varsproc=$( gsf_get_vars_proc )
