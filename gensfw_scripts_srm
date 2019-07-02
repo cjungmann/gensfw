@@ -24,9 +24,14 @@ save_srm_to_file()
 
     # Find appropriate default mode, and add to array if one is found:
     if gsf_IACT_included "List"; then
-        default_mode="List"
+        default_mode="list"
     else
         default_mode=$(gsf_IACT_single_included)
+        if default_mode="Import"; then
+           default_mode="import_${GF_TNAME}"
+        else
+           default_mode="${default_mode,,}"
+        fi
     fi
     if [ -n "$default_mode" ]; then
         if [ "$default_mode" = "Update" ]; then
@@ -34,7 +39,7 @@ save_srm_to_file()
         fi
         SRM_GLOBALS=(
             "${SRM_GLOBALS[@]}" 
-            "\$default-mode" "${default_mode,,}"
+            "\$default-mode" "${default_mode}"
             )
     fi
 
