@@ -82,6 +82,7 @@
 
   <xsl:template match="row" mode="self-set">
     <xsl:param name="indent" select="''" />
+    <xsl:param name="prefix" />
 
     <xsl:variable name="name" select="field[@name='COLUMN_NAME']" />
 
@@ -89,7 +90,10 @@
       <xsl:value-of select="concat(',',$nl,$indent)" />
     </xsl:if>
 
-    <xsl:value-of select="concat('`',$name,'` = ', $name)" />
+    <xsl:if test="$prefix">
+      <xsl:value-of select="concat($prefix,'.')" />
+    </xsl:if>
+    <xsl:value-of select="concat($name,' = ', $name)" />
   </xsl:template>
 
   <xsl:template match="row" mode="add_parameter">
@@ -230,6 +234,8 @@ END $$
         <xsl:with-param name="str" select="$create_string" />
       </xsl:call-template>
     </xsl:variable>
+    <xsl:variable name="prefix"
+                  select="translate(substring($table_name,1,1),$ucase,$lcase)" />
 
     <!-- field and value alignment variables -->
     <xsl:variable name="set_str" select="'      SET '" />
@@ -246,12 +252,13 @@ DROP PROCEDURE IF EXISTS App_Session_Initialize $$
 <xsl:with-param name="indent" select="$param_indent" />
 </xsl:apply-templates>)
 BEGIN
-   UPDATE <xsl:value-of select="$table_name" />
+   UPDATE <xsl:value-of select="concat($table_name,' ',$prefix)" />
 <xsl:value-of select="concat($nl,$set_str)" />
 <xsl:apply-templates select="$rows" mode="self-set">
   <xsl:with-param name="indent" select="$set_indent" />
+  <xsl:with-param name="prefix" select="$prefix" />
 </xsl:apply-templates>
-    WHERE <xsl:value-of select="concat('`',$index_column_name,'` = @session_confirmed_id;')" />
+    WHERE <xsl:value-of select="concat($prefix, '.' ,$index_column_name,' = @session_confirmed_id;')" />
 END $$
   </xsl:template>
 
