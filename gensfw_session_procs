@@ -59,9 +59,6 @@ show_table_fields()
     local IFS=$'\n'
     fields_array=( $( mysql -BN -e "${query[*]}" ) )
 
-    echo >&2
-    echo "Fields of table '$table'" >&2
-
     IFS=$'\t'
 
     # get max length of field names:
