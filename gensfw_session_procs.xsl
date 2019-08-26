@@ -61,9 +61,14 @@
 
   <xsl:template match="row" mode="raw">
     <xsl:param name="indent" select="''" />
+    <xsl:param name="prefix" />
 
     <xsl:if test="position() &gt; 1">
       <xsl:value-of select="concat(',',$nl,$indent)" />
+    </xsl:if>
+
+    <xsl:if test="string-length($prefix) &gt; 0">
+      <xsl:value-of select="$prefix" />
     </xsl:if>
 
     <xsl:value-of select="field[@name='COLUMN_NAME']" />
@@ -259,6 +264,16 @@ BEGIN
   <xsl:with-param name="prefix" select="$prefix" />
 </xsl:apply-templates>
     WHERE <xsl:value-of select="concat($prefix, '.' ,$index_column_name,' = @session_confirmed_id;')" />
+
+   SELECT <xsl:apply-templates select="$rows" mode="raw">
+     <xsl:with-param name="indent" select="$set_indent" />
+   </xsl:apply-templates>
+     INTO <xsl:apply-templates select="$rows" mode="raw">
+     <xsl:with-param name="indent" select="$set_indent" />
+     <xsl:with-param name="prefix" select="'@session_'" />
+   </xsl:apply-templates>
+   <xsl:text>;</xsl:text>
+   
 END $$
   </xsl:template>
 
