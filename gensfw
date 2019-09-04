@@ -10,7 +10,17 @@
 
 # Universal script indentation string, must precede 'source' calls that use it:
 declare gsf_script_indent="   "
-indent_line() { echo "${gsf_script_indent}${1}"; }
+indent_line()   { echo "${gsf_script_indent}${1}"; }
+indent_line_n() { echo -n "${gsf_script_indent}${1}"; }
+
+build_spaces_string()
+{
+    local -i stop="$1"
+    for (( c=0; c<$stop; ++c )); do
+        echo -n ' '
+    done
+}
+
 
 get_source_path()
 {
