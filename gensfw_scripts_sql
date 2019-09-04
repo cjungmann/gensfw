@@ -1077,7 +1077,7 @@ gsf_sql_import_proc_cursor_accept()
 
     indent_line "END LOOP;"
     echo
-    indent_line "Close MemCursor;"
+    indent_line "Close RowCursor;"
     echo
     indent_line "CALL ${IMPORT_PROC_ROOT}Abandon();"
     
