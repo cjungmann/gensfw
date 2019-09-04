@@ -1013,7 +1013,7 @@ gsf_sql_import_proc_cursor_accept()
             if is_slink; then
                 echo -n "$SLINK"
             else
-                echo -n "$FIELD_NAME"
+                echo -n "qt.$FIELD_NAME"
             fi
         fi
     }
@@ -1044,8 +1044,8 @@ gsf_sql_import_proc_cursor_accept()
     gsf_callback_prefs_rows "gsiqca_select"
 
     echo
-    indent_line "     FROM QT_${GF_TNAME}"
-    indent_line "    WHERE id_session = @session_confirmed_id;"
+    indent_line "     FROM QT_${GF_TNAME} qt"
+    indent_line "    WHERE qt.id_session = @session_confirmed_id;"
     echo
     indent_line "DECLARE CONTINUE HANDLER FOR NOT FOUND SET end_loop = TRUE;"
     echo
