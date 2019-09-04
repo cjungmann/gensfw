@@ -132,7 +132,15 @@ gsf_write_script_sql_import()
     echo
     gsf_sql_import_proc_abandon
     echo
-    gsf_sql_import_proc_accept
+    echo "-- Two procedures follow that accept import data."
+    echo "-- Usually only one is necessary.  Delete the other."
+    echo
+    echo "-- Complete procedure, copies QT data into the source table."
+    gsf_sql_import_proc_accept;
+    echo
+    echo "-- Incomplete, cursor-based accept procedure.  Useful when by-row steps"
+    echo "-- are required, such as needed the LAST_INSERT_ID() for each row."
+    gsf_sql_import_proc_cursor_accept;
 }
 
 # For procedure parameters, convert ENUM and SET types
@@ -950,3 +958,129 @@ gsf_sql_import_proc_accept()
 
     echo "END \$\$"
 }
+
+gsf_sql_import_proc_cursor_accept()
+{
+    
+    local -i lambda_count=0
+    local ispaces
+    local -i bespoke_autoinc=1  # 'false' until need is detected
+    local table_where
+    local type
+
+    maybe_new_line()
+    {
+        if [ $(( lambda_count++ )) -gt 0 ]; then
+            echo ", "
+            echo -n "${ispaces}"
+        fi
+    }
+
+    maybe_new_line_raw()
+    {
+        if [ $(( lambda_count++ )) -gt 0 ]; then
+            echo -n "${ispaces}"
+        fi
+    }
+
+    gsiqca_slots()
+    {
+        if CB_ROW_IS_PARAM; then
+            maybe_new_line_raw
+            type=$( CB_ROW_TYPE )
+            type=$( gsf_fix_param_type "$FIELD_NAME" "${type}" )
+            indent_line "DECLARE c_$FIELD_NAME ${type};"
+        fi
+    }
+
+    gsiqca_into()
+    {
+        if CB_ROW_IS_PARAM; then
+            maybe_new_line
+            echo -n "c_$FIELD_NAME"
+        fi
+    }
+
+    gsiqca_select()
+    {
+        if CB_ROW_IS_PARAM; then
+
+            if [ $(( lambda_count++ )) -gt 0 ]; then
+                echo ", "
+                echo -n "${ispaces}"
+            fi
+
+            if is_slink; then
+                echo -n "$SLINK"
+            else
+                echo -n "$FIELD_NAME"
+            fi
+        fi
+    }
+
+    local proc_name="${IMPORT_PROC_ROOT}Cursor_Accept"
+
+    local dropstr="DROP PROCEDURE IF EXISTS ${proc_name} \$\$"
+    gsf_script_proc_top_comment "${dropstr}"
+
+    echo "$dropstr"
+    echo "CREATE PROCEDURE ${proc_name}()"
+    echo "BEGIN"
+
+    # Write DECLARE c_xxx
+    lambda_count=0
+    gsf_callback_prefs_rows "gsiqca_slots"
+
+    echo
+    indent_line "DECLARE end_loop BOOLEAN DEFAULT FALSE;"
+    echo
+    indent_line "DECLARE RowCursor CURSOR FOR"
+
+    indent_line_n "   SELECT "
+
+    local select_line_str="${gsf_script_indent}   SELECT "
+    ispaces=$( build_spaces_string "${#select_line_str}" )
+    lambda_count=0
+    gsf_callback_prefs_rows "gsiqca_select"
+
+    echo
+    indent_line "     FROM QT_${GF_TNAME}"
+    indent_line "    WHERE id_session = @session_confirmed_id;"
+    echo
+    indent_line "DECLARE CONTINUE HANDLER FOR NOT FOUND SET end_loop = TRUE;"
+    echo
+    indent_line "OPEN RowCursor;"
+    echo
+    indent_line "cur_loop : LOOP"
+    echo
+
+
+    indent_line "   FETCH RowCursor"
+    select_line_str="${gsf_script_indent}         INTO "
+    echo -n "${select_line_str}"
+
+    ispaces=$( build_spaces_string "${#select_line_str}" )
+    lambda_count=0
+    gsf_callback_prefs_rows "gsiqca_into"
+    echo ";"
+
+    echo
+    indent_line "   IF end_loop THEN"
+    indent_line "      LEAVE cur_loop;"
+    indent_line "   END IF;"
+    echo
+
+    indent_line "   --"
+    indent_line "   -- Add custom, row-oriented processes here."
+    indent_line "   --"
+    echo
+
+    indent_line "END LOOP;"
+    echo
+    indent_line "Close MemCursor;"
+    echo
+    indent_line "CALL ${IMPORT_PROC_ROOT}Abandon();"
+    
+    echo "END \$\$"
+
+}    
