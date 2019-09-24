@@ -18,10 +18,25 @@ can then be modified by use of the
 application.
 
 .SH OPTIONS
-Yet to be entered
+.TP
+.IB "[" mode-name "]"
+.br
+Label the output response modes according to the mode-name.  If the
+mode-name is /fBlogin\fR, two response modes will be created,
+.B login
+and
+.B login_submit
+
 
 .SH EXAMPLES
-Yet to be entered
+Create a login interaction using procedure
+.I App_User_Login
+from database
+.I SFW_Enroll.
+.br
+.B gensfw_srm_from_proc
+.I SFW_Enroll App_User_Login login
+.br
 
 .SH AUTHOR
 Charles P. Jungmann
