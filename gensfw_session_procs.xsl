@@ -207,6 +207,19 @@ BEGIN
 END $$
   </xsl:template>
 
+  <xsl:template match="resultset" mode="test">
+-- -----------------------------------------
+-- Procedure for test scripts to check for
+--  existing session. Returns value of
+--  COUNT(), value != 0 confirms session.
+-- -----------------------------------------
+DROP PROCEDURE IF EXISTS App_Session_Test $$
+CREATE PROCEDURE App_Session_Test()
+BEGIN
+   CALL App_Session_Confirm(@session_confirmed_id);
+END $$
+  </xsl:template>
+
   <xsl:template match="row" mode="set_function">
     <xsl:variable name="cname" select="field[@name='COLUMN_NAME']" />
     <xsl:variable name="pname" select="concat('App_Session_Set_', $cname)" />
@@ -288,6 +301,7 @@ DELIMITER $$
 
     <xsl:apply-templates select="resultset" mode="initialize_session" />
     <xsl:apply-templates select="resultset" mode="confirm" />
+    <xsl:apply-templates select="resultset" mode="test" />
 
     <xsl:apply-templates select="$rows" mode="set_function" />
 DELIMITER ;
