@@ -216,7 +216,10 @@ END $$
 DROP PROCEDURE IF EXISTS App_Session_Test $$
 CREATE PROCEDURE App_Session_Test()
 BEGIN
-   CALL App_Session_Confirm(@session_confirmed_id);
+   SELECT COUNT(*) AS count
+     FROM <xsl:value-of select="$table_name" />
+    WHERE <xsl:value-of select="$index_column_name" />
+    <xsl:text> = @session_confirmed_id;</xsl:text>
 END $$
   </xsl:template>
 
